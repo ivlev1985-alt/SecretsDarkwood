@@ -20,5 +20,6 @@ game.boot().then(() => {
   if (boot) boot.style.display = 'none';
 }).catch((e) => {
   console.error(e);
-  if (bootText) bootText.textContent = 'Ошибка загрузки: ' + e.message;
+  if (bootText) bootText.textContent = 'Ошибка: ' + e.message;
+  if (bootText) bootText.style.whiteSpace = 'pre-wrap';
 });
