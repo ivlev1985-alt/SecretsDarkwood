@@ -27,3 +27,14 @@
 - SkillSystem: to_target (multishot+spread+auto_aim+pierce+взрыв), around_player (тик по радиусу + отброс), area (зона ttl+tick), кд с attack_speed, урон с damage_mul
 - Демо: активны magic_bolt+frost_ring+fire_wall (гейт unlocked — в Этапе 5); ranged-враги стреляют arrow/fireball_boss
 - Game: playing-цикл, чистка трупов, демо-рестарт при смерти (GameOver — Этап 4)
+
+## [Этап 3] — Прогрессия
+- ProgressionSystem: xp=base*lvl^exp (10/28/...), max 50, addXP с мульти-апом, grantLevels от сундуков
+- UpgradeSystem: пул weapon-ап/новое/passive, buildChoices 1-из-3 с локализацией, apply; пауза в state upgrade, клик по карточке
+- Player: passiveLevels, coins, applyPassive (7 пассивок), getPickupRadius
+- LootSystem: xp/coin/potion/magnet/bomb по шансам; potion лечит %, magnet притягивает всё, bomb 150 по всем
+- Pickup: разброс+трение, магнит в pickup_radius, время жизни, сбор в радиусе 20
+- Chest/ChestSystem: 4 тира по весам 60/30/9/1, интервал 60с, лимит 3, жизнь 120с, автооткрытие, награды coins/potions/spells/levels; стартовый wooden рядом (first_spawn_trigger_on_chest)
+- SkillSystem.grantRandomSpell: апгрейд owned (70%) или unlock нового
+- Boss: обёртка с именем, оверлей «БОСС» 2с + звук, бар снизу; цифры боссов всегда
+- HUD: XP и HP полоски с числами внутри, Lv/kills/coins/таймер

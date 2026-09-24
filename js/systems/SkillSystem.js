@@ -19,7 +19,32 @@ export class SkillSystem {
 
   // Для Этапа 2: какие оружия активны (в Этапе 5 — по unlocked из сейва)
   setActive(ids) {
-    for (const [id, st] of this.weapons) st.active = ids.includes(id);
+    for (const [id, st] of this.weapons) {
+      if (ids.includes(id)) { st.active = true; if (!(st.level > 0)) st.level = 1; }
+      else st.active = false;
+    }
+  }
+
+  ownedList() {
+    return [...this.weapons.values()].filter((s) => (s.level || 0) > 0 && s.active !== false);
+  }
+
+  // Награда сундука "заклинание": сначала апгрейд случайного owned, иначе unlock нового.
+  grantRandomSpell(rand = Math.random) {
+    const owned = [...this.weapons.values()].filter((s) => (s.level || 0) > 0 && s.active !== false && s.level < (s.cfg.max_level || 5));
+    if (owned.length && rand() < 0.7) {
+      const st = owned[Math.floor(rand() * owned.length)];
+      st.level++;
+      return { kind: 'weapon', id: st.cfg.id, level: st.level };
+    }
+    const locked = [...this.weapons.values()].filter((s) => !((s.level || 0) > 0) && s.cfg.unlocked === false);
+    // разблокируем через флаг unlocked конфига runtime (не пишем в файл)
+    const pool = locked.length ? locked : [...this.weapons.values()].filter((s) => !((s.level || 0) > 0));
+    if (!pool.length) return null;
+    const st = pool[Math.floor(rand() * pool.length)];
+    st.cfg.unlocked = true;
+    st.level = 1; st.active = true; st.cd = 0;
+    return { kind: 'newWeapon', id: st.cfg.id, level: 1 };
   }
 
   weaponDamage(st, player) {
@@ -47,8 +72,8 @@ export class SkillSystem {
   }
 
   update(dt, ctx) {
-    // ctx: { player, enemies }
-    const { player, enemies } = ctx;
+    // ctx: { player, enemies, onKill }
+    const { player, enemies, onKill } = ctx;
     if (!player.alive) return;
 
     for (const st of this.weapons.values()) {
@@ -79,7 +104,7 @@ export class SkillSystem {
             const { damage, crit } = this.combat.rollDamage(a.damage);
             e.takeDamage(damage, 0, 0);
             if (crit) this.combat.pushText(e.x, e.y - 20, Math.round(damage) + '!');
-            if (e.hp <= 0 && was > 0) { this.combat.kills++; }
+            if (e.hp <= 0 && was > 0) { this.combat.kills++; if (onKill) onKill(e); }
           }
         }
       }
@@ -144,7 +169,7 @@ export class SkillSystem {
         const r = this.combat.rollDamage(this.weaponDamage(st, player));
         e.takeDamage(r.damage, (dx / (Math.hypot(dx, dy) || 1)) * 120, (dy / (Math.hypot(dx, dy) || 1)) * 120);
         if (r.crit) this.combat.pushText(e.x, e.y - 20, Math.round(r.damage) + '!');
-        if (e.hp <= 0 && was > 0) this.combat.kills++;
+        if (e.hp <= 0 && was > 0) { this.combat.kills++; if (ctx.onKill) ctx.onKill(e); }
       }
     }
     this.auraRadius = radius;

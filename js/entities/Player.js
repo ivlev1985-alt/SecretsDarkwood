@@ -19,6 +19,32 @@ export class Player extends Entity {
     this.invT = 0; // неуязвимость после урона
     this.level = 1;
     this.anim = null; // задаёт Game.attachHeroAnim после загрузки hero.frames
+    this.passiveLevels = {};
+    this.coins = 0;
+  }
+
+  getPickupRadius() { return this.pickupRadius * (this.pickupMul || 1); }
+
+  // Пассивка из skills_config.passive_skills. Возвращает новый уровень.
+  applyPassive(id, passivesCfg) {
+    const def = (passivesCfg || []).find((p) => p.id === id);
+    if (!def) return 0;
+    const cur = this.passiveLevels[id] || 0;
+    if (cur >= (def.max_level || 5)) return cur;
+    const nv = cur + 1;
+    this.passiveLevels[id] = nv;
+    const v = def.value_per_level || 0;
+    switch (id) {
+      case 'max_hp': this.maxHp += v; this.hp = Math.min(this.maxHp, this.hp + v); break;
+      case 'speed': this.speed *= (1 + v); break;
+      case 'damage': this.damageMul *= (1 + v); break;
+      case 'attack_speed': this.attackSpeedMul *= (1 + v); break;
+      case 'pickup_radius': this.pickupMul *= (1 + v); break;
+      case 'crit_chance': this.critChance += v; break;
+      case 'hp_regen': this.regen += v; break;
+      default: break;
+    }
+    return nv;
   }
 
   attachHeroAnim(animator) { this.anim = animator; }
