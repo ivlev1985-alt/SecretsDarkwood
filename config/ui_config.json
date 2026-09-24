@@ -1,0 +1,101 @@
+{
+  "buttons": {
+    "sprite": "ui/buttons.png",
+    "frames": {
+      "frame_width": 200,
+      "frame_height": 64,
+      "columns": 3,
+      "animations": {
+        "normal": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "hover": { "row": 1, "frames": 1, "fps": 1, "loop": false },
+        "pressed": { "row": 2, "frames": 1, "fps": 1, "loop": false }
+      }
+    }
+  },
+  "panels": {
+    "sprite": "ui/panels.png",
+    "frames": {
+      "frame_width": 512,
+      "frame_height": 384,
+      "columns": 6,
+      "animations": {
+        "pause": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "gameover": { "row": 1, "frames": 1, "fps": 1, "loop": false },
+        "upgrade": { "row": 2, "frames": 1, "fps": 1, "loop": false },
+        "settings": { "row": 3, "frames": 1, "fps": 1, "loop": false },
+        "shop": { "row": 4, "frames": 1, "fps": 1, "loop": false },
+        "daily_bonus": { "row": 5, "frames": 1, "fps": 1, "loop": false }
+      }
+    }
+  },
+  "icons": {
+    "sprite": "ui/icons.png",
+    "frames": {
+      "frame_width": 32,
+      "frame_height": 32,
+      "columns": 16,
+      "animations": {
+        "hp": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "xp": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "coin": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "kill_counter": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "timer": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "level": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "pause": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "chest_indicator": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "boss_warning": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "daily_bonus": { "row": 0, "frames": 1, "fps": 1, "loop": false }
+      }
+    }
+  },
+  "hp_bar": {
+    "sprite": "ui/hp_bar.png",
+    "frames": {
+      "frame_width": 200,
+      "frame_height": 24,
+      "columns": 3,
+      "animations": {
+        "background": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "fill": { "row": 1, "frames": 1, "fps": 1, "loop": false },
+        "border": { "row": 2, "frames": 1, "fps": 1, "loop": false }
+      }
+    }
+  },
+  "xp_bar": {
+    "sprite": "ui/xp_bar.png",
+    "frames": {
+      "frame_width": 300,
+      "frame_height": 16,
+      "columns": 3,
+      "animations": {
+        "background": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "fill": { "row": 1, "frames": 1, "fps": 1, "loop": false },
+        "border": { "row": 2, "frames": 1, "fps": 1, "loop": false }
+      }
+    }
+  },
+  "boss_bar": {
+    "sprite": "ui/boss_bar.png",
+    "frames": {
+      "frame_width": 240,
+      "frame_height": 32,
+      "columns": 3,
+      "animations": {
+        "background": { "row": 0, "frames": 1, "fps": 1, "loop": false },
+        "fill": { "row": 1, "frames": 1, "fps": 1, "loop": false },
+        "border": { "row": 2, "frames": 1, "fps": 1, "loop": false }
+      }
+    }
+  },
+  "bar_text": {
+    "hp_format": "{current} / {max}",
+    "xp_format": "{current} / {max}",
+    "boss_format": "{current} / {max}",
+    "font_size": 14,
+    "font_color": "#ffffff",
+    "stroke_color": "#000000",
+    "stroke_width": 2,
+    "align": "center",
+    "vertical_align": "middle"
+  }
+}

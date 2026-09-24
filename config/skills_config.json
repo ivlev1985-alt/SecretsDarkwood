@@ -1,0 +1,332 @@
+{
+  "weapons": [
+    {
+      "id": "magic_bolt",
+      "name_key": "weapon_magic_bolt",
+      "desc_key": "weapon_magic_bolt_desc",
+      "icon": "ui/icons.png#magic_bolt",
+      "type": "to_target",
+      "damage": 10,
+      "cooldown_ms": 800,
+      "projectile_speed": 500,
+      "projectile_lifetime_ms": 1500,
+      "projectile_radius": 6,
+      "projectile_sprite": "projectiles/magic_bolt.png",
+      "projectile_frames": {
+        "frame_width": 32,
+        "frame_height": 32,
+        "columns": 4,
+        "animations": {
+          "fly": { "row": 0, "frames": 4, "fps": 16, "loop": true },
+          "impact": { "row": 1, "frames": 4, "fps": 12, "loop": false }
+        }
+      },
+      "pierce_count": 0,
+      "explosion_radius": 0,
+      "explosion_damage": 0,
+      "projectiles_per_shot": 1,
+      "spread_angle": 0,
+      "auto_aim": true,
+      "auto_aim_range": 400,
+      "sfx_shoot": "shoot.mp3",
+      "sfx_hit": "hit.mp3",
+      "hit_effect": "hit_spark",
+      "upgradeable": true,
+      "max_level": 5,
+      "damage_per_level": 5,
+      "cooldown_reduction_per_level": 0.1,
+      "unlocked": true,
+      "unlocked_by_default": true
+    },
+    {
+      "id": "arcane_nova",
+      "name_key": "weapon_arcane_nova",
+      "desc_key": "weapon_arcane_nova_desc",
+      "icon": "ui/icons.png#arcane_nova",
+      "type": "to_target",
+      "damage": 6,
+      "cooldown_ms": 1200,
+      "projectile_speed": 400,
+      "projectile_lifetime_ms": 600,
+      "projectile_radius": 5,
+      "projectile_sprite": "projectiles/arcane_nova.png",
+      "projectile_frames": {
+        "frame_width": 32,
+        "frame_height": 32,
+        "columns": 4,
+        "animations": {
+          "fly": { "row": 0, "frames": 4, "fps": 16, "loop": true },
+          "impact": { "row": 1, "frames": 4, "fps": 12, "loop": false }
+        }
+      },
+      "pierce_count": 0,
+      "explosion_radius": 0,
+      "explosion_damage": 0,
+      "projectiles_per_shot": 5,
+      "spread_angle": 45,
+      "auto_aim": true,
+      "auto_aim_range": 300,
+      "sfx_shoot": "shoot.mp3",
+      "sfx_hit": "hit.mp3",
+      "hit_effect": "hit_spark",
+      "upgradeable": true,
+      "max_level": 5,
+      "damage_per_level": 3,
+      "cooldown_reduction_per_level": 0.05,
+      "unlocked": true,
+      "unlocked_by_default": true
+    },
+    {
+      "id": "fireball",
+      "name_key": "weapon_fireball",
+      "desc_key": "weapon_fireball_desc",
+      "icon": "ui/icons.png#fireball",
+      "type": "to_target",
+      "damage": 25,
+      "cooldown_ms": 2000,
+      "projectile_speed": 300,
+      "projectile_lifetime_ms": 3000,
+      "projectile_radius": 12,
+      "projectile_sprite": "projectiles/fireball.png",
+      "projectile_frames": {
+        "frame_width": 48,
+        "frame_height": 48,
+        "columns": 6,
+        "animations": {
+          "fly": { "row": 0, "frames": 6, "fps": 12, "loop": true },
+          "impact": { "row": 1, "frames": 6, "fps": 15, "loop": false }
+        }
+      },
+      "pierce_count": 0,
+      "explosion_radius": 100,
+      "explosion_damage": 15,
+      "projectiles_per_shot": 1,
+      "spread_angle": 0,
+      "auto_aim": true,
+      "auto_aim_range": 500,
+      "sfx_shoot": "shoot.mp3",
+      "sfx_hit": "explosion.mp3",
+      "hit_effect": "explosion_burst",
+      "upgradeable": true,
+      "max_level": 5,
+      "damage_per_level": 10,
+      "cooldown_reduction_per_level": 0.08,
+      "explosion_radius_per_level": 20,
+      "unlocked": false,
+      "unlocked_by_default": false
+    },
+    {
+      "id": "frost_ring",
+      "name_key": "weapon_frost_ring",
+      "desc_key": "weapon_frost_ring_desc",
+      "icon": "ui/icons.png#frost_ring",
+      "type": "around_player",
+      "damage": 5,
+      "cooldown_ms": 500,
+      "aura_radius": 150,
+      "aura_color": "#00ccff",
+      "sfx_hit": "hit.mp3",
+      "hit_effect": "hit_spark",
+      "upgradeable": true,
+      "max_level": 5,
+      "damage_per_level": 3,
+      "aura_radius_per_level": 20,
+      "unlocked": false,
+      "unlocked_by_default": false
+    },
+    {
+      "id": "fire_wall",
+      "name_key": "weapon_fire_wall",
+      "desc_key": "weapon_fire_wall_desc",
+      "icon": "ui/icons.png#fire_wall",
+      "type": "area",
+      "damage": 8,
+      "cooldown_ms": 3000,
+      "area_radius": 120,
+      "area_duration_ms": 4000,
+      "area_tick_ms": 500,
+      "area_color": "#ff4400",
+      "area_sprite": "projectiles/fire_wall.png",
+      "area_frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 4,
+        "animations": {
+          "idle": { "row": 0, "frames": 4, "fps": 12, "loop": true }
+        }
+      },
+      "auto_aim": true,
+      "auto_aim_range": 400,
+      "sfx_hit": "hit.mp3",
+      "hit_effect": "hit_spark",
+      "upgradeable": true,
+      "max_level": 5,
+      "damage_per_level": 4,
+      "area_radius_per_level": 15,
+      "unlocked": false,
+      "unlocked_by_default": false
+    },
+    {
+      "id": "tornado",
+      "name_key": "weapon_tornado",
+      "desc_key": "weapon_tornado_desc",
+      "icon": "ui/icons.png#tornado",
+      "type": "area",
+      "damage": 12,
+      "cooldown_ms": 4000,
+      "area_radius": 100,
+      "area_duration_ms": 5000,
+      "area_tick_ms": 400,
+      "area_color": "#88ccff",
+      "area_sprite": "projectiles/tornado.png",
+      "area_frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 6,
+        "animations": {
+          "idle": { "row": 0, "frames": 6, "fps": 14, "loop": true }
+        }
+      },
+      "auto_aim": true,
+      "auto_aim_range": 350,
+      "sfx_hit": "hit.mp3",
+      "hit_effect": "hit_spark",
+      "upgradeable": true,
+      "max_level": 5,
+      "damage_per_level": 5,
+      "area_radius_per_level": 12,
+      "unlocked": false,
+      "unlocked_by_default": false
+    },
+    {
+      "id": "lightning_chain",
+      "name_key": "weapon_lightning_chain",
+      "desc_key": "weapon_lightning_chain_desc",
+      "icon": "ui/icons.png#lightning_chain",
+      "type": "to_target",
+      "damage": 15,
+      "cooldown_ms": 2500,
+      "projectile_speed": 800,
+      "projectile_lifetime_ms": 800,
+      "projectile_radius": 8,
+      "projectile_sprite": "projectiles/lightning_chain.png",
+      "projectile_frames": {
+        "frame_width": 32,
+        "frame_height": 32,
+        "columns": 4,
+        "animations": {
+          "fly": { "row": 0, "frames": 4, "fps": 20, "loop": true },
+          "impact": { "row": 1, "frames": 4, "fps": 15, "loop": false }
+        }
+      },
+      "pierce_count": 3,
+      "explosion_radius": 0,
+      "explosion_damage": 0,
+      "projectiles_per_shot": 1,
+      "spread_angle": 0,
+      "auto_aim": true,
+      "auto_aim_range": 600,
+      "sfx_shoot": "shoot.mp3",
+      "sfx_hit": "hit.mp3",
+      "hit_effect": "hit_spark",
+      "upgradeable": true,
+      "max_level": 5,
+      "damage_per_level": 8,
+      "cooldown_reduction_per_level": 0.1,
+      "unlocked": false,
+      "unlocked_by_default": false
+    }
+  ],
+  "enemy_projectiles": [
+    {
+      "id": "arrow_basic",
+      "sprite": "projectiles/arrow_basic.png",
+      "frames": {
+        "frame_width": 32,
+        "frame_height": 32,
+        "columns": 4,
+        "animations": {
+          "fly": { "row": 0, "frames": 4, "fps": 12, "loop": true },
+          "impact": { "row": 1, "frames": 4, "fps": 12, "loop": false }
+        }
+      },
+      "speed": 250,
+      "radius": 6,
+      "lifetime_ms": 2000
+    },
+    {
+      "id": "fireball_boss",
+      "sprite": "projectiles/fireball_boss.png",
+      "frames": {
+        "frame_width": 48,
+        "frame_height": 48,
+        "columns": 6,
+        "animations": {
+          "fly": { "row": 0, "frames": 6, "fps": 12, "loop": true },
+          "impact": { "row": 1, "frames": 6, "fps": 15, "loop": false }
+        }
+      },
+      "speed": 200,
+      "radius": 14,
+      "lifetime_ms": 3000
+    }
+  ],
+  "passive_skills": [
+    {
+      "id": "max_hp",
+      "name_key": "passive_max_hp",
+      "desc_key": "passive_max_hp_desc",
+      "icon": "ui/icons.png#passive_hp",
+      "value_per_level": 20,
+      "max_level": 5
+    },
+    {
+      "id": "speed",
+      "name_key": "passive_speed",
+      "desc_key": "passive_speed_desc",
+      "icon": "ui/icons.png#passive_speed",
+      "value_per_level": 0.1,
+      "max_level": 5
+    },
+    {
+      "id": "damage",
+      "name_key": "passive_damage",
+      "desc_key": "passive_damage_desc",
+      "icon": "ui/icons.png#passive_damage",
+      "value_per_level": 0.15,
+      "max_level": 5
+    },
+    {
+      "id": "attack_speed",
+      "name_key": "passive_attack_speed",
+      "desc_key": "passive_attack_speed_desc",
+      "icon": "ui/icons.png#passive_attack_speed",
+      "value_per_level": 0.1,
+      "max_level": 5
+    },
+    {
+      "id": "pickup_radius",
+      "name_key": "passive_pickup_radius",
+      "desc_key": "passive_pickup_radius_desc",
+      "icon": "ui/icons.png#passive_pickup",
+      "value_per_level": 0.2,
+      "max_level": 5
+    },
+    {
+      "id": "crit_chance",
+      "name_key": "passive_crit_chance",
+      "desc_key": "passive_crit_chance_desc",
+      "icon": "ui/icons.png#passive_crit",
+      "value_per_level": 0.03,
+      "max_level": 5
+    },
+    {
+      "id": "hp_regen",
+      "name_key": "passive_hp_regen",
+      "desc_key": "passive_hp_regen_desc",
+      "icon": "ui/icons.png#passive_regen",
+      "value_per_level": 0.5,
+      "max_level": 5
+    }
+  ]
+}

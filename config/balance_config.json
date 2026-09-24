@@ -1,0 +1,371 @@
+{
+  "player": {
+    "base_hp": 100,
+    "base_speed": 200,
+    "pickup_radius": 60,
+    "collision_radius": 16,
+    "invincibility_ms": 500,
+    "damage_multiplier": 1.0,
+    "attack_speed_multiplier": 1.0,
+    "pickup_radius_multiplier": 1.0,
+    "crit_chance": 0.05,
+    "crit_multiplier": 2.0,
+    "hp_regen_per_sec": 0.0,
+    "xp_multiplier": 1.0
+  },
+  "progression": {
+    "xp_base": 10,
+    "xp_exponent": 1.5,
+    "max_level_per_run": 50,
+    "upgrade_options_count": 3,
+    "starting_upgrades": 0
+  },
+  "monsters": [
+    {
+      "id": "goblin",
+      "name_key": "monster_goblin",
+      "sprite": "monsters/goblin.png",
+      "frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 5,
+        "animations": {
+          "walk": { "row": 0, "frames": 5, "fps": 8, "loop": true },
+          "attack": { "row": 1, "frames": 3, "fps": 10, "loop": false },
+          "death": { "row": 2, "frames": 5, "fps": 8, "loop": false }
+        }
+      },
+      "hp": 20,
+      "speed": 60,
+      "damage": 5,
+      "collision_radius": 14,
+      "xp_drop": 1,
+      "coin_drop": 0,
+      "coin_drop_chance": 0.1,
+      "movement_type": "chase",
+      "attack_range": 0,
+      "attack_cooldown_ms": 0,
+      "projectile_id": null,
+      "scale": 1.0,
+      "hit_flash_color": "#ffffff",
+      "knockback_resist": 0.0,
+      "spawn_weight": 100
+    },
+    {
+      "id": "pixie",
+      "name_key": "monster_pixie",
+      "sprite": "monsters/pixie.png",
+      "frames": {
+        "frame_width": 48,
+        "frame_height": 48,
+        "columns": 4,
+        "animations": {
+          "walk": { "row": 0, "frames": 4, "fps": 12, "loop": true },
+          "attack": { "row": 1, "frames": 3, "fps": 10, "loop": false },
+          "death": { "row": 2, "frames": 4, "fps": 8, "loop": false }
+        }
+      },
+      "hp": 10,
+      "speed": 140,
+      "damage": 3,
+      "collision_radius": 12,
+      "xp_drop": 2,
+      "coin_drop": 0,
+      "coin_drop_chance": 0.15,
+      "movement_type": "chase",
+      "attack_range": 0,
+      "attack_cooldown_ms": 0,
+      "projectile_id": null,
+      "scale": 0.9,
+      "hit_flash_color": "#ffcccc",
+      "knockback_resist": 0.0,
+      "spawn_weight": 80
+    },
+    {
+      "id": "troll",
+      "name_key": "monster_troll",
+      "sprite": "monsters/troll.png",
+      "frames": {
+        "frame_width": 96,
+        "frame_height": 96,
+        "columns": 5,
+        "animations": {
+          "walk": { "row": 0, "frames": 5, "fps": 5, "loop": true },
+          "attack": { "row": 1, "frames": 4, "fps": 6, "loop": false },
+          "death": { "row": 2, "frames": 6, "fps": 6, "loop": false }
+        }
+      },
+      "hp": 100,
+      "speed": 35,
+      "damage": 15,
+      "collision_radius": 22,
+      "xp_drop": 5,
+      "coin_drop": 1,
+      "coin_drop_chance": 0.5,
+      "movement_type": "chase",
+      "attack_range": 0,
+      "attack_cooldown_ms": 0,
+      "projectile_id": null,
+      "scale": 1.4,
+      "hit_flash_color": "#ffffff",
+      "knockback_resist": 0.7,
+      "spawn_weight": 20
+    },
+    {
+      "id": "dark_elf_archer",
+      "name_key": "monster_dark_elf_archer",
+      "sprite": "monsters/dark_elf_archer.png",
+      "frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 5,
+        "animations": {
+          "walk": { "row": 0, "frames": 5, "fps": 8, "loop": true },
+          "attack": { "row": 1, "frames": 4, "fps": 10, "loop": false },
+          "death": { "row": 2, "frames": 4, "fps": 8, "loop": false }
+        }
+      },
+      "hp": 30,
+      "speed": 50,
+      "damage": 8,
+      "collision_radius": 14,
+      "xp_drop": 4,
+      "coin_drop": 0,
+      "coin_drop_chance": 0.2,
+      "movement_type": "ranged",
+      "attack_range": 300,
+      "attack_cooldown_ms": 2000,
+      "projectile_id": "arrow_basic",
+      "scale": 1.0,
+      "hit_flash_color": "#ffffff",
+      "knockback_resist": 0.2,
+      "spawn_weight": 40
+    },
+    {
+      "id": "boss_dragon",
+      "name_key": "monster_boss_dragon",
+      "sprite": "monsters/boss_dragon.png",
+      "frames": {
+        "frame_width": 128,
+        "frame_height": 128,
+        "columns": 6,
+        "animations": {
+          "walk": { "row": 0, "frames": 6, "fps": 6, "loop": true },
+          "attack": { "row": 1, "frames": 6, "fps": 8, "loop": false },
+          "death": { "row": 2, "frames": 8, "fps": 6, "loop": false }
+        }
+      },
+      "hp": 2000,
+      "speed": 40,
+      "damage": 25,
+      "collision_radius": 40,
+      "xp_drop": 100,
+      "coin_drop": 10,
+      "coin_drop_chance": 1.0,
+      "movement_type": "ranged",
+      "attack_range": 400,
+      "attack_cooldown_ms": 1500,
+      "projectile_id": "fireball_boss",
+      "scale": 2.0,
+      "hit_flash_color": "#ff00ff",
+      "knockback_resist": 1.0,
+      "spawn_weight": 0,
+      "is_boss": true
+    }
+  ],
+  "waves": {
+    "first_spawn_delay_sec": 15,
+    "first_spawn_trigger_on_chest": true,
+    "spawn_interval_start_ms": 2000,
+    "spawn_interval_min_ms": 300,
+    "spawn_interval_multiplier": 0.92,
+    "wave_step_sec": 30,
+    "max_enemies_on_screen": 200,
+    "enemies_per_wave_start": 1,
+    "enemies_per_wave_increment": 0.5,
+    "boss_wave_interval_sec": 120,
+    "spawn_radius": 800,
+    "spawn_offscreen_only": true
+  },
+  "loot": {
+    "pickup_radius_override": null,
+    "health_potion_chance": 0.02,
+    "health_potion_heal_percent": 25,
+    "magnet_chance": 0.01,
+    "bomb_chance": 0.005
+  },
+  "environment_props": [
+    {
+      "id": "small_rock",
+      "sprite": "environment/prop_small_rock.png",
+      "frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 1,
+        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+      },
+      "collidable": false,
+      "slowdown_factor": 1.0
+    },
+    {
+      "id": "puddle",
+      "sprite": "environment/prop_puddle.png",
+      "frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 1,
+        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+      },
+      "collidable": false,
+      "slowdown_factor": 0.8
+    },
+    {
+      "id": "grass_patch",
+      "sprite": "environment/prop_grass_patch.png",
+      "frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 1,
+        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+      },
+      "collidable": false,
+      "slowdown_factor": 1.0
+    },
+    {
+      "id": "big_boulder",
+      "sprite": "environment/prop_big_boulder.png",
+      "frames": {
+        "frame_width": 96,
+        "frame_height": 96,
+        "columns": 1,
+        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+      },
+      "collidable": true,
+      "collision_radius": 48
+    },
+    {
+      "id": "stone_wall",
+      "sprite": "environment/prop_stone_wall.png",
+      "frames": {
+        "frame_width": 128,
+        "frame_height": 128,
+        "columns": 1,
+        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+      },
+      "collidable": true,
+      "collision_radius": 64
+    },
+    {
+      "id": "lake",
+      "sprite": "environment/prop_lake.png",
+      "frames": {
+        "frame_width": 256,
+        "frame_height": 256,
+        "columns": 1,
+        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+      },
+      "collidable": true,
+      "collision_radius": 128
+    }
+  ],
+  "chests": {
+    "enabled": true,
+    "spawn_interval_sec": 60,
+    "max_chests_on_map": 3,
+    "chest_lifetime_sec": 120,
+    "open_radius": 60,
+    "indicator_enabled": true,
+    "sfx_open": "audio/sfx/chest_open.mp3",
+    "open_effect": "effects/chest_burst.png",
+    "types": [
+      {
+        "id": "wooden",
+        "name_key": "chest_wooden",
+        "sprite": "environment/chest_wooden.png",
+        "frames": {
+          "frame_width": 48,
+          "frame_height": 48,
+          "columns": 4,
+          "animations": {
+            "idle": { "row": 0, "frames": 4, "fps": 6, "loop": true },
+            "open": { "row": 1, "frames": 6, "fps": 12, "loop": false }
+          }
+        },
+        "drop_weight": 60,
+        "reward_type": "mixed",
+        "coins_min": 10,
+        "coins_max": 30,
+        "health_potions": 1,
+        "spell_drop_chance": 0.0,
+        "spell_count": 0,
+        "level_up_bonus": 0
+      },
+      {
+        "id": "silver",
+        "name_key": "chest_silver",
+        "sprite": "environment/chest_silver.png",
+        "frames": {
+          "frame_width": 48,
+          "frame_height": 48,
+          "columns": 4,
+          "animations": {
+            "idle": { "row": 0, "frames": 4, "fps": 8, "loop": true },
+            "open": { "row": 1, "frames": 6, "fps": 12, "loop": false }
+          }
+        },
+        "drop_weight": 30,
+        "reward_type": "mixed",
+        "coins_min": 50,
+        "coins_max": 100,
+        "health_potions": 1,
+        "spell_drop_chance": 1.0,
+        "spell_count": 1,
+        "level_up_bonus": 0
+      },
+      {
+        "id": "golden",
+        "name_key": "chest_golden",
+        "sprite": "environment/chest_golden.png",
+        "frames": {
+          "frame_width": 64,
+          "frame_height": 64,
+          "columns": 4,
+          "animations": {
+            "idle": { "row": 0, "frames": 4, "fps": 8, "loop": true },
+            "open": { "row": 1, "frames": 8, "fps": 12, "loop": false }
+          }
+        },
+        "drop_weight": 9,
+        "reward_type": "mixed",
+        "coins_min": 200,
+        "coins_max": 500,
+        "health_potions": 2,
+        "spell_drop_chance": 1.0,
+        "spell_count": 1,
+        "level_up_bonus": 1
+      },
+      {
+        "id": "legendary",
+        "name_key": "chest_legendary",
+        "sprite": "environment/chest_legendary.png",
+        "frames": {
+          "frame_width": 64,
+          "frame_height": 64,
+          "columns": 4,
+          "animations": {
+            "idle": { "row": 0, "frames": 6, "fps": 10, "loop": true },
+            "open": { "row": 1, "frames": 10, "fps": 15, "loop": false }
+          }
+        },
+        "drop_weight": 1,
+        "reward_type": "mixed",
+        "coins_min": 1000,
+        "coins_max": 1000,
+        "health_potions": 3,
+        "spell_drop_chance": 1.0,
+        "spell_count": 2,
+        "level_up_bonus": 2
+      }
+    ]
+  }
+}

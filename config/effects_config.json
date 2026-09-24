@@ -1,0 +1,102 @@
+{
+  "effects": [
+    {
+      "id": "hit_spark",
+      "sprite": "effects/hit.png",
+      "frames": {
+        "frame_width": 48,
+        "frame_height": 48,
+        "columns": 5,
+        "animations": { "play": { "row": 0, "frames": 5, "fps": 20, "loop": false } }
+      },
+      "behavior": "oneshot",
+      "lifetime_ms": 250,
+      "scale": 1.0,
+      "attach_to": "hit_point"
+    },
+    {
+      "id": "explosion_burst",
+      "sprite": "effects/explosion.png",
+      "frames": {
+        "frame_width": 96,
+        "frame_height": 96,
+        "columns": 6,
+        "animations": { "play": { "row": 0, "frames": 6, "fps": 18, "loop": false } }
+      },
+      "behavior": "oneshot",
+      "lifetime_ms": 350,
+      "scale": 1.0,
+      "attach_to": "hit_point"
+    },
+    {
+      "id": "levelup_burst",
+      "sprite": "effects/levelup.png",
+      "frames": {
+        "frame_width": 128,
+        "frame_height": 128,
+        "columns": 6,
+        "animations": { "play": { "row": 0, "frames": 6, "fps": 15, "loop": false } }
+      },
+      "behavior": "oneshot",
+      "lifetime_ms": 400,
+      "scale": 1.5,
+      "attach_to": "caster"
+    },
+    {
+      "id": "pickup_xp",
+      "sprite": "effects/pickup_xp.png",
+      "frames": {
+        "frame_width": 32,
+        "frame_height": 32,
+        "columns": 4,
+        "animations": { "play": { "row": 0, "frames": 4, "fps": 20, "loop": false } }
+      },
+      "behavior": "oneshot",
+      "lifetime_ms": 200,
+      "scale": 1.0,
+      "attach_to": "pickup_point"
+    },
+    {
+      "id": "boss_spawn",
+      "sprite": "effects/boss_spawn.png",
+      "frames": {
+        "frame_width": 256,
+        "frame_height": 256,
+        "columns": 8,
+        "animations": { "play": { "row": 0, "frames": 8, "fps": 12, "loop": false } }
+      },
+      "behavior": "oneshot",
+      "lifetime_ms": 700,
+      "scale": 1.0,
+      "attach_to": "screen_edges"
+    },
+    {
+      "id": "chest_burst",
+      "sprite": "effects/chest_burst.png",
+      "frames": {
+        "frame_width": 128,
+        "frame_height": 128,
+        "columns": 6,
+        "animations": { "play": { "row": 0, "frames": 6, "fps": 18, "loop": false } }
+      },
+      "behavior": "oneshot",
+      "lifetime_ms": 400,
+      "scale": 1.0,
+      "attach_to": "chest"
+    },
+    {
+      "id": "daily_bonus_burst",
+      "sprite": "effects/levelup.png",
+      "frames": {
+        "frame_width": 128,
+        "frame_height": 128,
+        "columns": 6,
+        "animations": { "play": { "row": 0, "frames": 6, "fps": 15, "loop": false } }
+      },
+      "behavior": "oneshot",
+      "lifetime_ms": 400,
+      "scale": 1.2,
+      "attach_to": "ui_center"
+    }
+  ]
+}

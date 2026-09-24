@@ -1,0 +1,45 @@
+{
+  "shop": {
+    "title_key": "shop_title",
+    "currency_key": "coin",
+    "confirm_purchase": true,
+    "sfx_purchase": "button_click.mp3",
+    "sfx_fail": "gameover.mp3",
+    "sfx_success": "levelup.mp3"
+  },
+  "categories": [
+    { "id": "stats", "name_key": "shop_category_stats", "icon": "icons.png#category_stats", "order": 1 },
+    { "id": "spells", "name_key": "shop_category_spells", "icon": "icons.png#category_spells", "order": 2 }
+  ],
+  "items": [
+    { "id": "start_hp", "category": "stats", "name_key": "shop_start_hp", "desc_key": "shop_start_hp_desc", "icon": "icons.png#shop_hp", "type": "upgrade", "target": "player.base_hp", "value_per_level": 10, "max_level": 10, "base_price": 50, "price_multiplier": 1.5, "order": 1 },
+    { "id": "start_speed", "category": "stats", "name_key": "shop_start_speed", "desc_key": "shop_start_speed_desc", "icon": "icons.png#shop_speed", "type": "upgrade", "target": "player.base_speed", "value_per_level": 0.05, "max_level": 10, "base_price": 75, "price_multiplier": 1.5, "order": 2 },
+    { "id": "start_damage", "category": "stats", "name_key": "shop_start_damage", "desc_key": "shop_start_damage_desc", "icon": "icons.png#shop_damage", "type": "upgrade", "target": "player.damage_multiplier", "value_per_level": 0.05, "max_level": 10, "base_price": 100, "price_multiplier": 1.6, "order": 3 },
+    { "id": "start_attack_speed", "category": "stats", "name_key": "shop_start_attack_speed", "desc_key": "shop_start_attack_speed_desc", "icon": "icons.png#shop_attack_speed", "type": "upgrade", "target": "player.attack_speed_multiplier", "value_per_level": 0.03, "max_level": 10, "base_price": 100, "price_multiplier": 1.6, "order": 4 },
+    { "id": "start_pickup_radius", "category": "stats", "name_key": "shop_start_pickup_radius", "desc_key": "shop_start_pickup_radius_desc", "icon": "icons.png#shop_pickup", "type": "upgrade", "target": "player.pickup_radius_multiplier", "value_per_level": 0.1, "max_level": 5, "base_price": 60, "price_multiplier": 1.5, "order": 5 },
+    { "id": "start_crit_chance", "category": "stats", "name_key": "shop_start_crit_chance", "desc_key": "shop_start_crit_chance_desc", "icon": "icons.png#shop_crit", "type": "upgrade", "target": "player.crit_chance", "value_per_level": 0.01, "max_level": 10, "base_price": 150, "price_multiplier": 1.7, "order": 6 },
+    { "id": "start_hp_regen", "category": "stats", "name_key": "shop_start_hp_regen", "desc_key": "shop_start_hp_regen_desc", "icon": "icons.png#shop_regen", "type": "upgrade", "target": "player.hp_regen_per_sec", "value_per_level": 0.5, "max_level": 5, "base_price": 200, "price_multiplier": 1.8, "order": 7 },
+    { "id": "start_xp_multiplier", "category": "stats", "name_key": "shop_start_xp_multiplier", "desc_key": "shop_start_xp_multiplier_desc", "icon": "icons.png#shop_xp", "type": "upgrade", "target": "player.xp_multiplier", "value_per_level": 0.05, "max_level": 5, "base_price": 250, "price_multiplier": 1.8, "order": 8 },
+    { "id": "unlock_fireball", "category": "spells", "name_key": "shop_unlock_fireball", "desc_key": "shop_unlock_fireball_desc", "icon": "icons.png#fireball", "type": "unlock", "target": "weapon.fireball.unlocked", "value_per_level": 1, "max_level": 1, "base_price": 500, "price_multiplier": 1.0, "order": 1 },
+    { "id": "unlock_frost_ring", "category": "spells", "name_key": "shop_unlock_frost_ring", "desc_key": "shop_unlock_frost_ring_desc", "icon": "icons.png#frost_ring", "type": "unlock", "target": "weapon.frost_ring.unlocked", "value_per_level": 1, "max_level": 1, "base_price": 750, "price_multiplier": 1.0, "order": 2 },
+    { "id": "unlock_fire_wall", "category": "spells", "name_key": "shop_unlock_fire_wall", "desc_key": "shop_unlock_fire_wall_desc", "icon": "icons.png#fire_wall", "type": "unlock", "target": "weapon.fire_wall.unlocked", "value_per_level": 1, "max_level": 1, "base_price": 1000, "price_multiplier": 1.0, "order": 3 },
+    { "id": "unlock_tornado", "category": "spells", "name_key": "shop_unlock_tornado", "desc_key": "shop_unlock_tornado_desc", "icon": "icons.png#tornado", "type": "unlock", "target": "weapon.tornado.unlocked", "value_per_level": 1, "max_level": 1, "base_price": 1250, "price_multiplier": 1.0, "order": 4 },
+    { "id": "unlock_lightning_chain", "category": "spells", "name_key": "shop_unlock_lightning_chain", "desc_key": "shop_unlock_lightning_chain_desc", "icon": "icons.png#lightning_chain", "type": "unlock", "target": "weapon.lightning_chain.unlocked", "value_per_level": 1, "max_level": 1, "base_price": 1500, "price_multiplier": 1.0, "order": 5 }
+  ],
+  "display": {
+    "hide_maxed_items": false,
+    "hide_locked_items": false,
+    "sort_by": "order",
+    "show_level_progress": true,
+    "show_next_price": true,
+    "price_format_key": "shop_price_format",
+    "max_level_key": "shop_max_level"
+  },
+  "purchase": {
+    "instant_deduction": true,
+    "save_on_purchase": true,
+    "show_purchase_animation": true,
+    "show_toast": true,
+    "toast_key": "shop_toast_purchased"
+  }
+}

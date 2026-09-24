@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "game_id": "secrets_of_the_darkwood_01",
+    "version": "3.0.0",
+    "title": "Secrets of the Darkwood",
+    "studio": "K.O Studio",
+    "age_rating": "12+",
+    "yandex_app_id": ""
+  },
+  "localization": {
+    "default_lang": "ru",
+    "auto_detect": true,
+    "supported_langs": ["ru", "en", "tr", "de", "es", "fr"],
+    "texts_file": "config/localization.json"
+  },
+  "hero": {
+    "sprite": "hero/hero_main.png",
+    "portrait": "hero/hero_portrait.png",
+    "frames": {
+      "frame_width": 64,
+      "frame_height": 64,
+      "columns": 6,
+      "animations": {
+        "idle": { "row": 0, "frames": 6, "fps": 6, "loop": true },
+        "run": { "row": 1, "frames": 6, "fps": 12, "loop": true },
+        "death": { "row": 2, "frames": 8, "fps": 8, "loop": false }
+      }
+    }
+  },
+  "visuals": {
+    "background_color": "#1a1a2e",
+    "damage_text_color": "#ffcc00",
+    "heal_text_color": "#00ff88",
+    "global_sprite_scale": 1.0,
+    "hit_particle_color": "#ff0000",
+    "max_particles": 500,
+    "hurt_flash_color": "#ff0000",
+    "hurt_flash_alpha": 0.5,
+    "hurt_flash_duration_ms": 250
+  },
+  "camera": {
+    "follow_player": true,
+    "follow_speed": 0.1,
+    "offset": { "x": 0, "y": 0 },
+    "clamp_to_bounds": true
+  },
+  "collisions": {
+    "monsters_collide_with_monsters": true,
+    "monsters_collide_with_props": true,
+    "player_collides_with_monsters": false,
+    "player_collides_with_props": true
+  },
+  "monetization": {
+    "interstitial_ad_every_n_deaths": 3,
+    "interstitial_min_interval_sec": 60,
+    "interstitial_skip_first_run": true,
+    "rewarded_ad_multiplier": 2,
+    "rewarded_double_reward_enabled": true,
+    "rewarded_revive_enabled": true,
+    "rewarded_revive_max_per_run": 1,
+    "rewarded_cooldown_sec": 600,
+    "revive_hp_percent": 50
+  },
+  "daily_bonus": {
+    "enabled": true,
+    "cooldown_hours": 24,
+    "reward_coins": 50,
+    "reward_key": "daily_bonus_reward"
+  },
+  "save": {
+    "save_key": "secrets_darkwood_save_v1",
+    "autosave_interval_sec": 30,
+    "save_on_important_events": true
+  },
+  "audio": {
+    "music_volume_default": 0.5,
+    "sfx_volume_default": 0.8,
+    "pause_on_blur": true,
+    "music_menu": "audio/music/bgm_menu.mp3",
+    "music_battle": "audio/music/bgm_battle.mp3"
+  },
+  "controls": {
+    "joystick_position_default": "left",
+    "joystick_position_user_configurable": true,
+    "hud_flip_with_joystick": true
+  },
+  "ui": {
+    "show_fps": false,
+    "show_timer": true,
+    "show_level": true,
+    "show_kill_counter": true,
+    "show_xp_bar": true,
+    "show_active_skills": true,
+    "damage_text_lifetime_ms": 800,
+    "damage_text_show_crits_only": true,
+    "damage_text_show_bosses_always": true,
+    "main_menu_bg": "ui/main_menu_bg.png",
+    "buttons_sprite": "ui/buttons.png",
+    "panels_sprite": "ui/panels.png",
+    "icons_sprite": "ui/icons.png",
+    "font_main": "ui/fonts/main_font.ttf",
+    "font_damage": "ui/fonts/damage_font.ttf"
+  }
+}
