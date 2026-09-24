@@ -19,3 +19,11 @@
 - StateManager: boot/menu/playing/paused/upgrade/gameover, pause/resume, валидация
 - Camera: follow + lerp follow_speed + offset + clamp_to_bounds
 - Game: dt-кламп 0.05, FPS-счётчик (show_fps), камера следует, hero idle/run по движению, HUD flip при джойстике слева, LoadingAPI.ready, window.__game
+
+## [Этап 2] — Бой
+- Entity/Player/Enemy/Projectile: hp/speed/radius/invincibility/crit/regen/knockback_resist, death-анимация, hit-flash
+- CombatSystem: контактный урон (блок выкл, урон вкл), снаряды vs враги + pierce + взрывы, снаряды врагов vs игрок, separation монстров, цифры только криты/боссы, kills
+- SpawnSystem: first_delay 15с, затухание interval 2000->300 (x0.92/30с), perWave рост, веса (боссы excluded), оффскрин-кольцо 800+, босс каждые 120с
+- SkillSystem: to_target (multishot+spread+auto_aim+pierce+взрыв), around_player (тик по радиусу + отброс), area (зона ttl+tick), кд с attack_speed, урон с damage_mul
+- Демо: активны magic_bolt+frost_ring+fire_wall (гейт unlocked — в Этапе 5); ranged-враги стреляют arrow/fireball_boss
+- Game: playing-цикл, чистка трупов, демо-рестарт при смерти (GameOver — Этап 4)
