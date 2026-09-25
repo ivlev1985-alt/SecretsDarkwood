@@ -14,14 +14,15 @@ export class UpgradeSystem {
   setLang(l) { this.lang = l; }
 
   // Пул кандидатов: { kind, id, levelFrom, levelTo }
+  // Новое оружие предлагается и из закрытых (discovery в забеге):
+  // магазинный unlock даёт его сразу на старте, levelup — находит в бою.
   candidates(skills, player) {
     const out = [];
     for (const [id, st] of skills.weapons) {
-      if (st.active === false) continue;
-      const owned = (st.level || 0) > 0;
+      const owned = (st.level || 0) > 0 && st.active !== false;
       if (owned && st.cfg.upgradeable !== false && st.level < (st.cfg.max_level || 5)) {
         out.push({ kind: 'weapon', id, levelFrom: st.level, levelTo: st.level + 1 });
-      } else if (!owned && st.cfg.unlocked) {
+      } else if (!owned) {
         out.push({ kind: 'newWeapon', id, levelFrom: 0, levelTo: 1 });
       }
     }

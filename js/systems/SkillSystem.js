@@ -13,7 +13,7 @@ export class SkillSystem {
     this.auraTick = 0;
     this.pool = new Pool(() => new Projectile(), 128);
     for (const w of weaponsCfg) {
-      this.weapons.set(w.id, { cfg: w, level: 1, cd: Math.random() * 0.5 });
+      this.weapons.set(w.id, { cfg: w, level: 0, active: false, cd: Math.random() * 0.5 });
     }
   }
 

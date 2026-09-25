@@ -20,7 +20,7 @@ export class ShopMenu {
     return game.shop.itemsOf(this.tab);
   }
   _perPage() { return 3; }
-  _cardH() { return this.tab === 'spells' ? 96 : 92; }
+  _cardH() { return 92; }
   _step() { return this._cardH() + 8; }
   // Строка урона/кд для unlock-товара из skills_config
   _spellStats(game, item) {
@@ -50,15 +50,15 @@ export class ShopMenu {
     const cats = shop.cfg.categories || [];
     let tx = 50;
     this._tabRects = [];
-    const tabW = (360 - 6) / Math.max(1, cats.length);
+    const tabW = (356 - 6) / Math.max(1, cats.length);
     for (const c of cats) {
       const r = { x: tx, y: 195, w: tabW, h: 36 };
       drawButton(ctx, r, game._t(c.name_key), { primary: this.tab === c.id });
       this._tabRects.push({ id: c.id, r });
       tx += tabW + 6;
     }
-    // товары: колонка карточек 50..410, скроллбар 412..417, кнопки 421..448 (всё внутри панели 30..450)
-    const cardX = 50, cardW = 360;
+    // товары: колонка карточек 50..406, справа колонка скролла 414..442 (внутри панели 30..450)
+    const cardX = 50, cardW = 356;
     const items = this._items(game);
     const perPage = this._perPage();
     const maxScroll = Math.max(0, items.length - perPage);
@@ -75,23 +75,23 @@ export class ShopMenu {
       ctx.strokeStyle = '#ffd34d';
       ctx.strokeRect(cardX, y, cardW, cardH);
       // ВАЖНО: выравнивание влево для каждой карточки (drawButton ниже ставит center)
+      // Заголовок + уровень в одной строке (уровень не перекрывается кнопкой)
       ctx.textAlign = 'left';
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 13px monospace';
       ctx.fillText(game._t(it.name_key), cardX + 12, y + 22);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#8f8';
+      ctx.font = '11px monospace';
+      ctx.fillText(maxed ? t('shop_max_level') : ('Lv. ' + lv + ' / ' + (it.max_level || 1)), cardX + cardW - 12, y + 22);
+      ctx.textAlign = 'left';
       ctx.fillStyle = '#aaa';
       ctx.font = '11px monospace';
-      ctx.fillText((game._t(it.desc_key) || '').slice(0, 44), cardX + 12, y + 40);
+      ctx.fillText((game._t(it.desc_key) || '').slice(0, 42), cardX + 12, y + 40);
       if (this.tab === 'spells') {
         ctx.fillStyle = '#ff9d4d';
         ctx.font = '11px monospace';
-        ctx.fillText(this._spellStats(game, it).slice(0, 44), cardX + 12, y + 56);
-        ctx.fillStyle = '#8f8';
-        ctx.fillText(maxed ? t('shop_max_level') : ('Lv. ' + lv + ' / ' + (it.max_level || 1)), cardX + 12, y + 70);
-      } else {
-        ctx.fillStyle = '#8f8';
-        ctx.font = '11px monospace';
-        ctx.fillText('Lv. ' + lv + ' / ' + (it.max_level || 1), cardX + 12, y + 58);
+        ctx.fillText(this._spellStats(game, it).slice(0, 42), cardX + 12, y + 56);
       }
       const chk = shop.check(it, lv, game.save.data.coins);
       const label = maxed ? t('shop_max_level') : (t('buy') + ' · ' + t('shop_price_format', { price: chk.price }));
@@ -102,24 +102,27 @@ export class ShopMenu {
       y += step;
     }
     const listTop = 245, listH = perPage * step - 8;
-    // скроллбар между карточками и кнопками
-    if (items.length > perPage) {
-      ctx.fillStyle = '#333';
-      ctx.fillRect(412, listTop, 5, listH);
-      const th = Math.max(20, (listH * perPage) / items.length);
-      const ty = listTop + ((listH - th) * this.scroll) / maxScroll;
-      ctx.fillStyle = '#ffd34d';
-      ctx.fillRect(412, ty, 5, th);
-    }
-    // кнопки ▲▼ в отдельной колонке справа
-    this._upRect = { x: 421, y: listTop, w: 27, h: 44 };
-    this._downRect = { x: 421, y: listTop + listH - 44, w: 27, h: 44 };
+    // правая колонка: ▲ / скроллбар / ▼ — всё одной ширины, с отступом от края панели
+    const colX = 414, colW = 28;
+    this._upRect = { x: colX, y: listTop, w: colW, h: 40 };
+    this._downRect = { x: colX, y: listTop + listH - 40, w: colW, h: 40 };
+    this._trackRect = { x: colX, y: listTop + 44, w: colW, h: listH - 88 };
+    this._thumb = null;
     if (items.length > perPage) {
       drawButton(ctx, this._upRect, '▲');
       drawButton(ctx, this._downRect, '▼');
+      const tr = this._trackRect;
+      ctx.fillStyle = '#333';
+      ctx.fillRect(tr.x, tr.y, tr.w, tr.h);
+      const th = Math.max(24, (tr.h * perPage) / items.length);
+      const ty = tr.y + ((tr.h - th) * this.scroll) / maxScroll;
+      ctx.fillStyle = '#ffd34d';
+      ctx.fillRect(tr.x, ty, tr.w, th);
+      this._thumb = { x: tr.x, y: ty, w: tr.w, h: th };
     } else {
       this._upRect = null;
       this._downRect = null;
+      this._trackRect = null;
     }
     // отмена подтверждения
     const afterList = listTop + listH + 4;
@@ -149,6 +152,12 @@ export class ShopMenu {
     }
     if (this._upRect && hit(x, y, this._upRect)) { this.scroll--; return true; }
     if (this._downRect && hit(x, y, this._downRect)) { this.scroll++; return true; }
+    if (this._trackRect && hit(x, y, this._trackRect)) {
+      // клик по треку — страница к месту клика
+      const mid = this._thumb ? this._thumb.y + this._thumb.h / 2 : 0;
+      this.scroll += y > mid ? 1 : -1;
+      return true;
+    }
     if (this._cancelRect && hit(x, y, this._cancelRect)) { this.confirmId = null; return true; }
     for (const b of (this._buyRects || [])) {
       if (!hit(x, y, b.r)) continue;

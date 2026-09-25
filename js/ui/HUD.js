@@ -58,16 +58,23 @@ export class HUD {
   }
   drawBottom(ctx, game, W, H) {
     const R = this.layout(W, H);
-    // ВСЕ активные заклинания: иконка-заглушка с кодом + Lv (ГДД 6.3; >6 — мелкие 24px)
+    drawButton(ctx, R.pause, '⏸');
+    drawButton(ctx, R.inv, '🎒');
+    // Умения СТРОГО между кнопками: иконка-плашка как у сущностей, уровень ПОД иконкой
     const owned = game.skills.ownedList();
-    const perRowCap = 4;
-    const s = owned.length > 6 ? 24 : 32;
-    const cellW = s + 56;
-    let col = 0, row = 0;
-    ctx.textAlign = 'left';
-    for (const st of owned) {
-      const x = 84 + col * cellW;
-      const y = H - 104 - row * (s + 8);
+    const left = R.pause.x + R.pause.w + 8;
+    const right = R.inv.x - 8;
+    const avail = right - left;
+    let s = 32, cellW = 46;
+    let perRow = Math.max(1, Math.floor(avail / cellW));
+    if (owned.length > perRow) { s = 24; cellW = 34; perRow = Math.max(1, Math.floor(avail / cellW)); }
+    const baseY = H - 56; // иконка s px + подпись 12px в полосе кнопок
+    owned.forEach((st, idx) => {
+      const row = Math.floor(idx / perRow);
+      const col = idx % perRow;
+      const inRow = Math.min(perRow, owned.length - row * perRow);
+      const y = baseY - row * (s + 16);
+      const x = left + ((avail - inRow * cellW) / 2) + col * cellW + (cellW - s) / 2;
       // плашка как у сущностей без арта
       ctx.fillStyle = '#888';
       ctx.fillRect(x, y, s, s);
@@ -80,15 +87,10 @@ export class HUD {
       ctx.font = 'bold ' + (s > 24 ? 11 : 9) + 'px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(HUD.skillCode(st.cfg.id), x + s / 2, y + s / 2 + 4);
-      ctx.textAlign = 'left';
       ctx.fillStyle = '#fff';
-      ctx.font = (s > 24 ? 10 : 12) + 'px monospace';
-      ctx.fillText('Lv.' + st.level, x + s + 6, y + s - 4);
-      col++;
-      if (col >= perRowCap) { col = 0; row++; }
-    }
-    drawButton(ctx, R.pause, '⏸');
-    drawButton(ctx, R.inv, '🎒');
+      ctx.font = (s > 24 ? 11 : 9) + 'px monospace';
+      ctx.fillText('Lv.' + st.level, x + s / 2, y + s + 12);
+    });
     ctx.textAlign = 'center';
   }
   drawBossBar(ctx, game, W, H) {
