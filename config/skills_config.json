@@ -220,6 +220,7 @@
         }
       },
       "pierce_count": 3,
+      "pierce_per_level": 1,
       "explosion_radius": 0,
       "explosion_damage": 0,
       "projectiles_per_shot": 1,

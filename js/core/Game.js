@@ -132,6 +132,20 @@ export class Game {
     try { window.ysdk?.auth?.openAuthDialog?.(); } catch (e) {}
   }
   dailyReady() { return this.daily ? this.daily.ready(this.save.data.dailyLast) : false; }
+  // Повторный забор после бесплатного — за рекламу (видео в Этапе 7, пока stub).
+  // Кулдаун из monetization.rewarded_cooldown_sec.
+  dailyAdReady() {
+    const cd = (this.config.game_config.monetization.rewarded_cooldown_sec || 600) * 1000;
+    return !!this.daily && (Date.now() - (this.save.data.dailyAdLast || 0) >= cd);
+  }
+  claimDailyAd() {
+    if (!this.dailyAdReady()) return false;
+    this.save.data.dailyAdLast = Date.now();
+    this.save.addCoins(this.daily.reward);
+    this.save.save();
+    try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
+    return true;
+  }
   claimDaily() {
     if (!this.dailyReady()) return false;
     this.save.data.dailyLast = Date.now();

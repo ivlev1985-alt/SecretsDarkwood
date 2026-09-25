@@ -196,7 +196,7 @@ export class SkillSystem {
         vx: Math.cos(a) * (c.projectile_speed || 400),
         vy: Math.sin(a) * (c.projectile_speed || 400),
         damage, crit,
-        pierce: c.pierce_count || 0,
+        pierce: (c.pierce_count || 0) + (c.pierce_per_level || 0) * (st.level - 1),
         radius: c.projectile_radius || 6,
         life: (c.projectile_lifetime_ms || 1000) / 1000,
         explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),

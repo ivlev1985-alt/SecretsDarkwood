@@ -193,7 +193,7 @@ export class ShopMenu {
   }
 }
 
-// Ежедневный бонус: забрать / обратный отсчёт.
+// Ежедневный бонус: забрать бесплатно / за рекламу / обратный отсчёт.
 export class DailyBonusPopup {
   draw(ctx, game, W, H) {
     void H;
@@ -202,22 +202,35 @@ export class DailyBonusPopup {
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     drawPanel(ctx, { x: 60, y: 250, w: W - 120, h: 230 }, t('daily_bonus_title'));
     const ready = game.dailyReady();
-    ctx.fillStyle = ready ? '#8f8' : '#aaa';
     ctx.font = 'bold 16px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(ready ? t('daily_bonus_available') : t('daily_bonus_claimed'), W / 2, 320);
-    ctx.fillStyle = '#ffd34d';
-    ctx.font = '15px monospace';
-    ctx.fillText(ready ? t('daily_bonus_reward') : t('daily_bonus_next_in', { time: game.daily.fmtRemain(game.save.data.dailyLast) }), W / 2, 348);
-    drawButton(ctx, { x: W / 2 - 110, y: 370, w: 220, h: 44 }, '🎁 ' + t('claim'), { primary: true, disabled: !ready });
-    this._claim = { x: W / 2 - 110, y: 370, w: 220, h: 44 };
+    if (ready) {
+      ctx.fillStyle = '#8f8';
+      ctx.fillText(t('daily_bonus_available'), W / 2, 320);
+      ctx.fillStyle = '#ffd34d';
+      ctx.font = '15px monospace';
+      ctx.fillText(t('daily_bonus_reward'), W / 2, 348);
+      drawButton(ctx, { x: W / 2 - 110, y: 370, w: 220, h: 44 }, '🎁 ' + t('claim'), { primary: true });
+    } else {
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(t('daily_bonus_claimed'), W / 2, 312);
+      ctx.fillStyle = '#ffd34d';
+      ctx.font = '14px monospace';
+      ctx.fillText(t('daily_bonus_next_in', { time: game.daily.fmtRemain(game.save.data.dailyLast) }), W / 2, 336);
+      drawButton(ctx, { x: W / 2 - 110, y: 362, w: 220, h: 40 }, '📺 ' + t('claim'), { primary: true, disabled: !game.dailyAdReady() });
+    }
+    this._claim = { x: W / 2 - 110, y: ready ? 370 : 362, w: 220, h: ready ? 44 : 40 };
     drawButton(ctx, { x: W / 2 - 90, y: 424, w: 180, h: 36 }, t('close'));
     this._close = { x: W / 2 - 90, y: 424, w: 180, h: 36 };
   }
   click(game, x, y) {
     if (this._claim && hit(x, y, this._claim)) {
-      game.claimDaily();
-      return game.dailyReady() ? true : 'close';
+      if (game.dailyReady()) {
+        game.claimDaily();
+        return 'close';
+      }
+      game.claimDailyAd(); // повторный забор — за рекламу
+      return game.dailyAdReady() ? true : 'close';
     }
     if (this._close && hit(x, y, this._close)) return 'close';
     return false;

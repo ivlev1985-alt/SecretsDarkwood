@@ -22,7 +22,7 @@ export class MainMenu {
   }
   draw(ctx, game, W, H) {
     const R = this.layout(W, H);
-    const t = (k) => game._t(k);
+    const t = (k, p) => game._t(k, p);
     // фон: полупрозрачный оверлей поверх мира
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, W, H);
@@ -33,9 +33,19 @@ export class MainMenu {
     ctx.fillStyle = '#fff';
     ctx.font = '14px monospace';
     ctx.fillText(t('stat_best_time') + ': ' + (game.bestTime > 0 ? game.fmtTime(game.bestTime) : '--:--'), W / 2, 180);
-    ctx.fillStyle = '#8f8';
+    // строка бонуса — только по состоянию: доступна / за рекламу / обратный отсчёт
     ctx.font = '13px monospace';
-    ctx.fillText(t('daily_bonus_available') + ': +' + game.config.game_config.daily_bonus.reward_coins, W / 2, 205);
+    ctx.textAlign = 'center';
+    if (game.dailyReady()) {
+      ctx.fillStyle = '#8f8';
+      ctx.fillText(t('daily_bonus_available') + ': +' + game.config.game_config.daily_bonus.reward_coins, W / 2, 205);
+    } else if (game.dailyAdReady()) {
+      ctx.fillStyle = '#ffd34d';
+      ctx.fillText('📺 ' + t('daily_bonus_title'), W / 2, 205);
+    } else {
+      ctx.fillStyle = '#666';
+      ctx.fillText(t('daily_bonus_next_in', { time: game.daily.fmtRemain(game.save.data.dailyLast) }), W / 2, 205);
+    }
     drawButton(ctx, R.settings, '⚙ ' + t('settings'));
     drawButton(ctx, R.leaders, '🏆 ' + t('leaderboard'));
     drawButton(ctx, R.play, '▶ ' + t('play'), { primary: true, big: true });

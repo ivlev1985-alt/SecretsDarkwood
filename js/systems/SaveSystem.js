@@ -13,7 +13,8 @@ export class SaveSystem {
       coins: 0,
       shop: {}, // itemId -> level
       stats: { totalTime: 0, totalKills: 0, bestTime: 0, totalRuns: 0, fav: {} },
-      dailyLast: 0
+      dailyLast: 0,
+      dailyAdLast: 0 // последний забор бонуса за рекламу (stub видео до Этапа 7)
     };
   }
 
