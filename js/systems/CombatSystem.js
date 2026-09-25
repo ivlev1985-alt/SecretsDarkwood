@@ -103,7 +103,7 @@ export class CombatSystem {
           if (p.crit || (e.isBoss && this.showBossAlways)) {
             this.pushText(e.x, e.y - 20, Math.round(p.damage) + (p.crit ? '!' : ''), p.crit ? '#ffcc00' : '#fff');
           }
-          if (e.hp <= 0 && wasAlive > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(e); }
+          if (e.hp <= 0 && wasAlive > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(e, p.weaponId); }
           // взрыв fireball
           if (p.explosionR > 0) {
             for (const o of enemies) {
@@ -112,7 +112,7 @@ export class CombatSystem {
               if (ox * ox + oy * oy < p.explosionR * p.explosionR) {
                 const w = o.hp;
                 o.takeDamage(p.explosionDmg, 0, 0);
-                if (o.hp <= 0 && w > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(o); }
+                if (o.hp <= 0 && w > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(o, p.weaponId); }
               }
             }
           }

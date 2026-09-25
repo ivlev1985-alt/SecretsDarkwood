@@ -105,7 +105,7 @@ export class SkillSystem {
             const { damage, crit } = this.combat.rollDamage(a.damage);
             e.takeDamage(damage, 0, 0);
             if (crit) this.combat.pushText(e.x, e.y - 20, Math.round(damage) + '!');
-            if (e.hp <= 0 && was > 0) { this.combat.addKill(a.weaponId); if (onKill) onKill(e); }
+            if (e.hp <= 0 && was > 0) { this.combat.addKill(a.weaponId); if (onKill) onKill(e, a.weaponId); }
           }
         }
       }
@@ -223,7 +223,7 @@ export class SkillSystem {
         const r = this.combat.rollDamage(this.weaponDamage(st, player));
         e.takeDamage(r.damage, (dx / (Math.hypot(dx, dy) || 1)) * 120, (dy / (Math.hypot(dx, dy) || 1)) * 120);
         if (r.crit) this.combat.pushText(e.x, e.y - 20, Math.round(r.damage) + '!');
-        if (e.hp <= 0 && was > 0) { this.combat.addKill(c.id); if (ctx.onKill) ctx.onKill(e); }
+        if (e.hp <= 0 && was > 0) { this.combat.addKill(c.id); if (ctx.onKill) ctx.onKill(e, c.id); }
       }
     }
     this.auraRadius = radius;

@@ -21,6 +21,8 @@ export class Player extends Entity {
     this.anim = null; // задаёт Game.attachHeroAnim после загрузки hero.frames
     this.passiveLevels = {};
     this.coins = 0;
+    this.flashColor = '#ff0000'; // переопределяется из visuals.hurt_flash_color
+    this.hurtDur = 0.25; // переопределяется из visuals.hurt_flash_duration_ms
   }
 
   getPickupRadius() { return this.pickupRadius * (this.pickupMul || 1); }
@@ -70,7 +72,7 @@ export class Player extends Entity {
     if (this.invT > 0 || this.hp <= 0) return 0;
     this.hp -= amount;
     this.invT = (this.cfg.invincibility_ms || 500) / 1000;
-    this.hitFlash = 0.25;
+    this.hitFlash = this.hurtDur || 0.25;
     if (this.hp <= 0) { this.hp = 0; this.alive = false; }
     return amount;
   }

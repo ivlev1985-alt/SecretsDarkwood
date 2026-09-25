@@ -15,9 +15,11 @@ import { UpgradeSystem } from '../systems/UpgradeSystem.js';
 import { ChestSystem } from '../systems/ChestSystem.js';
 import { LootSystem } from '../systems/LootSystem.js';
 import { Chest } from '../entities/Chest.js';
+import { Prop } from '../entities/Prop.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
+import { EffectSystem } from '../systems/EffectSystem.js';
 import { MainMenu } from '../ui/MainMenu.js';
 import { HUD } from '../ui/HUD.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
@@ -53,6 +55,8 @@ export class Game {
     this.player = null;
     this.enemies = [];
     this.pickups = [];
+    this.props = [];
+    this.fx = null;
     this.combat = null;
     this.spawn = null;
     this.skills = null;
@@ -143,6 +147,7 @@ export class Game {
     this.save.data.dailyAdLast = Date.now();
     this.save.addCoins(this.daily.reward);
     this.save.save();
+    if (this.fx && this.player) this.fx.play('daily_bonus_burst', this.player.x, this.player.y);
     try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
     return true;
   }
@@ -151,6 +156,7 @@ export class Game {
     this.save.data.dailyLast = Date.now();
     this.save.addCoins(this.daily.reward);
     this.save.save();
+    if (this.fx && this.player) this.fx.play('daily_bonus_burst', this.player.x, this.player.y);
     try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
     return true;
   }
@@ -358,8 +364,12 @@ export class Game {
     }
     this.player = new Player(base, 0, 0);
     this.player.attachHeroAnim(new Animator(g.hero.frames, 'idle'));
+    this.player.flashColor = g.visuals.hurt_flash_color || '#ff0000';
+    this.player.hurtDur = (g.visuals.hurt_flash_duration_ms || 250) / 1000;
     this.enemies = [];
     this.pickups = [];
+    this.props = [];
+    this.fx = new EffectSystem(this.config.effects_config, this.assets);
     this.combat = new CombatSystem(g, b);
     this.spawn = new SpawnSystem(b.waves, b.monsters);
     // разблокировки магазина живут в сейве — применяем каждый забег
@@ -391,8 +401,100 @@ export class Game {
     this.camera.snap(0, 0);
   }
 
-  _onKill(e) {
+  _onKill(e, weaponId) {
     for (const p of this.loot.dropFor(e)) this.pickups.push(p);
+    // эффект смерти по hit_effect оружия (дефолт — искра)
+    let fxId = 'hit_spark';
+    if (weaponId) {
+      const st = this.skills.weapons.get(weaponId);
+      if (st && st.cfg.hit_effect) fxId = st.cfg.hit_effect;
+    }
+    if (this.fx) this.fx.play(fxId, e.x, e.y);
+  }
+
+  // эффект попадания по hit_effect оружия + молния
+  _onHit(p, e) {
+    this.skills.registerHitFx(p, e);
+    if (p.weaponId) {
+      const st = this.skills.weapons.get(p.weaponId);
+      if (st && st.cfg.hit_effect && this.fx) this.fx.play(st.cfg.hit_effect, e.x, e.y);
+    }
+  }
+
+  // --- пропсы окружения: плотность вокруг игрока, slowdown, push-out ---
+  _updateProps(dt) {
+    void dt;
+    const defs = this.config.balance_config.environment_props || [];
+    if (!defs.length) return;
+    const P = this.player;
+    // чистка далёких
+    for (let i = this.props.length - 1; i >= 0; i--) {
+      const pr = this.props[i];
+      if (Math.hypot(pr.x - P.x, pr.y - P.y) > 1200) this.props.splice(i, 1);
+    }
+    // плотность ~40 в кольце 500–950
+    let guard = 0;
+    while (this.props.length < 40 && guard++ < 12) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 500 + Math.random() * 450;
+      // collidable реже (30%)
+      const solids = defs.filter((d) => d.collidable);
+      const softs = defs.filter((d) => !d.collidable);
+      const pool = (Math.random() < 0.3 && solids.length) ? solids : (softs.length ? softs : defs);
+      const cfg = pool[(Math.random() * pool.length) | 0];
+      this.props.push(new Prop(cfg, P.x + Math.cos(a) * r, P.y + Math.sin(a) * r));
+    }
+  }
+
+  _propSlow(x, y) {
+    let f = 1;
+    for (const pr of this.props) {
+      if (pr.cfg.collidable || !pr.alive) continue;
+      const s = pr.cfg.slowdown_factor || 1;
+      if (s >= 1) continue;
+      const dx = x - pr.x, dy = y - pr.y;
+      const rr = pr.radius + 16;
+      if (dx * dx + dy * dy < rr * rr && s < f) f = s;
+    }
+    return f;
+  }
+
+  // Раздвижка с непроходимыми пропсами (игрок / монстры — по collisions из конфига)
+  _pushOut(ent, isPlayer) {
+    const col = this.config.game_config.collisions;
+    if (isPlayer && !col.player_collides_with_props) return;
+    if (!isPlayer && !col.monsters_collide_with_props) return;
+    for (const pr of this.props) {
+      if (!pr.cfg.collidable || !pr.alive) continue;
+      const dx = ent.x - pr.x, dy = ent.y - pr.y;
+      const rr = ent.radius + pr.radius;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < rr * rr && d2 > 0.01) {
+        const d = Math.sqrt(d2);
+        ent.x = pr.x + (dx / d) * rr;
+        ent.y = pr.y + (dy / d) * rr;
+      }
+    }
+  }
+
+  _drawProps(ctx) {
+    for (const pr of this.props) {
+      if (!pr.alive) continue;
+      const img = this.assets.get(pr.cfg.sprite);
+      if (img && img.tagName !== 'CANVAS') {
+        pr.draw(ctx, this.assets, pr.cfg.sprite, pr.w, pr.h, 1, '#555');
+      } else if (pr.cfg.collidable) {
+        ctx.fillStyle = '#4a4a5e';
+        ctx.fillRect(pr.x - pr.radius, pr.y - pr.radius, pr.radius * 2, pr.radius * 2);
+        ctx.strokeStyle = '#888';
+        ctx.strokeRect(pr.x - pr.radius, pr.y - pr.radius, pr.radius * 2, pr.radius * 2);
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, pr.radius * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
   }
 
   _chestSpawnPoint() {
@@ -413,6 +515,7 @@ export class Game {
       this.pendingLevels += ups;
     }
     this.combat.pushText(c.x, c.y - 24, '+' + reward.coins, '#ffd34d');
+    if (this.fx) this.fx.play('chest_burst', c.x, c.y);
     try { this.audio.playSfx(this.config.balance_config.chests.sfx_open); } catch (e) {}
     if (this.config.game_config.save.save_on_important_events) this.save.save();
   }
@@ -423,6 +526,7 @@ export class Game {
       const ups = this.progression.addXP(p.value * (this.player.xpMul || 1));
       this.player.level = this.progression.level;
       this.pendingLevels += ups;
+      if (this.fx) this.fx.play('pickup_xp', p.x, p.y);
     } else if (p.kind === 'coin') {
       this.player.coins += p.value;
     } else if (p.kind === 'potion') {
@@ -437,7 +541,7 @@ export class Game {
         if (!e.alive || e.deathT > 0) continue;
         const was = e.hp;
         e.takeDamage(150, 0, 0);
-        if (e.hp <= 0 && was > 0) { this.combat.addKill(null); this._onKill(e); }
+        if (e.hp <= 0 && was > 0) { this.combat.addKill(null); this._onKill(e, null); }
       }
       this.combat.pushText(this.player.x, this.player.y - 30, 'BOOM', '#ff8800');
     }
@@ -485,9 +589,13 @@ export class Game {
     }
     this.time += dt;
     const v = this.input.getVector();
-    this.player.update(dt, v);
+    const slow = this._propSlow(this.player.x, this.player.y);
+    this.player.update(dt, { x: v.x * slow, y: v.y * slow });
     this.player.level = this.progression.level;
     this.camera.update(dt, this.player.x, this.player.y, this.canvas.width, this.canvas.height);
+    this._updateProps(dt);
+    this._pushOut(this.player, true);
+    if (this.fx) this.fx.update(dt);
 
     const fresh = this.spawn.update(dt, {
       player: this.player, enemies: this.enemies, viewW: this.canvas.width, viewH: this.canvas.height
@@ -498,6 +606,7 @@ export class Game {
         b.hp = raw.hp; b.maxHp = raw.maxHp;
         this.enemies.push(b);
         this.bossWarn = { text: ConfigLoader.t(this.config.localization, this.settings.lang, 'boss_warning', { name: b.name || 'BOSS' }), t: 2 };
+        if (this.fx) this.fx.play('boss_spawn', b.x, b.y);
         try { this.audio.playSfx('boss_roar.mp3'); } catch (e) {}
       } else this.enemies.push(raw);
     }
@@ -524,11 +633,12 @@ export class Game {
       e.x += mx * e.speed * dt;
       e.y += my * e.speed * dt;
       e.applyKnock(dt);
+      this._pushOut(e, false);
       e.updateAnim(dt);
     }
 
-    const onKill = (e) => this._onKill(e);
-    const onHit = (p, e) => this.skills.registerHitFx(p, e);
+    const onKill = (e, wid) => this._onKill(e, wid);
+    const onHit = (p, e) => this._onHit(p, e);
     this.skills.update(dt, { player: this.player, enemies: this.enemies, onKill });
     this.skills.updateProjectiles(dt);
     this.skills.updateFx(dt);
@@ -558,7 +668,11 @@ export class Game {
 
     if (this.pendingLevels > 0 && this.states.is('playing')) {
       this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3);
-      if (this.choices.length) this.states.set('upgrade');
+      if (this.choices.length) {
+        if (this.fx) this.fx.play('levelup_burst', this.player.x, this.player.y);
+        try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
+        this.states.set('upgrade');
+      }
       else this.pendingLevels = 0;
     }
 
@@ -592,6 +706,7 @@ export class Game {
       ctx.save();
       this.camera.apply(ctx, W, H);
       this._drawGrid(ctx, W, H);
+      this._drawProps(ctx);
       for (const a of this.skills.areas) {
         ctx.globalAlpha = 0.35;
         ctx.fillStyle = a.color;
@@ -637,6 +752,7 @@ export class Game {
       for (const p of this.skills.projectiles) this._drawShot(ctx, p, '#ffd34d');
       for (const p of this.skills.enemyShots) this._drawShot(ctx, p, '#ff4d4d');
       this.skills.drawLightning(ctx);
+      if (this.fx) this.fx.draw(ctx);
       ctx.textAlign = 'center';
       for (const t of this.combat.texts) {
         ctx.globalAlpha = 1 - t.life / t.maxLife;
