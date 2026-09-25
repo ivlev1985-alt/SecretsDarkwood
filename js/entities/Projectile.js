@@ -21,6 +21,8 @@ export class Projectile extends Entity {
   fire(o) {
     this.active = true; this.alive = true;
     this.x = o.x; this.y = o.y;
+    this.ox = o.x; this.oy = o.y; // точка выстрела (для эффектов типа молнии)
+    this.lastX = null; this.lastY = null; // последняя поражённая цель (цепочка)
     this.vx = o.vx; this.vy = o.vy;
     this.damage = o.damage; this.crit = !!o.crit;
     this.pierce = o.pierce || 0;

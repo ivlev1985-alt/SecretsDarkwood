@@ -213,6 +213,13 @@ export class Game {
         this._tap(t.clientX, t.clientY);
       }
     });
+    // колесико — скролл магазина
+    this.canvas.addEventListener('wheel', (e) => {
+      if (this.uiShop) {
+        e.preventDefault();
+        this.shopMenu.scroll += e.deltaY > 0 ? 1 : -1;
+      }
+    }, { passive: false });
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape' || e.code === 'KeyP') {
         if (this.states.is('playing')) this.pauseGame();
@@ -507,9 +514,11 @@ export class Game {
     }
 
     const onKill = (e) => this._onKill(e);
+    const onHit = (p, e) => this.skills.registerHitFx(p, e);
     this.skills.update(dt, { player: this.player, enemies: this.enemies, onKill });
     this.skills.updateProjectiles(dt);
-    this.combat.projectilesVsEnemies(this.skills.projectiles, this.enemies, onKill);
+    this.skills.updateFx(dt);
+    this.combat.projectilesVsEnemies(this.skills.projectiles, this.enemies, onKill, onHit);
     this.combat.enemyProjectilesVsPlayer(this.skills.enemyShots, this.player);
     this.combat.separate(this.enemies);
     this.combat.contactDamage(this.player, this.enemies);
@@ -613,6 +622,7 @@ export class Game {
       }
       for (const p of this.skills.projectiles) this._drawShot(ctx, p, '#ffd34d');
       for (const p of this.skills.enemyShots) this._drawShot(ctx, p, '#ff4d4d');
+      this.skills.drawLightning(ctx);
       ctx.textAlign = 'center';
       for (const t of this.combat.texts) {
         ctx.globalAlpha = 1 - t.life / t.maxLife;

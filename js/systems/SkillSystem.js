@@ -10,6 +10,7 @@ export class SkillSystem {
     this.projectiles = [];
     this.enemyShots = [];
     this.areas = []; // { cfg, level, x, y, ttl, tickT, color, weaponId }
+    this.lightningFx = []; // { x1, y1, x2, y2, t, max } — ломаные молний
     this.auraTick = 0;
     this.pool = new Pool(() => new Projectile(), 128);
     for (const w of weaponsCfg) {
@@ -110,6 +111,59 @@ export class SkillSystem {
       }
       if (a.ttl <= 0) this.areas.splice(i, 1);
     }
+  }
+
+  // Хук попаданий из Combat: цепочка молнии от предыдущей точки к цели.
+  registerHitFx(p, e) {
+    if (p.weaponId !== 'lightning_chain') return;
+    this.lightningFx.push({
+      x1: p.lastX ?? p.ox ?? p.x,
+      y1: p.lastY ?? p.oy ?? p.y,
+      x2: e.x, y2: e.y,
+      t: 0.22, max: 0.22
+    });
+    if (this.lightningFx.length > 24) this.lightningFx.shift();
+    p.lastX = e.x; p.lastY = e.y;
+  }
+
+  updateFx(dt) {
+    for (let i = this.lightningFx.length - 1; i >= 0; i--) {
+      this.lightningFx[i].t -= dt;
+      if (this.lightningFx[i].t <= 0) this.lightningFx.splice(i, 1);
+    }
+  }
+
+  // Ломаная молния: 6 сегментов со случайным смещением, гаснет за ~0.2с
+  drawLightning(ctx) {
+    for (const f of this.lightningFx) {
+      const k = Math.max(0, f.t / f.max);
+      const n = 6;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.65 * k;
+      ctx.strokeStyle = '#cfe8ff';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      this._traceBolt(ctx, f, n, 14);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffe94d';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      this._traceBolt(ctx, f, n, 14);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  _traceBolt(ctx, f, n, amp) {
+    ctx.moveTo(f.x1, f.y1);
+    const dx = (f.x2 - f.x1) / n, dy = (f.y2 - f.y1) / n;
+    const len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1) || 1;
+    const nx = -(f.y2 - f.y1) / len, ny = (f.x2 - f.x1) / len;
+    for (let i = 1; i < n; i++) {
+      const off = (Math.random() - 0.5) * 2 * amp;
+      ctx.lineTo(f.x1 + dx * i + nx * off, f.y1 + dy * i + ny * off);
+    }
+    ctx.lineTo(f.x2, f.y2);
   }
 
   updateProjectiles(dt) {

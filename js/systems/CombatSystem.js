@@ -86,7 +86,8 @@ export class CombatSystem {
   }
 
   // Снаряды игрока по врагам. Возвращает число убийств за кадр.
-  projectilesVsEnemies(projectiles, enemies, onKill) {
+  // onHit(p, e) — визуальные эффекты попадания (молния и т.п.).
+  projectilesVsEnemies(projectiles, enemies, onKill, onHit) {
     let kills = 0;
     for (const p of projectiles) {
       if (!p.active) continue;
@@ -98,6 +99,7 @@ export class CombatSystem {
         if (dx * dx + dy * dy < rr * rr) {
           const wasAlive = e.hp;
           e.takeDamage(p.damage, p.vx * 0.15, p.vy * 0.15);
+          if (onHit) onHit(p, e);
           if (p.crit || (e.isBoss && this.showBossAlways)) {
             this.pushText(e.x, e.y - 20, Math.round(p.damage) + (p.crit ? '!' : ''), p.crit ? '#ffcc00' : '#fff');
           }
