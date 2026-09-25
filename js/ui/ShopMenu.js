@@ -1,4 +1,5 @@
 ﻿import { drawButton, drawPanel, hit } from './widgets.js';
+import { ShopSystem } from '../systems/ShopSystem.js';
 
 // Предметный магазин: вкладка «Магазин» (6 офферов, обновление раз в час / за рекламу)
 // и «Инвентарь» (8 слотов, выбор → характеристики + Продать).
@@ -53,27 +54,18 @@ export class ShopMenu {
 
   // ---------- вкладка Магазин ----------
   _drawShop(ctx, game, W, t) {
-    // строка обновления
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#888';
-    ctx.font = '11px monospace';
-    ctx.fillText(t('shop_refresh_in', { time: game.stockRemain() }), 50, 256);
-    const adReady = game.stockAdReady();
-    const rr = { x: 250, y: 238, w: 164, h: 26 };
-    drawButton(ctx, rr, '📺 ' + t('shop_refresh'), { disabled: !adReady });
-    this._refreshRect = rr;
-    // офферы
+    // офферы: колонка карточек 50..406, справа колонка скролла 414..442
     const offers = game.save.data.stock.offers;
     const maxScroll = Math.max(0, offers.length - this.PER_PAGE);
     this.scroll = Math.max(0, Math.min(maxScroll, this.scroll));
     const cardX = 50, cardW = 356, cardH = 92, step = 100;
-    let y = 272;
+    let y = 245;
     this._buyRects = [];
     for (let i = this.scroll; i < Math.min(offers.length, this.scroll + this.PER_PAGE); i++) {
       this._drawOffer(ctx, game, t, offers[i], i, cardX, y, cardW, cardH);
       y += step;
     }
-    const listTop = 272, listH = this.PER_PAGE * step - 8;
+    const listTop = 245, listH = this.PER_PAGE * step - 8;
     const colX = 414, colW = 28;
     this._upRect = { x: colX, y: listTop, w: colW, h: 40 };
     this._downRect = { x: colX, y: listTop + listH - 40, w: colW, h: 40 };
@@ -93,10 +85,25 @@ export class ShopMenu {
     } else {
       this._upRect = null; this._downRect = null; this._trackRect = null;
     }
+    // низ: таймер + «Обновить» (правая грань под правой гранью карточек),
+    // при подтверждении покупки строку занимает «Отмена»
+    const rowY = 548, rowH = 26;
     if (this.confirmIdx >= 0) {
-      drawButton(ctx, { x: cardX, y: 574, w: cardW, h: 22 }, t('cancel'));
-      this._cancelRect = { x: cardX, y: 574, w: cardW, h: 22 };
-    } else this._cancelRect = null;
+      drawButton(ctx, { x: cardX, y: rowY, w: cardW, h: rowH }, t('cancel'));
+      this._cancelRect = { x: cardX, y: rowY, w: cardW, h: rowH };
+      this._refreshRect = null;
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#888';
+      ctx.font = '11px monospace';
+      ctx.fillText(t('shop_refresh_in', { time: game.stockRemain() }), cardX, rowY + 17);
+      const adReady = game.stockAdReady();
+      const rw = 176;
+      const rr = { x: cardX + cardW - rw, y: rowY, w: rw, h: rowH };
+      drawButton(ctx, rr, '📺 ' + t('shop_refresh'), { primary: adReady, disabled: !adReady });
+      this._refreshRect = rr;
+      this._cancelRect = null;
+    }
   }
 
   _drawOffer(ctx, game, t, offer, idx, x, y, w, h) {
@@ -189,22 +196,22 @@ export class ShopMenu {
       ctx.fillStyle = rar ? rar.color : '#fff';
       ctx.font = 'bold 14px monospace';
       ctx.fillText(game.itemName(sel).slice(0, 34), 60, dy + 20);
-      ctx.font = '12px monospace';
-      ctx.fillStyle = '#fff';
-      let yy = dy + 42;
-      if (sel.slot === 'staff') {
-        ctx.fillText(game.weaponName(sel.spell) + ' · Lv.' + (sel.spell_level || 1), 60, yy);
-        yy += 22;
-      } else {
-        for (const st of (sel.stats || [])) {
-          ctx.fillText(ShopSystem.statText(st, (k) => game._t(k)).slice(0, 40), 60, yy);
-          yy += 22;
-        }
-      }
+      // кнопка продажи сразу под названием, характеристики ниже — без наложений
       const sp = game.shop.sellPrice(sel);
-      const r = { x: 60, y: 516, w: W - 120, h: 34 };
+      const r = { x: 60, y: dy + 32, w: W - 120, h: 30 };
       drawButton(ctx, r, t('inv_sell') + ' · ' + t('shop_price_format', { price: sp }), { primary: true });
       this._sellRect = r;
+      ctx.font = '12px monospace';
+      ctx.fillStyle = '#fff';
+      let yy = dy + 84;
+      if (sel.slot === 'staff') {
+        ctx.fillText((game.weaponName(sel.spell) + ' · Lv.' + (sel.spell_level || 1)).slice(0, 40), 60, yy);
+      } else {
+        for (const st of (sel.stats || []).slice(0, 4)) {
+          ctx.fillText(ShopSystem.statText(st, (k) => game._t(k)).slice(0, 40), 60, yy);
+          yy += 20;
+        }
+      }
     }
     if (!sel) this._sellRect = null;
     ctx.textAlign = 'center';
