@@ -746,6 +746,9 @@ export class Game {
     const slow = this._propSlow(this.player.x, this.player.y);
     this.player.update(dt, { x: v.x * slow, y: v.y * slow });
     this.player.level = this.progression.level;
+    // крит из статов игрока (снаряжение + пассивки), а не из базового конфига
+    this.combat.critChance = this.player.critChance;
+    this.combat.critMul = this.player.critMul;
     this.camera.update(dt, this.player.x, this.player.y, this.canvas.width, this.canvas.height);
     this._updateProps(dt);
     this._pushOut(this.player, true);

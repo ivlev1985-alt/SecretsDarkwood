@@ -158,38 +158,39 @@ export class ShopMenu {
   }
 
   // ---------- вкладка Инвентарь ----------
-  // Сетка 2×4: левая колонка 50..224, правая 232..406 (симметрия относительно центра).
-  // Иконка — на всю ячейку, характеристики — столбиком под названием, Продать — над Закрыть.
+  // Сетка 4×2 квадратных слотов: 50..406 строго (83px + зазор 8).
+  // Иконка-заглушка на всю ячейку (место под картинку), характеристики — столбиком,
+  // Продать — над Закрыть в тех же гранях.
   _drawInv(ctx, game, W, t) {
     const slots = game.shop.cfg.slots;
-    const cellW = 174, cellH = 48, gap = 8;
-    const x0 = 50, y0 = 245; // 50..224 | 232..406
+    const cell = 83, gap = 8;
+    const x0 = 50, y0 = 245; // колонки 50/141/232/323, ряды 245/336
     this._slotRects = [];
     ctx.textAlign = 'center';
     slots.forEach((s, i) => {
-      const cx = x0 + (i % 2) * (cellW + gap);
-      const cy = y0 + Math.floor(i / 2) * (cellH + gap);
+      const cx = x0 + (i % 4) * (cell + gap);
+      const cy = y0 + Math.floor(i / 4) * (cell + gap);
       const item = game.save.data.gear[s.id];
       const rar = item ? game.shop.rarityOf(item) : null;
       // иконка на всю ячейку
       ctx.fillStyle = item ? '#2e2e28' : '#1c1c34';
-      ctx.fillRect(cx, cy, cellW, cellH);
+      ctx.fillRect(cx, cy, cell, cell);
       if (item && rar) {
         ctx.globalAlpha = 0.22;
         ctx.fillStyle = rar.color;
-        ctx.fillRect(cx, cy, cellW, cellH);
+        ctx.fillRect(cx, cy, cell, cell);
         ctx.globalAlpha = 1;
       }
       ctx.strokeStyle = rar ? rar.color : '#555';
       ctx.lineWidth = this.selected === s.id ? 3 : 2;
-      ctx.strokeRect(cx, cy, cellW, cellH);
+      ctx.strokeRect(cx, cy, cell, cell);
       ctx.fillStyle = item ? (rar ? rar.color : '#fff') : '#555';
-      ctx.font = 'bold 20px monospace';
-      ctx.fillText(item ? game.itemName(item).slice(0, 8) : s.icon_letter, cx + cellW / 2, cy + 26);
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText(item ? game.itemName(item).slice(0, 7) : s.icon_letter, cx + cell / 2, cy + 44);
       ctx.fillStyle = '#999';
       ctx.font = '10px monospace';
-      ctx.fillText(game._t(s.name_key).slice(0, 20), cx + cellW / 2, cy + 41);
-      this._slotRects.push({ id: s.id, r: { x: cx, y: cy, w: cellW, h: cellH } });
+      ctx.fillText(game._t(s.name_key).slice(0, 16), cx + cell / 2, cy + 68);
+      this._slotRects.push({ id: s.id, r: { x: cx, y: cy, w: cell, h: cell } });
     });
     // низ: название + характеристики столбиком + Продать над Закрыть (грани 50..406)
     const sel = this.selected ? game.save.data.gear[this.selected] : null;
