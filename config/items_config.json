@@ -135,6 +135,17 @@
   "pet": {
     "speed": 260,                              // скорость полёта (px/s)
     "grab_radius": 24,                         // радиус захвата дропа
-    "deliver_radius": 28                       // радиус передачи хозяину
-  }
+    "deliver_radius": 28,                      // радиус передачи хозяину
+    "magnet_radius": 60,                       // стартовый радиус притяжения монет/XP к питомцу
+    "magnet_pull": 380                         // скорость притяжения (px/s)
+  },
+
+  // ------------------------------------------------------------
+  // АПГРЕЙДЫ ПИТОМЦА В ЗАБЕГЕ (окно levelup, только если питомец есть).
+  // value — прибавка в px за уровень.
+  // ------------------------------------------------------------
+  "pet_upgrades": [
+    { "id": "pet_range",  "name_key": "pet_up_range",  "desc_key": "pet_up_range_desc",  "value": 40, "max_level": 5 },
+    { "id": "pet_magnet", "name_key": "pet_up_magnet", "desc_key": "pet_up_magnet_desc", "value": 20, "max_level": 5 }
+  ]
 }

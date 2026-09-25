@@ -58,6 +58,7 @@ export class Game {
     this.pickups = [];
     this.props = [];
     this.pet = null;
+    this.petLevels = {};
     this.fx = null;
     this.combat = null;
     this.spawn = null;
@@ -450,16 +451,30 @@ export class Game {
   applyUpgrade(i) {
     const c = this.choices[i];
     if (!c) return;
-    this.upgrades.apply(c, this.skills, this.player);
+    if (c.kind === 'pet' && this.pet) {
+      // апгрейд питомца: дальность полёта / радиус притяжения
+      const def = (this.shop.cfg.pet_upgrades || []).find((d) => d.id === c.id);
+      this.petLevels[c.id] = (this.petLevels[c.id] || 0) + 1;
+      if (def) {
+        if (c.id === 'pet_range') this.pet.radius += def.value;
+        else if (c.id === 'pet_magnet') this.pet.magnetR += def.value;
+      }
+    } else {
+      this.upgrades.apply(c, this.skills, this.player);
+    }
     this.pendingLevels--;
     this.player.level = this.progression.level;
     if (this.config.game_config.save.save_on_important_events) this.save.save();
     if (this.pendingLevels > 0) {
-      this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3);
+      this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3, Math.random, this._petCtx());
       if (!this.choices.length) { this.pendingLevels = 0; this.states.set('playing'); }
     } else {
       this.states.set('playing');
     }
+  }
+
+  _petCtx() {
+    return { hasPet: !!this.pet, levels: this.petLevels || {} };
   }
 
   _initRun() {
@@ -513,13 +528,15 @@ export class Game {
     }
     // питомец из слота (если куплен)
     this.pet = null;
+    this.petLevels = {};
     const petItem = gear.pet;
     if (petItem && petItem.stats && petItem.stats[0] && petItem.stats[0].value > 0) {
-      this.pet = new Pet(this.player.x, this.player.y - 40, petItem.stats[0].value, (this.shop.cfg.pet || {}).speed || 260);
+      this.pet = new Pet(this.player.x, this.player.y - 40, petItem.stats[0].value,
+        (this.shop.cfg.pet || {}).speed || 260, (this.shop.cfg.pet || {}).magnet_radius || 60);
       this.pet.tpl = petItem.tpl;
     }
     this.progression = new ProgressionSystem(b.progression);
-    this.upgrades = new UpgradeSystem(s, this.config.localization, this.settings.lang);
+    this.upgrades = new UpgradeSystem(s, this.config.localization, this.settings.lang, this.config.items_config.pet_upgrades);
     this.chestSys = new ChestSystem(b.chests);
     this.loot = new LootSystem(b.loot);
     this.enemyProjById = new Map();
@@ -824,7 +841,7 @@ export class Game {
     });
 
     if (this.pendingLevels > 0 && this.states.is('playing')) {
-      this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3);
+      this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3, Math.random, this._petCtx());
       if (this.choices.length) {
         if (this.fx) this.fx.play('levelup_burst', this.player.x, this.player.y);
         try { this.audio.playSfx('levelup.mp3'); } catch (e) {}

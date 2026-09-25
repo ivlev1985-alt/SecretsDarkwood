@@ -158,62 +158,64 @@ export class ShopMenu {
   }
 
   // ---------- вкладка Инвентарь ----------
+  // Сетка 2×4: левая колонка 50..224, правая 232..406 (симметрия относительно центра).
+  // Иконка — на всю ячейку, характеристики — столбиком под названием, Продать — над Закрыть.
   _drawInv(ctx, game, W, t) {
     const slots = game.shop.cfg.slots;
-    const cell = 82, gap = 8;
-    const x0 = 50 + ((364 - (4 * cell + 3 * gap)) / 2);
-    let y0 = 245;
+    const cellW = 174, cellH = 48, gap = 8;
+    const x0 = 50, y0 = 245; // 50..224 | 232..406
     this._slotRects = [];
     ctx.textAlign = 'center';
     slots.forEach((s, i) => {
-      const cx = x0 + (i % 4) * (cell + gap);
-      const cy = y0 + Math.floor(i / 4) * (cell + gap);
+      const cx = x0 + (i % 2) * (cellW + gap);
+      const cy = y0 + Math.floor(i / 2) * (cellH + gap);
       const item = game.save.data.gear[s.id];
       const rar = item ? game.shop.rarityOf(item) : null;
-      ctx.fillStyle = this.selected === s.id ? '#3a3a1c' : '#1c1c34';
-      ctx.fillRect(cx, cy, cell, cell);
+      // иконка на всю ячейку
+      ctx.fillStyle = item ? '#2e2e28' : '#1c1c34';
+      ctx.fillRect(cx, cy, cellW, cellH);
+      if (item && rar) {
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = rar.color;
+        ctx.fillRect(cx, cy, cellW, cellH);
+        ctx.globalAlpha = 1;
+      }
       ctx.strokeStyle = rar ? rar.color : '#555';
       ctx.lineWidth = this.selected === s.id ? 3 : 2;
-      ctx.strokeRect(cx, cy, cell, cell);
+      ctx.strokeRect(cx, cy, cellW, cellH);
       ctx.fillStyle = item ? (rar ? rar.color : '#fff') : '#555';
-      ctx.font = 'bold 22px monospace';
-      ctx.fillText(item ? game.itemName(item).slice(0, 6) : s.icon_letter, cx + cell / 2, cy + 40);
-      ctx.fillStyle = '#888';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText(item ? game.itemName(item).slice(0, 8) : s.icon_letter, cx + cellW / 2, cy + 26);
+      ctx.fillStyle = '#999';
       ctx.font = '10px monospace';
-      ctx.fillText(game._t(s.name_key).slice(0, 14), cx + cell / 2, cy + 62);
-      this._slotRects.push({ id: s.id, r: { x: cx, y: cy, w: cell, h: cell } });
+      ctx.fillText(game._t(s.name_key).slice(0, 20), cx + cellW / 2, cy + 41);
+      this._slotRects.push({ id: s.id, r: { x: cx, y: cy, w: cellW, h: cellH } });
     });
-    // низ: характеристики выбранного + Продать
-    const dy = 435;
+    // низ: название + характеристики столбиком + Продать над Закрыть (грани 50..406)
     const sel = this.selected ? game.save.data.gear[this.selected] : null;
-    ctx.textAlign = 'left';
-    if (!sel) {
-      ctx.fillStyle = '#666';
-      ctx.font = '12px monospace';
-      ctx.fillText(t('inv_empty'), 60, dy + 20);
-    } else {
+    this._sellRect = null;
+    if (sel) {
       const rar = game.shop.rarityOf(sel);
+      ctx.textAlign = 'left';
       ctx.fillStyle = rar ? rar.color : '#fff';
       ctx.font = 'bold 14px monospace';
-      ctx.fillText(game.itemName(sel).slice(0, 34), 60, dy + 20);
-      // кнопка продажи сразу под названием, характеристики ниже — без наложений
+      ctx.fillText(game.itemName(sel).slice(0, 34), 50, 486);
+      ctx.font = '11px monospace';
+      ctx.fillStyle = '#fff';
+      let yy = 506;
+      const lines = sel.slot === 'staff'
+        ? [(game.weaponName(sel.spell) + ' · Lv.' + (sel.spell_level || 1)).slice(0, 40)]
+        : (sel.stats || []).slice(0, 4).map((st) => ShopSystem.statText(st, (k) => game._t(k)).slice(0, 40));
+      for (const ln of lines) {
+        if (yy > 556) break;
+        ctx.fillText(ln, 50, yy);
+        yy += 16;
+      }
       const sp = game.shop.sellPrice(sel);
-      const r = { x: 60, y: dy + 32, w: W - 120, h: 30 };
+      const r = { x: 50, y: 562, w: 356, h: 34 };
       drawButton(ctx, r, t('inv_sell') + ' · ' + t('shop_price_format', { price: sp }), { primary: true });
       this._sellRect = r;
-      ctx.font = '12px monospace';
-      ctx.fillStyle = '#fff';
-      let yy = dy + 84;
-      if (sel.slot === 'staff') {
-        ctx.fillText((game.weaponName(sel.spell) + ' · Lv.' + (sel.spell_level || 1)).slice(0, 40), 60, yy);
-      } else {
-        for (const st of (sel.stats || []).slice(0, 4)) {
-          ctx.fillText(ShopSystem.statText(st, (k) => game._t(k)).slice(0, 40), 60, yy);
-          yy += 20;
-        }
-      }
     }
-    if (!sel) this._sellRect = null;
     ctx.textAlign = 'center';
   }
 

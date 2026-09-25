@@ -1,12 +1,13 @@
 import { Entity } from './Entity.js';
 
-// Питомец: летает, подбирает ОДИН дроп (монета/XP) в радиусе сбора и несёт хозяину.
-// Монстры питомца не бьют (коллизий с ним нет ни у кого).
+// Питомец: летает, притягивает дроп (монеты/XP) в своём радиусе как персонаж,
+// подбирает ОДИН дроп и несёт хозяину. Монстры питомца не бьют.
 export class Pet extends Entity {
-  constructor(x, y, radius, speed) {
+  constructor(x, y, radius, speed, magnetR = 60) {
     super(x, y, 10);
-    this.radius = radius; // радиус поиска/сбора
+    this.radius = radius; // дальность полёта: поиск дропа вокруг хозяина
     this.speed = speed || 260;
+    this.magnetR = magnetR; // радиус притяжения монет/XP к себе
     this.mode = 'follow'; // follow | fetch | deliver
     this.target = null; // Pickup
     this.carrying = null; // { kind, value }
@@ -14,8 +15,22 @@ export class Pet extends Entity {
     this.anim = null;
   }
 
-  update(dt, px, py, pickups, grabR, deliverR) {
+  static isLoot(p) {
+    return p && p.alive && (p.kind === 'coin' || p.kind === 'xp');
+  }
+
+  update(dt, px, py, pickups, grabR, deliverR, magnetPull = 380) {
     this.bob += dt * 6;
+    // магнит: монеты и XP в радиусе притягиваются к питомцу
+    for (const p of pickups) {
+      if (!Pet.isLoot(p)) continue;
+      const mdx = p.x - this.x, mdy = p.y - this.y;
+      const md = Math.hypot(mdx, mdy);
+      if (md < this.magnetR && md > 1) {
+        p.x -= (mdx / md) * magnetPull * dt;
+        p.y -= (mdy / md) * magnetPull * dt;
+      }
+    }
     let tx = px, ty = py - 40; // точка следования над хозяином
     if (this.mode === 'follow') {
       const best = this._nearest(pickups, px, py);

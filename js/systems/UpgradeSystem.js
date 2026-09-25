@@ -1,10 +1,11 @@
 ﻿import { ConfigLoader } from '../core/ConfigLoader.js';
 
-// Выбор 1 из N при levelup: апгрейды оружия, новое оружие, пассивки.
+// Выбор 1 из N при levelup: апгрейды оружия, новое оружие, пассивки, апгрейды питомца.
 export class UpgradeSystem {
-  constructor(skillsCfg, locCfg, lang = 'ru') {
+  constructor(skillsCfg, locCfg, lang = 'ru', petDefs = null) {
     this.weaponsCfg = skillsCfg.weapons || [];
     this.passivesCfg = skillsCfg.passive_skills || [];
+    this.petDefs = petDefs || [];
     this.loc = locCfg;
     this.lang = lang;
   }
@@ -16,7 +17,8 @@ export class UpgradeSystem {
   // Пул кандидатов: { kind, id, levelFrom, levelTo }
   // Новое оружие предлагается и из закрытых (discovery в забеге):
   // магазинный unlock даёт его сразу на старте, levelup — находит в бою.
-  candidates(skills, player) {
+  // petCtx: { hasPet, levels } — апгрейды питомца только при наличии питомца.
+  candidates(skills, player, petCtx) {
     const out = [];
     for (const [id, st] of skills.weapons) {
       const owned = (st.level || 0) > 0 && st.active !== false;
@@ -31,11 +33,18 @@ export class UpgradeSystem {
       const cur = pl[p.id] || 0;
       if (cur < (p.max_level || 5)) out.push({ kind: 'passive', id: p.id, levelFrom: cur, levelTo: cur + 1 });
     }
+    if (petCtx && petCtx.hasPet) {
+      const lv = petCtx.levels || {};
+      for (const d of this.petDefs) {
+        const cur = lv[d.id] || 0;
+        if (cur < (d.max_level || 5)) out.push({ kind: 'pet', id: d.id, levelFrom: cur, levelTo: cur + 1 });
+      }
+    }
     return out;
   }
 
-  buildChoices(skills, player, n = 3, rand = Math.random) {
-    const pool = this.candidates(skills, player);
+  buildChoices(skills, player, n = 3, rand = Math.random, petCtx) {
+    const pool = this.candidates(skills, player, petCtx);
     // перемешать
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
@@ -45,6 +54,15 @@ export class UpgradeSystem {
   }
 
   describe(c, skills) {
+    if (c.kind === 'pet') {
+      const d = this.petDefs.find((x) => x.id === c.id);
+      return {
+        ...c,
+        title: this.t(d.name_key),
+        desc: this.t(d.desc_key),
+        info: 'Lv. ' + c.levelFrom + ' → Lv. ' + c.levelTo
+      };
+    }
     if (c.kind === 'passive') {
       const p = this.passivesCfg.find((x) => x.id === c.id);
       return {

@@ -151,7 +151,11 @@
     "shop_refresh_in": "Обновление через {time}",
     "shop_refresh": "Обновить",
     "shop_occupied": "Слот занят — продай старый",
-    "inv_sell": "Продать"
+    "inv_sell": "Продать",
+    "pet_up_range": "Дальность полёта",
+    "pet_up_range_desc": "+40 к дальности полёта питомца",
+    "pet_up_magnet": "Радиус притяжения",
+    "pet_up_magnet_desc": "+20 к радиусу притяжения питомца"
   },
   "en": {
     "play": "Play",
@@ -305,7 +309,11 @@
     "shop_refresh_in": "Refresh in {time}",
     "shop_refresh": "Refresh",
     "shop_occupied": "Slot occupied — sell the old one",
-    "inv_sell": "Sell"
+    "inv_sell": "Sell",
+    "pet_up_range": "Flight Range",
+    "pet_up_range_desc": "+40 pet flight range",
+    "pet_up_magnet": "Attraction Radius",
+    "pet_up_magnet_desc": "+20 pet attraction radius"
   },
   "tr": {
     "play": "Oyna",
@@ -459,7 +467,11 @@
     "shop_refresh_in": "{time} içinde yenilenir",
     "shop_refresh": "Yenile",
     "shop_occupied": "Yuva dolu — eskisini sat",
-    "inv_sell": "Sat"
+    "inv_sell": "Sat",
+    "pet_up_range": "Uçuş Menzili",
+    "pet_up_range_desc": "+40 evcil hayvan uçuş menzili",
+    "pet_up_magnet": "Çekim Yarıçapı",
+    "pet_up_magnet_desc": "+20 evcil hayvan çekim yarıçapı"
   },
   "de": {
     "play": "Spielen",
@@ -613,7 +625,11 @@
     "shop_refresh_in": "Update in {time}",
     "shop_refresh": "Aktualisieren",
     "shop_occupied": "Slot belegt — verkaufe das alte",
-    "inv_sell": "Verkaufen"
+    "inv_sell": "Verkaufen",
+    "pet_up_range": "Flugweite",
+    "pet_up_range_desc": "+40 Flugweite des Begleiters",
+    "pet_up_magnet": "Anziehungsradius",
+    "pet_up_magnet_desc": "+20 Anziehungsradius des Begleiters"
   },
   "es": {
     "play": "Jugar",
@@ -767,7 +783,11 @@
     "shop_refresh_in": "Actualiza en {time}",
     "shop_refresh": "Actualizar",
     "shop_occupied": "Ranura ocupada — vende el anterior",
-    "inv_sell": "Vender"
+    "inv_sell": "Vender",
+    "pet_up_range": "Alcance de vuelo",
+    "pet_up_range_desc": "+40 alcance de vuelo de la mascota",
+    "pet_up_magnet": "Radio de atracción",
+    "pet_up_magnet_desc": "+20 radio de atracción de la mascota"
   },
   "fr": {
     "play": "Jouer",
@@ -921,6 +941,10 @@
     "shop_refresh_in": "Actualisation dans {time}",
     "shop_refresh": "Actualiser",
     "shop_occupied": "Emplacement occupé — vends l’ancien",
-    "inv_sell": "Vendre"
+    "inv_sell": "Vendre",
+    "pet_up_range": "Portée de vol",
+    "pet_up_range_desc": "+40 portée de vol du familier",
+    "pet_up_magnet": "Rayon d’attraction",
+    "pet_up_magnet_desc": "+20 rayon d’attraction du familier"
   }
 }
