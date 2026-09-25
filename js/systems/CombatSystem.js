@@ -11,6 +11,20 @@ export class CombatSystem {
     this.critMul = balanceCfg.player.crit_multiplier ?? 2;
     this.texts = []; // {x,y,vy,txt,color,life,maxLife}
     this.kills = 0;
+    this.killsByWeapon = {}; // weaponId -> kills (любимое заклинание, Этап 5)
+  }
+
+  addKill(weaponId) {
+    this.kills++;
+    if (weaponId) this.killsByWeapon[weaponId] = (this.killsByWeapon[weaponId] || 0) + 1;
+  }
+
+  favoriteWeapon() {
+    let best = null, n = 0;
+    for (const [id, k] of Object.entries(this.killsByWeapon)) {
+      if (k > n) { n = k; best = id; }
+    }
+    return best ? { id: best, kills: n } : null;
   }
 
   rollDamage(base, rand = Math.random) {
@@ -87,7 +101,7 @@ export class CombatSystem {
           if (p.crit || (e.isBoss && this.showBossAlways)) {
             this.pushText(e.x, e.y - 20, Math.round(p.damage) + (p.crit ? '!' : ''), p.crit ? '#ffcc00' : '#fff');
           }
-          if (e.hp <= 0 && wasAlive > 0) { kills++; this.kills++; if (onKill) onKill(e); }
+          if (e.hp <= 0 && wasAlive > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(e); }
           // взрыв fireball
           if (p.explosionR > 0) {
             for (const o of enemies) {
@@ -96,7 +110,7 @@ export class CombatSystem {
               if (ox * ox + oy * oy < p.explosionR * p.explosionR) {
                 const w = o.hp;
                 o.takeDamage(p.explosionDmg, 0, 0);
-                if (o.hp <= 0 && w > 0) { kills++; this.kills++; if (onKill) onKill(o); }
+                if (o.hp <= 0 && w > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(o); }
               }
             }
           }

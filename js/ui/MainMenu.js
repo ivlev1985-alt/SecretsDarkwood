@@ -58,11 +58,11 @@ export class MainMenu {
     const R = this.R;
     const t = (k) => game._t(k);
     if (hit(x, y, R.play)) { game.startRun(); return true; }
-    if (hit(x, y, R.bonus)) { if (game.dailyReady()) game.uiBonus = true; return true; }
-    if (hit(x, y, R.shop)) { game.uiShop = true; return true; }
+    if (hit(x, y, R.bonus)) { game.uiBonus = true; return true; }
+    if (hit(x, y, R.shop)) { game.shopMenu.open(game); game.uiShop = true; return true; }
     if (hit(x, y, R.stats)) { game.uiStats = true; return true; }
     if (hit(x, y, R.settings)) { game.uiSettings = 'menu'; return true; }
-    if (hit(x, y, R.leaders)) { game.uiLeaders = true; return true; }
+    if (hit(x, y, R.leaders)) { game.openLeaders(); return true; }
     if (hit(x, y, R.login)) { try { game.yandexLogin(); } catch (e) {} return true; }
     void t;
     return false;

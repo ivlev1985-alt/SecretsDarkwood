@@ -46,25 +46,46 @@ export class HUD {
     ctx.fillText('💀 ' + game.combat.kills + '   🪙 ' + p.coins, flip ? 180 : W - 12, 62);
     ctx.textAlign = 'center';
   }
+  // Короткий код оружия для иконки-заглушки: magic_bolt -> MB.
+  // Как персонаж/монстры без арта — серая плашка с подписью; заменится картинкой.
+  static skillCode(id) {
+    return String(id).split('_').filter(Boolean).map((w) => w[0]).join('').slice(0, 3).toUpperCase() || '?';
+  }
+  static skillColor(type) {
+    if (type === 'around_player') return '#00ccff';
+    if (type === 'area') return '#ff4400';
+    return '#ffd34d';
+  }
   drawBottom(ctx, game, W, H) {
     const R = this.layout(W, H);
-    // активные заклинания (иконка-заглушка + Lv)
+    // ВСЕ активные заклинания: иконка-заглушка с кодом + Lv (ГДД 6.3; >6 — мелкие 24px)
     const owned = game.skills.ownedList();
-    let sx = 84;
+    const perRowCap = 4;
+    const s = owned.length > 6 ? 24 : 32;
+    const cellW = s + 56;
+    let col = 0, row = 0;
     ctx.textAlign = 'left';
-    for (let i = 0; i < Math.min(owned.length, 6); i++) {
-      const st = owned[i];
-      const small = owned.length > 6;
-      const s = small ? 24 : 32;
-      ctx.fillStyle = '#2a2a4a';
-      ctx.fillRect(sx, H - 104, s, s);
-      ctx.strokeStyle = '#ffd34d';
-      ctx.strokeRect(sx, H - 104, s, s);
+    for (const st of owned) {
+      const x = 84 + col * cellW;
+      const y = H - 104 - row * (s + 8);
+      // плашка как у сущностей без арта
+      ctx.fillStyle = '#888';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = HUD.skillColor(st.cfg.type);
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, s, s);
       ctx.fillStyle = '#fff';
-      ctx.font = (small ? 10 : 12) + 'px monospace';
-      ctx.fillText('Lv.' + st.level, sx + s + 6, H - 104 + s - 4);
-      sx += s + 52;
-      if (sx > W - 140) break;
+      ctx.fillRect(x + (st.cfg.type === 'to_target' ? s - 10 : 4), y + s / 2 - 4, 6, 8);
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold ' + (s > 24 ? 11 : 9) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(HUD.skillCode(st.cfg.id), x + s / 2, y + s / 2 + 4);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#fff';
+      ctx.font = (s > 24 ? 10 : 12) + 'px monospace';
+      ctx.fillText('Lv.' + st.level, x + s + 6, y + s - 4);
+      col++;
+      if (col >= perRowCap) { col = 0; row++; }
     }
     drawButton(ctx, R.pause, '⏸');
     drawButton(ctx, R.inv, '🎒');

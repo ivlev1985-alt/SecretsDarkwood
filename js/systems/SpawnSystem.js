@@ -1,6 +1,8 @@
 ﻿import { Enemy } from '../entities/Enemy.js';
 
 // Спавн волн (balance.waves): задержка, затухание интервала, веса, оффскрин.
+// Скейлинг: +2% HP/урона за каждые wave_step_sec выживания И +10% всем за каждого
+// появившегося босса (каждый следующий босс тоже на 10% сильнее предыдущего).
 export class SpawnSystem {
   constructor(wavesCfg, monsters) {
     this.cfg = wavesCfg;
@@ -13,6 +15,33 @@ export class SpawnSystem {
     this.bossTimer = 0;
     this.started = false;
     this.count = 0;
+    this.bossesSpawned = 0;
+    this.TIME_GROWTH_PER_STEP = 0.02; // +2% за шаг
+    this.BOSS_GROWTH = 0.10; // +10% за босса
+  }
+
+  // Множитель от времени: 1 + 0.02 * шагов
+  get timeScale() {
+    const steps = Math.floor(this.time / (this.cfg.wave_step_sec || 30));
+    return 1 + this.TIME_GROWTH_PER_STEP * steps;
+  }
+
+  // Множитель от боссов: 1.1^N
+  get bossScale() {
+    return Math.pow(1 + this.BOSS_GROWTH, this.bossesSpawned);
+  }
+
+  // Итоговая сила вновь спавнящихся (монстры и боссы)
+  get powerScale() {
+    return this.timeScale * this.bossScale;
+  }
+
+  applyScale(enemy, scale) {
+    enemy.maxHp = Math.round(enemy.maxHp * scale);
+    enemy.hp = enemy.maxHp;
+    enemy.damage = Math.round(enemy.damage * scale * 10) / 10;
+    enemy.powerScale = scale;
+    return enemy;
   }
 
   get intervalSec() {
@@ -60,17 +89,26 @@ export class SpawnSystem {
       for (let i = 0; i < n; i++) {
         const type = this.pickType(rand);
         const p = this.spawnPoint(ctx.player.x, ctx.player.y, ctx.viewW, ctx.viewH, rand);
-        const e = new Enemy(type, p.x, p.y);
+        const e = this.applyScale(new Enemy(type, p.x, p.y), this.powerScale);
         out.push(e); this.count++;
       }
     }
-    // босс по интервалу
+    // босс по интервалу: сам на 10% сильнее предыдущего + все живые монстры +10%
     const bossEvery = this.cfg.boss_wave_interval_sec || 120;
     if (this.bosses.length && this.bossTimer >= bossEvery) {
       this.bossTimer = 0;
-      const type = this.bosses[0];
+      this.bossesSpawned++;
+      for (const e of ctx.enemies) {
+        if (!e.alive || e.deathT > 0) continue;
+        e.maxHp = Math.round(e.maxHp * (1 + this.BOSS_GROWTH));
+        e.hp = Math.min(e.maxHp, Math.round(e.hp * (1 + this.BOSS_GROWTH)));
+        e.damage = Math.round(e.damage * (1 + this.BOSS_GROWTH) * 10) / 10;
+      }
+      const type = this.bosses[(this.bossesSpawned - 1) % this.bosses.length];
       const p = this.spawnPoint(ctx.player.x, ctx.player.y, ctx.viewW, ctx.viewH, rand);
-      out.push(new Enemy(type, p.x, p.y));
+      // босс №k: сила 1.1^(k-1) от времени — каждый следующий на 10% сильнее
+      const bossScale = this.timeScale * Math.pow(1 + this.BOSS_GROWTH, this.bossesSpawned - 1);
+      out.push(this.applyScale(new Enemy(type, p.x, p.y), bossScale));
       this.count++;
     }
     return out;

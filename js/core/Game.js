@@ -15,6 +15,9 @@ import { UpgradeSystem } from '../systems/UpgradeSystem.js';
 import { ChestSystem } from '../systems/ChestSystem.js';
 import { LootSystem } from '../systems/LootSystem.js';
 import { Chest } from '../entities/Chest.js';
+import { SaveSystem } from '../systems/SaveSystem.js';
+import { ShopSystem } from '../systems/ShopSystem.js';
+import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
 import { MainMenu } from '../ui/MainMenu.js';
 import { HUD } from '../ui/HUD.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
@@ -31,7 +34,6 @@ export const ChestRewardRegistry = { coins: 'coins', spell: 'spell', levelup: 'l
 
 const CONFIG_NAMES = ['game_config', 'balance_config', 'skills_config', 'effects_config', 'ui_config', 'shop_config', 'localization'];
 const SETTINGS_KEY = 'sdw_settings_v1';
-const BEST_KEY = 'sdw_best_v1';
 
 export class Game {
   constructor(canvas, onStatus) {
@@ -82,7 +84,12 @@ export class Game {
     this.runStats = { time: 0, level: 1, kills: 0, coins: 0, record: false };
     this.reviveUsed = false;
     this.bestTime = 0;
-    this.dailyTaken = false;
+    // Этап 5: мета
+    this.save = new SaveSystem('secrets_darkwood_save_v1');
+    this.shop = null;
+    this.daily = null;
+    this.leaderEntries = null;
+    this._autosaveT = 30;
     this.ready = false;
   }
 
@@ -93,9 +100,6 @@ export class Game {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (raw) Object.assign(this.settings, JSON.parse(raw));
-    } catch (e) {}
-    try {
-      this.bestTime = Number(localStorage.getItem(BEST_KEY) || 0) || 0;
     } catch (e) {}
   }
   saveSettings() {
@@ -120,14 +124,47 @@ export class Game {
     this.saveSettings();
   }
   resetProgress() {
-    try { localStorage.removeItem(BEST_KEY); } catch (e) {}
+    if (this.save) this.save.reset();
     this.bestTime = 0;
     this.deaths = 0;
   }
   yandexLogin() {
     try { window.ysdk?.auth?.openAuthDialog?.(); } catch (e) {}
   }
-  dailyReady() { return !this.dailyTaken && (this.config.game_config.daily_bonus.enabled !== false); }
+  dailyReady() { return this.daily ? this.daily.ready(this.save.data.dailyLast) : false; }
+  claimDaily() {
+    if (!this.dailyReady()) return false;
+    this.save.data.dailyLast = Date.now();
+    this.save.addCoins(this.daily.reward);
+    this.save.save();
+    try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
+    return true;
+  }
+  weaponName(id) {
+    const st = this.skills?.weapons.get(id);
+    const cfg = st ? st.cfg : (this.config.skills_config.weapons || []).find((w) => w.id === id);
+    if (!cfg) return id;
+    return ConfigLoader.t(this.config.localization, this.settings.lang, cfg.name_key);
+  }
+  async openLeaders() {
+    this.uiLeaders = true;
+    this.leaderEntries = null;
+    try {
+      const lb = await window.ysdk?.getLeaderboards?.();
+      if (lb) {
+        const res = await lb.getEntries?.({ quantityTop: 5 });
+        const arr = res?.entries || res || [];
+        this.leaderEntries = arr.map((e) => ({ name: e.player?.publicName || '?', score: e.score || 0 }));
+        return;
+      }
+    } catch (e) {}
+    this.leaderEntries = [];
+  }
+  submitScore() {
+    try {
+      window.ysdk?.getLeaderboards?.().then((lb) => lb.setScore?.(Math.floor(this.bestTime))).catch(() => {});
+    } catch (e) {}
+  }
 
   async boot() {
     this.onStatus('Загрузка конфигов...');
@@ -140,6 +177,14 @@ export class Game {
     if (errors.length) throw new Error('Валидация конфигов:\n' + errors.join('\n'));
 
     const g = this.config.game_config, b = this.config.balance_config;
+    // Этап 5: мета-сейв (SDK + localStorage)
+    this.save = new SaveSystem(g.save.save_key);
+    this.shop = new ShopSystem(this.config.shop_config);
+    this.daily = new DailyBonusSystem(g.daily_bonus);
+    this.onStatus('Загрузка сейва...');
+    await this.save.load();
+    this.bestTime = this.save.data.stats.bestTime || 0;
+    this._autosaveT = g.save.autosave_interval_sec || 30;
     // язык: настройки -> автоопределение
     this.loadSettings();
     if (!localStorage.getItem(SETTINGS_KEY)) {
@@ -211,10 +256,12 @@ export class Game {
       return;
     }
     if (this.uiSettings) { this.settingsMenu.click(this, x, y); return; }
-    if (this.uiShop) { if (this.shopMenu.click(this, x, y) === 'close') this.uiShop = false; return; }
+    if (this.uiShop) {
+      if (this.shopMenu.click(this, x, y) === 'close') { this.uiShop = false; this.save.save(); }
+      return;
+    }
     if (this.uiBonus) {
       if (this.bonusPopup.click(this, x, y) === 'close') this.uiBonus = false;
-      else if (this.dailyReady()) { /* Этап 5 выдаст монеты */ }
       return;
     }
     if (this.uiStats) { if (this.statsPopup.click(this, x, y) === 'close') this.uiStats = false; return; }
@@ -231,6 +278,8 @@ export class Game {
   // --- переходы ---
   startRun() {
     this._initRun();
+    this.save.data.stats.totalRuns++;
+    this.save.save();
     this.states.set('playing');
     this.uiSettings = null;
     try { this.audio.playMusic(this.config.game_config.audio.music_battle); } catch (e) {}
@@ -262,6 +311,7 @@ export class Game {
     this.upgrades.apply(c, this.skills, this.player);
     this.pendingLevels--;
     this.player.level = this.progression.level;
+    if (this.config.game_config.save.save_on_important_events) this.save.save();
     if (this.pendingLevels > 0) {
       this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3);
       if (!this.choices.length) { this.pendingLevels = 0; this.states.set('playing'); }
@@ -272,14 +322,35 @@ export class Game {
 
   _initRun() {
     const g = this.config.game_config, b = this.config.balance_config, s = this.config.skills_config;
-    this.player = new Player(b.player, 0, 0);
+    // Этап 5: shop-бонусы к стартовым статам
+    const mods = this.shop ? this.shop.statMods(this.save.data.shop) : null;
+    const base = Object.assign({}, b.player);
+    if (mods) {
+      base.base_hp = Math.round(base.base_hp + mods.hpAdd);
+      base.base_speed = Math.round(base.base_speed * mods.speedMul);
+      base.damage_multiplier = base.damage_multiplier * mods.dmgMul;
+      base.attack_speed_multiplier = base.attack_speed_multiplier * mods.atkMul;
+      base.pickup_radius_multiplier = base.pickup_radius_multiplier * mods.pickupMul;
+      base.crit_chance = Math.min(0.6, base.crit_chance + mods.critAdd);
+      base.hp_regen_per_sec = base.hp_regen_per_sec + mods.regenAdd;
+      base.xp_multiplier = base.xp_multiplier * mods.xpMul;
+    }
+    this.player = new Player(base, 0, 0);
     this.player.attachHeroAnim(new Animator(g.hero.frames, 'idle'));
     this.enemies = [];
     this.pickups = [];
     this.combat = new CombatSystem(g, b);
     this.spawn = new SpawnSystem(b.waves, b.monsters);
+    // разблокировки магазина живут в сейве — применяем каждый забег
+    if (this.shop) {
+      for (const wid of this.shop.unlockedWeapons(this.save.data.shop)) {
+        const w = (s.weapons || []).find((x) => x.id === wid);
+        if (w) w.unlocked = true;
+      }
+    }
     this.skills = new SkillSystem(s.weapons, this.combat, this.audio);
-    this.skills.setActive(['magic_bolt', 'frost_ring', 'fire_wall']);
+    const active = (s.weapons || []).filter((w) => w.unlocked).map((w) => w.id);
+    this.skills.setActive(active.length ? active : ['magic_bolt']);
     this.progression = new ProgressionSystem(b.progression);
     this.upgrades = new UpgradeSystem(s, this.config.localization, this.settings.lang);
     this.chestSys = new ChestSystem(b.chests);
@@ -322,6 +393,7 @@ export class Game {
     }
     this.combat.pushText(c.x, c.y - 24, '+' + reward.coins, '#ffd34d');
     try { this.audio.playSfx(this.config.balance_config.chests.sfx_open); } catch (e) {}
+    if (this.config.game_config.save.save_on_important_events) this.save.save();
   }
 
   _collect(p) {
@@ -344,7 +416,7 @@ export class Game {
         if (!e.alive || e.deathT > 0) continue;
         const was = e.hp;
         e.takeDamage(150, 0, 0);
-        if (e.hp <= 0 && was > 0) { this.combat.kills++; this._onKill(e); }
+        if (e.hp <= 0 && was > 0) { this.combat.addKill(null); this._onKill(e); }
       }
       this.combat.pushText(this.player.x, this.player.y - 30, 'BOOM', '#ff8800');
     }
@@ -353,11 +425,13 @@ export class Game {
   _die() {
     this.deaths++;
     const t = this.time;
-    const record = t > this.bestTime;
-    if (record) {
-      this.bestTime = t;
-      try { localStorage.setItem(BEST_KEY, String(Math.floor(t))); } catch (e) {}
-    }
+    // монеты забега -> мета-баланс
+    this.save.addCoins(this.player.coins);
+    const fav = this.combat.favoriteWeapon();
+    const { record } = this.save.recordRun({ time: t, kills: this.combat.kills, fav });
+    this.save.save();
+    this.bestTime = this.save.data.stats.bestTime || 0;
+    if (record) this.submitScore();
     this.runStats = {
       time: t,
       level: this.progression.level,
@@ -378,6 +452,7 @@ export class Game {
     const st = this.states.get();
     const paused = st === 'paused' || document.hidden;
     if (!paused && (st === 'playing' || st === 'upgrade')) this.update(dt);
+    if (this.uiShop) this.shopMenu.update(dt);
     this.render();
     requestAnimationFrame((tt) => this.frame(tt));
   }
@@ -470,6 +545,12 @@ export class Game {
 
     if (!this.player.alive) this._die();
     if (this.skills.auraFlash > 0) this.skills.auraFlash -= dt;
+    // Этап 5: автосейв + сохранение после важных событий (levelup-окно уже ставит паузу)
+    this._autosaveT -= dt;
+    if (this._autosaveT <= 0) {
+      this._autosaveT = this.config.game_config.save.autosave_interval_sec || 30;
+      this.save.save();
+    }
   }
 
   render() {
