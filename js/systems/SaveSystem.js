@@ -11,11 +11,15 @@ export class SaveSystem {
   static defaultData() {
     return {
       coins: 0,
-      shop: {}, // itemId -> level
+      shop: {}, // legacy (магазин характеристик, удалён) — игнорируется
+      gear: {}, // слот -> купленный предмет { tpl, slot, rarity, stats, price, spell?, spell_level? }
+      stock: { ts: 0, offers: [] }, // текущий ассортимент магазина
+      unlockedSpells: [], // заклинания от посохов (остаются и после продажи посоха)
       stats: { totalTime: 0, totalKills: 0, bestTime: 0, totalRuns: 0, fav: {} },
       dailyLast: 0,
-      dailyAdLast: 0, // последний забор бонуса за рекламу (stub видео до Этапа 7)
-      menuAdLast: 0 // последний 📺×2 в меню
+      dailyAdLast: 0,
+      menuAdLast: 0, // последний 📺×2 в меню
+      stockAdLast: 0 // последнее досрочное обновление магазина за рекламу
     };
   }
 
@@ -71,9 +75,6 @@ export class SaveSystem {
     this.data.coins -= n;
     return true;
   }
-
-  // --- магазин ---
-  shopLevel(id) { return this.data.shop[id] || 0; }
 
   // --- статистика забега ---
   // fav: { id, kills } любимое оружие забега. Возвращает { record }.

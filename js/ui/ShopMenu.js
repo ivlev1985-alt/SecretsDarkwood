@@ -1,190 +1,283 @@
 ﻿import { drawButton, drawPanel, hit } from './widgets.js';
 
-// Магазин меты (GDD п.5.5): вкладки, карточки, подтверждение, тост.
-// Раскладка: карточки слева, справа отдельная колонка ▲/▼ + скроллбар между ними.
+// Предметный магазин: вкладка «Магазин» (6 офферов, обновление раз в час / за рекламу)
+// и «Инвентарь» (8 слотов, выбор → характеристики + Продать).
 export class ShopMenu {
   constructor() {
-    this.tab = 'stats';
+    this.tab = 'shop';
     this.scroll = 0;
-    this.confirmId = null;
-    this.toast = null; // { text, t }
+    this.selected = null; // slot id в инвентаре
+    this.confirmIdx = -1; // индекс оффера в stock.offers
+    this.toast = null;
+    this.PER_PAGE = 3;
   }
   open(game) {
-    this.tab = 'stats';
+    this.tab = 'shop';
     this.scroll = 0;
-    this.confirmId = null;
+    this.selected = null;
+    this.confirmIdx = -1;
     this.toast = null;
     void game;
-  }
-  _items(game) {
-    return game.shop.itemsOf(this.tab);
-  }
-  _perPage() { return 3; }
-  _cardH() { return 92; }
-  _step() { return this._cardH() + 8; }
-  // Строка урона/кд для unlock-товара из skills_config
-  _spellStats(game, item) {
-    const m = /^weapon\.(.+)\.unlocked$/.exec(item.target || '');
-    if (!m) return '';
-    const w = (game.config.skills_config.weapons || []).find((x) => x.id === m[1]);
-    if (!w) return '';
-    let s = 'Урон: ' + (w.damage ?? '?');
-    if (w.cooldown_ms) s += ' · КД ' + (w.cooldown_ms / 1000) + 'с';
-    if (w.type === 'around_player' && w.aura_radius) s += ' · R' + w.aura_radius;
-    if (w.type === 'area' && w.area_radius) s += ' · R' + w.area_radius;
-    return s;
   }
   draw(ctx, game, W, H) {
     void H;
     const t = (k, p) => game._t(k, p);
-    const shop = game.shop;
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     drawPanel(ctx, { x: 30, y: 120, w: W - 60, h: 540 }, t('shop_title'));
-    // баланс
     ctx.fillStyle = '#ffd34d';
     ctx.font = 'bold 15px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('🪙 ' + game.save.data.coins, W / 2, 185);
     // вкладки
-    const cats = shop.cfg.categories || [];
-    let tx = 50;
-    this._tabRects = [];
-    const tabW = (356 - 6) / Math.max(1, cats.length);
-    for (const c of cats) {
-      const r = { x: tx, y: 195, w: tabW, h: 36 };
-      drawButton(ctx, r, game._t(c.name_key), { primary: this.tab === c.id });
-      this._tabRects.push({ id: c.id, r });
-      tx += tabW + 6;
-    }
-    // товары: колонка карточек 50..406, справа колонка скролла 414..442 (внутри панели 30..450)
-    const cardX = 50, cardW = 356;
-    const items = this._items(game);
-    const perPage = this._perPage();
-    const maxScroll = Math.max(0, items.length - perPage);
-    this.scroll = Math.max(0, Math.min(maxScroll, this.scroll));
-    const cardH = this._cardH(), step = this._step();
-    let y = 245;
-    this._buyRects = [];
-    for (let i = this.scroll; i < Math.min(items.length, this.scroll + perPage); i++) {
-      const it = items[i];
-      const lv = game.save.shopLevel(it.id);
-      const maxed = lv >= (it.max_level || 1);
-      ctx.fillStyle = '#1c1c34';
-      ctx.fillRect(cardX, y, cardW, cardH);
-      ctx.strokeStyle = '#ffd34d';
-      ctx.strokeRect(cardX, y, cardW, cardH);
-      // ВАЖНО: выравнивание влево для каждой карточки (drawButton ниже ставит center)
-      // Заголовок + уровень в одной строке (уровень не перекрывается кнопкой)
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText(game._t(it.name_key), cardX + 12, y + 22);
-      ctx.textAlign = 'right';
+    const tabW = (356 - 6) / 2;
+    this._tabShop = { x: 50, y: 195, w: tabW, h: 36 };
+    this._tabInv = { x: 50 + tabW + 6, y: 195, w: tabW, h: 36 };
+    drawButton(ctx, this._tabShop, t('shop_tab_shop'), { primary: this.tab === 'shop' });
+    drawButton(ctx, this._tabInv, t('shop_tab_inventory'), { primary: this.tab === 'inv' });
+    if (this.tab === 'shop') this._drawShop(ctx, game, W, t);
+    else this._drawInv(ctx, game, W, t);
+    // тост
+    if (this.toast) {
+      ctx.fillStyle = 'rgba(0,0,0,0.85)';
+      ctx.fillRect(W / 2 - 130, 560, 260, 30);
       ctx.fillStyle = '#8f8';
-      ctx.font = '11px monospace';
-      ctx.fillText(maxed ? t('shop_max_level') : ('Lv. ' + lv + ' / ' + (it.max_level || 1)), cardX + cardW - 12, y + 22);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#aaa';
-      ctx.font = '11px monospace';
-      ctx.fillText((game._t(it.desc_key) || '').slice(0, 42), cardX + 12, y + 40);
-      if (this.tab === 'spells') {
-        ctx.fillStyle = '#ff9d4d';
-        ctx.font = '11px monospace';
-        ctx.fillText(this._spellStats(game, it).slice(0, 42), cardX + 12, y + 56);
-      }
-      const chk = shop.check(it, lv, game.save.data.coins);
-      const label = maxed ? t('shop_max_level') : (t('buy') + ' · ' + t('shop_price_format', { price: chk.price }));
-      const r = { x: cardX + 12, y: y + cardH - 28, w: cardW - 24, h: 22 };
-      const confirming = this.confirmId === it.id;
-      drawButton(ctx, r, confirming ? t('confirm') + '?' : label, { disabled: maxed || (!confirming && !chk.ok) });
-      this._buyRects.push({ id: it.id, r });
+      ctx.font = 'bold 13px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.toast.text, W / 2, 580);
+    }
+    drawButton(ctx, { x: W / 2 - 90, y: 604, w: 180, h: 40 }, t('close'), { primary: true });
+    this._close = { x: W / 2 - 90, y: 604, w: 180, h: 40 };
+    ctx.textAlign = 'center';
+  }
+
+  // ---------- вкладка Магазин ----------
+  _drawShop(ctx, game, W, t) {
+    // строка обновления
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#888';
+    ctx.font = '11px monospace';
+    ctx.fillText(t('shop_refresh_in', { time: game.stockRemain() }), 50, 256);
+    const adReady = game.stockAdReady();
+    const rr = { x: 250, y: 238, w: 164, h: 26 };
+    drawButton(ctx, rr, '📺 ' + t('shop_refresh'), { disabled: !adReady });
+    this._refreshRect = rr;
+    // офферы
+    const offers = game.save.data.stock.offers;
+    const maxScroll = Math.max(0, offers.length - this.PER_PAGE);
+    this.scroll = Math.max(0, Math.min(maxScroll, this.scroll));
+    const cardX = 50, cardW = 356, cardH = 92, step = 100;
+    let y = 272;
+    this._buyRects = [];
+    for (let i = this.scroll; i < Math.min(offers.length, this.scroll + this.PER_PAGE); i++) {
+      this._drawOffer(ctx, game, t, offers[i], i, cardX, y, cardW, cardH);
       y += step;
     }
-    const listTop = 245, listH = perPage * step - 8;
-    // правая колонка: ▲ / скроллбар / ▼ — всё одной ширины, с отступом от края панели
+    const listTop = 272, listH = this.PER_PAGE * step - 8;
     const colX = 414, colW = 28;
     this._upRect = { x: colX, y: listTop, w: colW, h: 40 };
     this._downRect = { x: colX, y: listTop + listH - 40, w: colW, h: 40 };
     this._trackRect = { x: colX, y: listTop + 44, w: colW, h: listH - 88 };
     this._thumb = null;
-    if (items.length > perPage) {
+    if (offers.length > this.PER_PAGE) {
       drawButton(ctx, this._upRect, '▲');
       drawButton(ctx, this._downRect, '▼');
       const tr = this._trackRect;
       ctx.fillStyle = '#333';
       ctx.fillRect(tr.x, tr.y, tr.w, tr.h);
-      const th = Math.max(24, (tr.h * perPage) / items.length);
+      const th = Math.max(24, (tr.h * this.PER_PAGE) / offers.length);
       const ty = tr.y + ((tr.h - th) * this.scroll) / maxScroll;
       ctx.fillStyle = '#ffd34d';
       ctx.fillRect(tr.x, ty, tr.w, th);
       this._thumb = { x: tr.x, y: ty, w: tr.w, h: th };
     } else {
-      this._upRect = null;
-      this._downRect = null;
-      this._trackRect = null;
+      this._upRect = null; this._downRect = null; this._trackRect = null;
     }
-    // отмена подтверждения
-    const afterList = listTop + listH + 4;
-    if (this.confirmId) {
-      const r = { x: cardX, y: afterList, w: cardW, h: 26 };
-      drawButton(ctx, r, t('cancel'));
-      this._cancelRect = r;
+    if (this.confirmIdx >= 0) {
+      drawButton(ctx, { x: cardX, y: 574, w: cardW, h: 22 }, t('cancel'));
+      this._cancelRect = { x: cardX, y: 574, w: cardW, h: 22 };
     } else this._cancelRect = null;
-    drawButton(ctx, { x: W / 2 - 90, y: 600, w: 180, h: 44 }, t('close'), { primary: true });
-    this._close = { x: W / 2 - 90, y: 600, w: 180, h: 44 };
-    // тост
-    if (this.toast) {
-      ctx.fillStyle = 'rgba(0,0,0,0.85)';
-      ctx.fillRect(W / 2 - 110, 560, 220, 30);
-      ctx.fillStyle = '#8f8';
-      ctx.font = 'bold 14px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(this.toast.text, W / 2, 580);
+  }
+
+  _drawOffer(ctx, game, t, offer, idx, x, y, w, h) {
+    const rar = game.shop.rarityOf(offer);
+    const slot = game.shop.slotById.get(offer.slot);
+    ctx.fillStyle = '#1c1c34';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = rar ? rar.color : '#ffd34d';
+    ctx.strokeRect(x, y, w, h);
+    // иконка-заглушка: буква слота в рамке цвета редкости
+    ctx.fillStyle = '#888';
+    ctx.fillRect(x + 8, y + 10, 36, 36);
+    ctx.strokeStyle = rar ? rar.color : '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 8, y + 10, 36, 36);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(slot ? slot.icon_letter : '?', x + 26, y + 33);
+    // название цветом редкости
+    ctx.textAlign = 'left';
+    ctx.fillStyle = rar ? rar.color : '#fff';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(game.itemName(offer).slice(0, 30), x + 52, y + 22);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '11px monospace';
+    if (offer.slot === 'staff') {
+      ctx.fillStyle = '#ff9d4d';
+      ctx.fillText((game.weaponName(offer.spell) + ' · Lv.' + (offer.spell_level || 1)).slice(0, 40), x + 52, y + 40);
+      ctx.fillStyle = '#aaa';
+      ctx.fillText((rar ? game._t(rar.name_key) : '').slice(0, 40), x + 52, y + 56);
+    } else {
+      const lines = this._statLines(game, offer);
+      ctx.fillText(lines[0] || '', x + 52, y + 40);
+      ctx.fillText(lines[1] || '', x + 52, y + 56);
     }
+    const chk = game.shop.checkBuy(offer, game.save.data.gear, game.save.data.coins);
+    let label;
+    if (!chk.ok && chk.reason === 'occupied') label = t('shop_occupied');
+    else label = t('buy') + ' · ' + t('shop_price_format', { price: offer.price });
+    const r = { x: x + 12, y: y + h - 28, w: w - 24, h: 22 };
+    const confirming = this.confirmIdx === idx;
+    drawButton(ctx, r, confirming ? t('confirm') + '?' : label, { disabled: !confirming && !chk.ok });
+    (this._buyRects = this._buyRects || []).push({ idx, r });
+  }
+
+  _statLines(game, offer) {
+    const parts = (offer.stats || []).map((st) => ShopSystem.statText(st, (k) => game._t(k)));
+    const l1 = (parts[0] || '') + (parts[1] ? ' · ' + parts[1] : '');
+    const l2 = (parts[2] || '') + (parts[3] ? ' · ' + parts[3] : '');
+    return [l1.slice(0, 40), l2.slice(0, 40)];
+  }
+
+  // ---------- вкладка Инвентарь ----------
+  _drawInv(ctx, game, W, t) {
+    const slots = game.shop.cfg.slots;
+    const cell = 82, gap = 8;
+    const x0 = 50 + ((364 - (4 * cell + 3 * gap)) / 2);
+    let y0 = 245;
+    this._slotRects = [];
+    ctx.textAlign = 'center';
+    slots.forEach((s, i) => {
+      const cx = x0 + (i % 4) * (cell + gap);
+      const cy = y0 + Math.floor(i / 4) * (cell + gap);
+      const item = game.save.data.gear[s.id];
+      const rar = item ? game.shop.rarityOf(item) : null;
+      ctx.fillStyle = this.selected === s.id ? '#3a3a1c' : '#1c1c34';
+      ctx.fillRect(cx, cy, cell, cell);
+      ctx.strokeStyle = rar ? rar.color : '#555';
+      ctx.lineWidth = this.selected === s.id ? 3 : 2;
+      ctx.strokeRect(cx, cy, cell, cell);
+      ctx.fillStyle = item ? (rar ? rar.color : '#fff') : '#555';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText(item ? game.itemName(item).slice(0, 6) : s.icon_letter, cx + cell / 2, cy + 40);
+      ctx.fillStyle = '#888';
+      ctx.font = '10px monospace';
+      ctx.fillText(game._t(s.name_key).slice(0, 14), cx + cell / 2, cy + 62);
+      this._slotRects.push({ id: s.id, r: { x: cx, y: cy, w: cell, h: cell } });
+    });
+    // низ: характеристики выбранного + Продать
+    const dy = 435;
+    const sel = this.selected ? game.save.data.gear[this.selected] : null;
+    ctx.textAlign = 'left';
+    if (!sel) {
+      ctx.fillStyle = '#666';
+      ctx.font = '12px monospace';
+      ctx.fillText(t('inv_empty'), 60, dy + 20);
+    } else {
+      const rar = game.shop.rarityOf(sel);
+      ctx.fillStyle = rar ? rar.color : '#fff';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(game.itemName(sel).slice(0, 34), 60, dy + 20);
+      ctx.font = '12px monospace';
+      ctx.fillStyle = '#fff';
+      let yy = dy + 42;
+      if (sel.slot === 'staff') {
+        ctx.fillText(game.weaponName(sel.spell) + ' · Lv.' + (sel.spell_level || 1), 60, yy);
+        yy += 22;
+      } else {
+        for (const st of (sel.stats || [])) {
+          ctx.fillText(ShopSystem.statText(st, (k) => game._t(k)).slice(0, 40), 60, yy);
+          yy += 22;
+        }
+      }
+      const sp = game.shop.sellPrice(sel);
+      const r = { x: 60, y: 516, w: W - 120, h: 34 };
+      drawButton(ctx, r, t('inv_sell') + ' · ' + t('shop_price_format', { price: sp }), { primary: true });
+      this._sellRect = r;
+    }
+    if (!sel) this._sellRect = null;
     ctx.textAlign = 'center';
   }
+
   click(game, x, y) {
     const t = (k) => game._t(k);
-    if (this._close && hit(x, y, this._close)) { this.confirmId = null; return 'close'; }
-    for (const tb of (this._tabRects || [])) {
-      if (hit(x, y, tb.r)) { this.tab = tb.id; this.scroll = 0; this.confirmId = null; return true; }
+    if (this._close && hit(x, y, this._close)) { this.confirmIdx = -1; return 'close'; }
+    if (this._tabShop && hit(x, y, this._tabShop)) { this.tab = 'shop'; this.confirmIdx = -1; return true; }
+    if (this._tabInv && hit(x, y, this._tabInv)) { this.tab = 'inv'; this.confirmIdx = -1; return true; }
+    if (this.tab === 'shop') return this._clickShop(game, x, y, t);
+    // инвентарь
+    for (const s of (this._slotRects || [])) {
+      if (hit(x, y, s.r)) { this.selected = (this.selected === s.id) ? null : s.id; return true; }
     }
-    if (this._upRect && hit(x, y, this._upRect)) { this.scroll--; return true; }
-    if (this._downRect && hit(x, y, this._downRect)) { this.scroll++; return true; }
-    if (this._trackRect && hit(x, y, this._trackRect)) {
-      // клик по треку — страница к месту клика
-      const mid = this._thumb ? this._thumb.y + this._thumb.h / 2 : 0;
-      this.scroll += y > mid ? 1 : -1;
-      return true;
-    }
-    if (this._cancelRect && hit(x, y, this._cancelRect)) { this.confirmId = null; return true; }
-    for (const b of (this._buyRects || [])) {
-      if (!hit(x, y, b.r)) continue;
-      const it = game.shop.cfg.items.find((i) => i.id === b.id);
-      const lv = game.save.shopLevel(it.id);
-      const chk = game.shop.check(it, lv, game.save.data.coins);
-      if (!chk.ok) {
-        try { game.audio.playSfx(game.shop.cfg.shop.sfx_fail); } catch (e) {}
-        return true;
+    if (this._sellRect && hit(x, y, this._sellRect) && this.selected) {
+      const item = game.save.data.gear[this.selected];
+      if (item) {
+        game.save.addCoins(game.shop.sellPrice(item));
+        game.save.data.gear[this.selected] = null;
+        if (!Object.values(game.save.data.gear).some(Boolean)) game.save.data.gear = {};
+        // заклинание посоха остаётся открытым
+        game.save.save();
+        this.toast = { text: t('shop_toast_purchased'), t: 1.5 };
+        try { game.audio.playSfx(game.shop.shop.sfx_success); } catch (e) {}
+        this.selected = null;
       }
-      if (game.shop.cfg.shop.confirm_purchase && this.confirmId !== it.id) {
-        this.confirmId = it.id;
-        return true;
-      }
-      // покупка
-      game.save.spendCoins(chk.price);
-      game.save.data.shop[it.id] = lv + 1;
-      game.save.save();
-      this.confirmId = null;
-      this.toast = { text: t('shop_toast_purchased'), t: 1.5 };
-      try {
-        game.audio.playSfx(game.shop.cfg.shop.sfx_success);
-      } catch (e) {}
       return true;
     }
     return false;
   }
+
+  _clickShop(game, x, y, t) {
+    if (this._refreshRect && hit(x, y, this._refreshRect)) { game.refreshStockAd(); return true; }
+    if (this._upRect && hit(x, y, this._upRect)) { this.scroll--; return true; }
+    if (this._downRect && hit(x, y, this._downRect)) { this.scroll++; return true; }
+    if (this._trackRect && hit(x, y, this._trackRect)) {
+      const mid = this._thumb ? this._thumb.y + this._thumb.h / 2 : 0;
+      this.scroll += y > mid ? 1 : -1;
+      return true;
+    }
+    if (this._cancelRect && hit(x, y, this._cancelRect)) { this.confirmIdx = -1; return true; }
+    const offers = game.save.data.stock.offers;
+    for (const b of (this._buyRects || [])) {
+      if (!hit(x, y, b.r)) continue;
+      const offer = offers[b.idx];
+      if (!offer) return true;
+      const chk = game.shop.checkBuy(offer, game.save.data.gear, game.save.data.coins);
+      if (!chk.ok) {
+        this.toast = { text: chk.reason === 'occupied' ? t('shop_occupied') : t('shop_price_format', { price: chk.price }), t: 1.5 };
+        try { game.audio.playSfx(game.shop.shop.sfx_fail); } catch (e) {}
+        return true;
+      }
+      if (game.shop.shop.confirm_purchase && this.confirmIdx !== b.idx) {
+        this.confirmIdx = b.idx;
+        return true;
+      }
+      // покупка: предмет в слот, посох открывает заклинание навсегда
+      game.save.spendCoins(offer.price);
+      game.save.data.gear[offer.slot] = JSON.parse(JSON.stringify(offer));
+      if (offer.slot === 'staff' && offer.spell && !game.save.data.unlockedSpells.includes(offer.spell)) {
+        game.save.data.unlockedSpells.push(offer.spell);
+      }
+      offers.splice(b.idx, 1);
+      game.save.save();
+      this.confirmIdx = -1;
+      this.toast = { text: t('shop_toast_purchased'), t: 1.5 };
+      try { game.audio.playSfx(game.shop.shop.sfx_success); } catch (e) {}
+      return true;
+    }
+    return false;
+  }
+
   update(dt) {
     if (this.toast) {
       this.toast.t -= dt;
@@ -193,7 +286,7 @@ export class ShopMenu {
   }
 }
 
-// Ежедневный бонус: забрать бесплатно / за рекламу / обратный отсчёт.
+// Заглушки попапов переехали в отдельные классы ниже (Daily/Stats/Leaders — без изменений API)
 export class DailyBonusPopup {
   draw(ctx, game, W, H) {
     void H;
@@ -237,7 +330,6 @@ export class DailyBonusPopup {
   }
 }
 
-// Статистика меты.
 export class StatsPopup {
   draw(ctx, game, W, H) {
     void H;
@@ -273,7 +365,6 @@ export class StatsPopup {
   }
 }
 
-// Лидеры: Yandex entries или локальный рекорд.
 export class LeadersPopup {
   draw(ctx, game, W, H) {
     void H;

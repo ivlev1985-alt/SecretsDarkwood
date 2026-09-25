@@ -110,21 +110,29 @@ export class HUD {
     ctx.textAlign = 'left';
     ctx.font = '13px monospace';
     let y = 230;
-    const owned = game.skills.ownedList();
-    if (!owned.length) {
+    const gear = game.save.data.gear || {};
+    const slots = game.shop.cfg.slots;
+    let any = false;
+    for (const s of slots) {
+      if (y > 460) break;
+      const item = gear[s.id];
+      if (!item) continue;
+      any = true;
+      const rar = game.shop.rarityOf(item);
+      ctx.fillStyle = rar ? rar.color : '#fff';
+      ctx.fillText((game._t(s.name_key) + ': ' + game.itemName(item)).slice(0, 36), 70, y);
+      y += 24;
+    }
+    if (!any) {
       ctx.fillStyle = '#888';
       ctx.fillText(game._t('inventory_empty'), 70, y);
-    }
-    for (const st of owned) {
-      ctx.fillStyle = '#fff';
-      ctx.fillText(game.upgrades.t(st.cfg.name_key) + '  Lv.' + st.level, 70, y);
       y += 24;
-      if (y > 470) break;
     }
+    // активные заклинания забега
     ctx.fillStyle = '#8f8';
-    for (const [id, lv] of Object.entries(game.player.passiveLevels || {})) {
-      if (y > 470) break;
-      ctx.fillText(id + '  Lv.' + lv, 70, y);
+    for (const st of game.skills.ownedList()) {
+      if (y > 460) break;
+      ctx.fillText((game.weaponName(st.cfg.id) + '  Lv.' + st.level).slice(0, 36), 70, y);
       y += 22;
     }
     drawButton(ctx, { x: W / 2 - 90, y: 470, w: 180, h: 40 }, game._t('close'));

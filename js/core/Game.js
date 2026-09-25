@@ -16,6 +16,7 @@ import { ChestSystem } from '../systems/ChestSystem.js';
 import { LootSystem } from '../systems/LootSystem.js';
 import { Chest } from '../entities/Chest.js';
 import { Prop } from '../entities/Prop.js';
+import { Pet } from '../entities/Pet.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
@@ -34,7 +35,7 @@ export const WeaponRegistry = { to_target: 'to_target', around_player: 'around_p
 export const EffectRegistry = { oneshot: 'oneshot', looping: 'looping', attached: 'attached' };
 export const ChestRewardRegistry = { coins: 'coins', spell: 'spell', levelup: 'levelup', mixed: 'mixed' };
 
-const CONFIG_NAMES = ['game_config', 'balance_config', 'skills_config', 'effects_config', 'ui_config', 'shop_config', 'localization'];
+const CONFIG_NAMES = ['game_config', 'balance_config', 'skills_config', 'effects_config', 'ui_config', 'items_config', 'localization'];
 const SETTINGS_KEY = 'sdw_settings_v1';
 
 export class Game {
@@ -56,6 +57,7 @@ export class Game {
     this.enemies = [];
     this.pickups = [];
     this.props = [];
+    this.pet = null;
     this.fx = null;
     this.combat = null;
     this.spawn = null;
@@ -264,7 +266,7 @@ export class Game {
     const g = this.config.game_config, b = this.config.balance_config;
     // Этап 5: мета-сейв (SDK + localStorage)
     this.save = new SaveSystem(g.save.save_key);
-    this.shop = new ShopSystem(this.config.shop_config);
+    this.shop = new ShopSystem(this.config.items_config);
     this.daily = new DailyBonusSystem(g.daily_bonus);
     this.onStatus('Загрузка сейва...');
     await this.save.load();
@@ -367,6 +369,50 @@ export class Game {
     if (st === 'gameover') { this.gameover.click(this, x, y); return; }
   }
 
+  // --- предметный магазин: ассортимент, обновление ---
+  ensureStock() {
+    const hours = (this.shop.shop.refresh_hours || 1) * 3600 * 1000;
+    const st = this.save.data.stock;
+    if (!st.offers.length || Date.now() - (st.ts || 0) >= hours) {
+      this.save.data.stock = { ts: Date.now(), offers: this.shop.rollStock() };
+      this.save.save();
+    }
+  }
+  stockRemain() {
+    const hours = (this.shop.shop.refresh_hours || 1) * 3600 * 1000;
+    const ms = Math.max(0, hours - (Date.now() - (this.save.data.stock.ts || 0)));
+    const m = String(Math.floor(ms / 60000)).padStart(2, '0');
+    const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
+    return m + ':' + s;
+  }
+  stockAdReady() {
+    const cd = (this.shop.shop.refresh_ad_cooldown_sec || 300) * 1000;
+    return Date.now() - (this.save.data.stockAdLast || 0) >= cd;
+  }
+  async refreshStockAd() {
+    if (!this.stockAdReady() || this._adBusy) return false;
+    this._adBusy = true;
+    const ok = await this._showRewarded();
+    this._adBusy = false;
+    if (!ok) return false;
+    this.save.data.stockAdLast = Date.now();
+    this.save.data.stock = { ts: Date.now(), offers: this.shop.rollStock() };
+    this.save.save();
+    return true;
+  }
+  openShop() {
+    this.ensureStock();
+    this.shopMenu.open(this);
+    this.uiShop = true;
+  }
+  // имя предмета по шаблону из items_config
+  itemName(item) {
+    if (!item) return '—';
+    const tpl = this.shop.tplById.get(item.tpl);
+    if (!tpl) return item.tpl;
+    return ConfigLoader.t(this.config.localization, this.settings.lang, tpl.name_key);
+  }
+
   // --- переходы ---
   startRun() {
     this._initRun();
@@ -418,8 +464,9 @@ export class Game {
 
   _initRun() {
     const g = this.config.game_config, b = this.config.balance_config, s = this.config.skills_config;
-    // Этап 5: shop-бонусы к стартовым статам
-    const mods = this.shop ? this.shop.statMods(this.save.data.shop) : null;
+    // Надетое снаряжение -> стартовые статы
+    const gear = this.save.data.gear || {};
+    const mods = this.shop ? this.shop.gearMods(gear) : null;
     const base = Object.assign({}, b.player);
     if (mods) {
       base.base_hp = Math.round(base.base_hp + mods.hpAdd);
@@ -439,18 +486,38 @@ export class Game {
     this.pickups = [];
     this.props = [];
     this.fx = new EffectSystem(this.config.effects_config, this.assets);
-    this.combat = new CombatSystem(g, b);
-    this.spawn = new SpawnSystem(b.waves, b.monsters);
-    // разблокировки магазина живут в сейве — применяем каждый забег
+    // заклинания: дефолтные + купленные (сейв) + надетый посох (с его уровнем)
+    const byId = new Map((s.weapons || []).map((w) => [w.id, w]));
+    for (const id of (this.save.data.unlockedSpells || [])) {
+      const w = byId.get(id);
+      if (w) w.unlocked = true;
+    }
+    const staffLv = {};
     if (this.shop) {
-      for (const wid of this.shop.unlockedWeapons(this.save.data.shop)) {
-        const w = (s.weapons || []).find((x) => x.id === wid);
-        if (w) w.unlocked = true;
+      for (const { spell, level } of this.shop.staffSpells(gear)) {
+        const w = byId.get(spell);
+        if (w) {
+          w.unlocked = true;
+          staffLv[spell] = Math.max(staffLv[spell] || 0, level);
+        }
+        if (!this.save.data.unlockedSpells.includes(spell)) this.save.data.unlockedSpells.push(spell);
       }
     }
+    this.combat = new CombatSystem(g, b);
+    this.spawn = new SpawnSystem(b.waves, b.monsters);
     this.skills = new SkillSystem(s.weapons, this.combat, this.audio);
     const active = (s.weapons || []).filter((w) => w.unlocked).map((w) => w.id);
     this.skills.setActive(active.length ? active : ['magic_bolt']);
+    for (const [id, st] of this.skills.weapons) {
+      if (staffLv[id]) st.level = Math.max(st.level, Math.min(staffLv[id], st.cfg.max_level || 5));
+    }
+    // питомец из слота (если куплен)
+    this.pet = null;
+    const petItem = gear.pet;
+    if (petItem && petItem.stats && petItem.stats[0] && petItem.stats[0].value > 0) {
+      this.pet = new Pet(this.player.x, this.player.y - 40, petItem.stats[0].value, (this.shop.cfg.pet || {}).speed || 260);
+      this.pet.tpl = petItem.tpl;
+    }
     this.progression = new ProgressionSystem(b.progression);
     this.upgrades = new UpgradeSystem(s, this.config.localization, this.settings.lang);
     this.chestSys = new ChestSystem(b.chests);
@@ -729,6 +796,26 @@ export class Game {
       if (!p.alive) this.pickups.splice(i, 1);
     }
 
+    // питомец: несёт по одному дропу хозяину
+    if (this.pet) {
+      const pcfg = (this.shop.cfg.pet || {});
+      const got = this.pet.update(dt, this.player.x, this.player.y, this.pickups,
+        pcfg.grab_radius || 24, pcfg.deliver_radius || 28);
+      if (got) {
+        if (got.kind === 'xp') {
+          const ups = this.progression.addXP(got.value * (this.player.xpMul || 1));
+          this.player.level = this.progression.level;
+          this.pendingLevels += ups;
+          if (this.fx) this.fx.play('pickup_xp', this.player.x, this.player.y);
+        } else if (got.kind === 'coin') {
+          this.player.coins += got.value;
+        }
+      }
+      for (let i = this.pickups.length - 1; i >= 0; i--) {
+        if (!this.pickups[i].alive) this.pickups.splice(i, 1);
+      }
+    }
+
     this.chestSys.update(dt, {
       player: this.player,
       pickupRadius: pr,
@@ -818,6 +905,22 @@ export class Game {
         const hasAnim = !!(this.player.anim && this.player.anim.getRect);
         const r = hasAnim ? this.player.anim.getRect() : { sw: 32, sh: 32 };
         this.player.draw(ctx, this.assets, g.hero.sprite, r.sw, r.sh, g.visuals.global_sprite_scale || 1, '#888');
+      }
+      // питомец (монстры его не бьют — коллизий с ним нет)
+      if (this.pet) {
+        const bobY = Math.sin(this.pet.bob) * 4;
+        ctx.fillStyle = '#ffd34d';
+        ctx.beginPath();
+        ctx.arc(this.pet.x, this.pet.y + bobY, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+        if (this.pet.carrying) {
+          ctx.fillStyle = this.pet.carrying.kind === 'coin' ? '#ffd34d' : '#4da6ff';
+          ctx.beginPath();
+          ctx.arc(this.pet.x, this.pet.y + bobY - 14, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       for (const p of this.skills.projectiles) this._drawShot(ctx, p, '#ffd34d');
       for (const p of this.skills.enemyShots) this._drawShot(ctx, p, '#ff4d4d');

@@ -6,7 +6,8 @@
 4. Править `config/balance_config.json`: monsters[], chests.types[], waves, loot, environment_props.
 5. Править `config/skills_config.json`: weapons[] (type только из WeaponRegistry), enemy_projectiles, passive_skills.
 6. Править `config/effects_config.json`: effects[] (behavior только из EffectRegistry).
-7. Править `config/shop_config.json`: items (target вида player.* или weapon.<id>.unlocked).
+7. Править `config/items_config.json` (JSONC, комментарии можно): templates (новые предметы),
+   rarities (тиры/цены/цвета), stats (диапазоны), slots (fixed_stat), shop (ассортимент/обновление).
 8. Править `config/localization.json`: тексты. Отсутствующий ключ = fallback en -> ru (не падает).
 9. Код в `js/` не трогать. Новый тип поведения = 1-2 строки в реестр в `js/core/Game.js`.
 

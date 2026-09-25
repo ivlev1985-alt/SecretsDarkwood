@@ -19,7 +19,7 @@ export class AssetLoader {
   static collectPaths(cfg) {
     const img = new Set(), audio = new Set();
     const g = cfg.game_config, b = cfg.balance_config, s = cfg.skills_config;
-    const e = cfg.effects_config, ui = cfg.ui_config, shop = cfg.shop_config;
+    const e = cfg.effects_config, ui = cfg.ui_config, items = cfg.items_config;
     if (g.hero.sprite) img.add(g.hero.sprite);
     if (g.hero.portrait) img.add(g.hero.portrait);
     if (g.audio.music_menu) audio.add(g.audio.music_menu);
@@ -38,14 +38,12 @@ export class AssetLoader {
     }
     for (const p of (s.enemy_projectiles || [])) if (p.sprite) img.add(p.sprite);
     for (const fx of ((e && e.effects) || [])) if (fx.sprite) img.add(fx.sprite);
-    for (const it of ((shop && shop.items) || [])) {
-      // icon вида "icons.png#fireball" — грузим базовый атлас
-      if (it.icon && it.icon.includes('#')) img.add('ui/' + it.icon.split('#')[0]);
-      else if (it.icon && it.icon.includes('/')) img.add(it.icon);
-    }
-    if (shop) for (const k of ['sfx_purchase', 'sfx_fail', 'sfx_success']) {
-      const v = shop.shop && shop.shop[k];
-      if (v) audio.add(AssetLoader.normalizeSfx(v));
+    // магазин предметов: иконок-файлов нет (буквы-заглушки), только звуки
+    if (items && items.shop) {
+      for (const k of ['sfx_purchase', 'sfx_fail', 'sfx_success']) {
+        const v = items.shop[k];
+        if (v) audio.add(AssetLoader.normalizeSfx(v));
+      }
     }
     return { images: [...img], audio: [...audio] };
   }

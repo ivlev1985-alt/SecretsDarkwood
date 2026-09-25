@@ -104,14 +104,37 @@ export class ConfigLoader {
     }
 
     for (const t of ((shop && shop.items) || []).map((i) => i.target)) {
-      if (t.startsWith('weapon.')) {
-        const id = t.split('.')[1];
-        if (!(s.weapons || []).some((w) => w.id === id)) errors.push('shop target unknown weapon: ' + t);
-      } else if (t.startsWith('player.')) {
-        const key = t.split('.')[1];
-        if (!(key in b.player)) errors.push('shop target unknown player key: ' + t);
-      } else {
-        errors.push('shop target bad format: ' + t);
+      // legacy shop_config (характеристики/разблокировки) — удалён, проверка пропущена
+      void t;
+    }
+
+    // items_config: шаблоны ссылаются на слоты/редкости/статы/заклинания
+    const items = cfg.items_config;
+    if (!items) errors.push('missing items_config');
+    else {
+      const slotIds = new Set((items.slots || []).map((s) => s.id));
+      const rarIds = new Set((items.rarities || []).map((r) => r.id));
+      const statIds = new Set(Object.keys(items.stats || {}));
+      const weaponIds = new Set((s.weapons || []).map((w) => w.id));
+      for (const tp of (items.templates || [])) {
+        if (!slotIds.has(tp.slot)) errors.push('item template ' + tp.id + ' unknown slot=' + tp.slot);
+        if (!tp.name_key) errors.push('item template ' + tp.id + ' missing name_key');
+        if (tp.slot === 'staff' && !weaponIds.has(tp.spell)) errors.push('staff ' + tp.id + ' unknown spell=' + tp.spell);
+        if (tp.slot === 'pet' && !(tp.base_radius > 0)) errors.push('pet ' + tp.id + ' missing base_radius');
+      }
+      for (const sl of (items.slots || [])) {
+        if (sl.fixed_stat && !statIds.has(sl.fixed_stat)) errors.push('slot ' + sl.id + ' unknown fixed_stat=' + sl.fixed_stat);
+      }
+      for (const r of (items.rarities || [])) {
+        if (!(r.stats_count > 0)) errors.push('rarity ' + r.id + ' bad stats_count');
+        if (!(r.weight > 0)) errors.push('rarity ' + r.id + ' bad weight');
+      }
+      for (const [sid, def] of Object.entries(items.stats || {})) {
+        if (sid === 'radius') continue;
+        for (const r of (items.rarities || [])) {
+          const range = def.ranges && def.ranges[r.id];
+          if (!range || !(range[0] <= range[1])) errors.push('stat ' + sid + ' bad range for ' + r.id);
+        }
       }
     }
 

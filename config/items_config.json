@@ -1,0 +1,140 @@
+{
+  // ============================================================
+  // КАТАЛОГ ПРЕДМЕТОВ — как добавить новый предмет:
+  // 1. Добавь шаблон в "templates": { id, slot, name_key } (+spell для посоха, +base_radius для питомца).
+  // 2. Всё остальное (редкость, характеристики, цена) генерируется само:
+  //    - редкость роллится по "weight", цвет имени — из "color";
+  //    - число характеристик = "stats_count" тира (1/2/3/4);
+  //    - первая характеристика слота — из slots[].fixed_stat (у посоха — заклинание, у питомца — радиус);
+  //    - остальные роллятся случайно из "stats" в диапазоне тира;
+  //    - цена = rarity.price_base * slots[].price_mul.
+  // Файл в формате JSONC (комментарии // допустимы — ConfigLoader их вырезает).
+  // ============================================================
+
+  // ------------------------------------------------------------
+  // ТИРЫ РЕДКОСТИ (4 тира)
+  // ------------------------------------------------------------
+  "rarities": [
+    {
+      "id": "common",                          // обычный
+      "name_key": "rarity_common",
+      "color": "#B0B0B0",                       // цвет наименования предмета
+      "stats_count": 1,                        // сколько характеристик у предмета
+      "weight": 50,                            // вес ролла редкости в магазине
+      "price_base": 100,                       // базовая цена
+      "spell_level": 1,                        // с каким уровнем даётся заклинание посоха
+      "pet_mult": 1.0                          // множитель радиуса питомца
+    },
+    {
+      "id": "rare",                            // редкий
+      "name_key": "rarity_rare",
+      "color": "#4DA6FF",
+      "stats_count": 2,
+      "weight": 30,
+      "price_base": 300,
+      "spell_level": 2,
+      "pet_mult": 1.25
+    },
+    {
+      "id": "epic",                            // эпический
+      "name_key": "rarity_epic",
+      "color": "#B400FF",
+      "stats_count": 3,
+      "weight": 15,
+      "price_base": 800,
+      "spell_level": 3,
+      "pet_mult": 1.5
+    },
+    {
+      "id": "legendary",                       // легендарный
+      "name_key": "rarity_legendary",
+      "color": "#FF9500",
+      "stats_count": 4,
+      "weight": 5,
+      "price_base": 2000,
+      "spell_level": 4,
+      "pet_mult": 2.0
+    }
+  ],
+
+  // ------------------------------------------------------------
+  // ХАРАКТЕРИСТИКИ: диапазоны ролла [min, max] по тирам.
+  // unit: "percent" (+N%), "flat" (+N), "pp" (+N п.п. — процентные пункты, для крита).
+  // ------------------------------------------------------------
+  "stats": {
+    "damage":       { "name_key": "passive_damage",        "unit": "percent", "ranges": { "common": [3, 6],     "rare": [6, 10],    "epic": [10, 16],  "legendary": [16, 25] } },
+    "max_hp":       { "name_key": "passive_max_hp",        "unit": "flat",    "ranges": { "common": [10, 20],   "rare": [20, 40],   "epic": [40, 70],   "legendary": [70, 120] } },
+    "speed":        { "name_key": "passive_speed",         "unit": "percent", "ranges": { "common": [3, 5],     "rare": [5, 8],     "epic": [8, 12],    "legendary": [12, 18] } },
+    "attack_speed": { "name_key": "passive_attack_speed",  "unit": "percent", "ranges": { "common": [2, 4],     "rare": [4, 7],     "epic": [7, 11],     "legendary": [11, 16] } },
+    "pickup":       { "name_key": "passive_pickup_radius", "unit": "percent", "ranges": { "common": [5, 10],    "rare": [10, 18],   "epic": [18, 28],   "legendary": [28, 40] } },
+    "crit":         { "name_key": "passive_crit_chance",   "unit": "pp",      "ranges": { "common": [1, 2],     "rare": [2, 4],     "epic": [4, 6],      "legendary": [6, 10] } },
+    "regen":        { "name_key": "passive_hp_regen",      "unit": "flat",    "ranges": { "common": [0.3, 0.6], "rare": [0.6, 1.2], "epic": [1.2, 2],   "legendary": [2, 3.5] } },
+    "xp":           { "name_key": "stat_xp",               "unit": "percent", "ranges": { "common": [3, 6],     "rare": [6, 10],    "epic": [10, 16],   "legendary": [16, 25] } },
+    "radius":       { "name_key": "stat_radius",           "unit": "flat",    "ranges": null }  // только питомцы: base_radius шаблона * pet_mult тира
+  },
+
+  // ------------------------------------------------------------
+  // СЛОТЫ (8): fixed_stat — обязательная первая характеристика.
+  // У посоха вместо характеристик — заклинание (spell из шаблона).
+  // ------------------------------------------------------------
+  "slots": [
+    { "id": "staff",    "name_key": "slot_staff",    "icon_letter": "Пх", "fixed_stat": null,      "price_mul": 1.5 },
+    { "id": "hat",      "name_key": "slot_hat",      "icon_letter": "Ш",  "fixed_stat": "damage",  "price_mul": 1.0 },
+    { "id": "robe",     "name_key": "slot_robe",     "icon_letter": "О",  "fixed_stat": "max_hp",  "price_mul": 1.0 },
+    { "id": "boots",    "name_key": "slot_boots",    "icon_letter": "С",  "fixed_stat": "speed",   "price_mul": 1.0 },
+    { "id": "gloves",   "name_key": "slot_gloves",   "icon_letter": "Пр", "fixed_stat": "pickup",  "price_mul": 1.0 },
+    { "id": "bracelet", "name_key": "slot_bracelet", "icon_letter": "Б",  "fixed_stat": null,      "price_mul": 1.0 },
+    { "id": "amulet",   "name_key": "slot_amulet",   "icon_letter": "А",  "fixed_stat": null,      "price_mul": 1.0 },
+    { "id": "pet",      "name_key": "slot_pet",      "icon_letter": "Пт", "fixed_stat": "radius",  "price_mul": 1.5 }
+  ],
+
+  // ------------------------------------------------------------
+  // ШАБЛОНЫ ПРЕДМЕТОВ — добавляй новые сюда.
+  // Обычный шаблон: { id, slot, name_key }.
+  // Посох: + "spell" (id заклинания из skills_config.json).
+  // Питомец: + "base_radius" (поиск дропа, px; умножается на pet_mult тира).
+  // ------------------------------------------------------------
+  "templates": [
+    { "id": "staff_fire",      "slot": "staff", "name_key": "item_staff_fire",      "spell": "fireball" },
+    { "id": "staff_frost",     "slot": "staff", "name_key": "item_staff_frost",     "spell": "frost_ring" },
+    { "id": "staff_wall",      "slot": "staff", "name_key": "item_staff_wall",      "spell": "fire_wall" },
+    { "id": "staff_storm",     "slot": "staff", "name_key": "item_staff_storm",     "spell": "tornado" },
+    { "id": "staff_thunder",   "slot": "staff", "name_key": "item_staff_thunder",   "spell": "lightning_chain" },
+
+    { "id": "hat_mage",        "slot": "hat",      "name_key": "item_hat_mage" },
+    { "id": "robe_mage",       "slot": "robe",     "name_key": "item_robe_mage" },
+    { "id": "boots_mage",      "slot": "boots",    "name_key": "item_boots_mage" },
+    { "id": "gloves_mage",     "slot": "gloves",   "name_key": "item_gloves_mage" },
+    { "id": "bracelet_power",  "slot": "bracelet", "name_key": "item_bracelet_power" },
+    { "id": "bracelet_swift",  "slot": "bracelet", "name_key": "item_bracelet_swift" },
+    { "id": "amulet_wisdom",   "slot": "amulet",   "name_key": "item_amulet_wisdom" },
+    { "id": "amulet_luck",     "slot": "amulet",   "name_key": "item_amulet_luck" },
+
+    { "id": "pet_owl",         "slot": "pet", "name_key": "item_pet_owl",   "base_radius": 120 },
+    { "id": "pet_bat",         "slot": "pet", "name_key": "item_pet_bat",   "base_radius": 160 },
+    { "id": "pet_fairy",       "slot": "pet", "name_key": "item_pet_fairy", "base_radius": 200 },
+    { "id": "pet_raven",       "slot": "pet", "name_key": "item_pet_raven", "base_radius": 240 }
+  ],
+
+  // ------------------------------------------------------------
+  // МАГАЗИН: ассортимент, обновление, продажа, питомец в бою
+  // ------------------------------------------------------------
+  "shop": {
+    "title_key": "shop_title",
+    "currency_key": "coin",
+    "offers_count": 6,                         // товаров за раз (слоты не повторяются)
+    "refresh_hours": 1,                        // ассортимент обновляется раз в час
+    "refresh_ad_cooldown_sec": 300,            // досрочное обновление за рекламу — раз в 5 мин
+    "sell_rate": 0.5,                          // продажа за 50% цены покупки
+    "confirm_purchase": true,                  // окно "Купить?" первым тапом
+    "sfx_purchase": "button_click.mp3",
+    "sfx_fail": "gameover.mp3",
+    "sfx_success": "levelup.mp3"
+  },
+
+  "pet": {
+    "speed": 260,                              // скорость полёта (px/s)
+    "grab_radius": 24,                         // радиус захвата дропа
+    "deliver_radius": 28                       // радиус передачи хозяину
+  }
+}

@@ -72,7 +72,7 @@ export class MainMenu {
     const t = (k) => game._t(k);
     if (hit(x, y, R.play)) { game.startRun(); return true; }
     if (hit(x, y, R.bonus)) { game.uiBonus = true; return true; }
-    if (hit(x, y, R.shop)) { game.shopMenu.open(game); game.uiShop = true; return true; }
+    if (hit(x, y, R.shop)) { game.openShop(); return true; }
     if (hit(x, y, R.stats)) { game.uiStats = true; return true; }
     if (hit(x, y, R.ads)) { game.claimMenuAd(); return true; }
     if (hit(x, y, R.settings)) { game.uiSettings = 'menu'; return true; }
