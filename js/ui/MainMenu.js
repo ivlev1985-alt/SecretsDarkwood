@@ -15,6 +15,7 @@ export class MainMenu {
       bonus: { x: bx, y: (y += 72), w: bw, h: bh },
       shop: { x: bx, y: (y += 64), w: bw, h: bh },
       stats: { x: bx, y: (y += 64), w: bw, h: bh },
+      ads: { x: bx, y: 564, w: bw, h: 44 },
       login: { x: W - 132, y: H - 52, w: 120, h: 40 }
     };
     this.R = R;
@@ -50,15 +51,20 @@ export class MainMenu {
     drawButton(ctx, R.leaders, '🏆 ' + t('leaderboard'));
     drawButton(ctx, R.play, '▶ ' + t('play'), { primary: true, big: true });
     const bonusReady = game.dailyReady();
-    drawButton(ctx, R.bonus, '🎁 ' + t('daily_bonus_title') + (bonusReady ? '!' : ''), { disabled: !bonusReady });
+    drawButton(ctx, R.bonus, '🎁 ' + t('daily_bonus_title') + (bonusReady ? '!' : ''));
     drawButton(ctx, R.shop, '🛒 ' + t('shop'));
     drawButton(ctx, R.stats, '📊 ' + t('stats'));
+    // 📺×2 в меню (ГДД п.10.2): +100 монет, кулдаун 10 мин
+    const adReady = game.menuAdReady();
+    drawButton(ctx, R.ads, adReady ? ('📺 ×2  +100') : ('📺 ' + game.menuAdRemain()), { disabled: !adReady });
     // низ: версия и политики слева столбиком, вход справа
     ctx.textAlign = 'left';
     ctx.fillStyle = '#888';
     ctx.font = '11px monospace';
     ctx.fillText(game.config.game_config.meta.version + ' · ' + game.config.game_config.meta.studio, 12, H - 44);
-    ctx.fillText(t('privacy_policy') + ' · ' + t('terms_of_use'), 12, H - 24);
+    const policies = t('privacy_policy') + ' · ' + t('terms_of_use');
+    ctx.fillText(policies, 12, H - 24);
+    this.R.priv = { x: 12, y: H - 40, w: ctx.measureText(policies).width, h: 28 };
     drawButton(ctx, R.login, t('login'));
   }
   click(game, x, y) {
@@ -68,8 +74,15 @@ export class MainMenu {
     if (hit(x, y, R.bonus)) { game.uiBonus = true; return true; }
     if (hit(x, y, R.shop)) { game.shopMenu.open(game); game.uiShop = true; return true; }
     if (hit(x, y, R.stats)) { game.uiStats = true; return true; }
+    if (hit(x, y, R.ads)) { game.claimMenuAd(); return true; }
     if (hit(x, y, R.settings)) { game.uiSettings = 'menu'; return true; }
     if (hit(x, y, R.leaders)) { game.openLeaders(); return true; }
+    if (R.priv && hit(x, y, R.priv)) {
+      const meta = game.config.game_config.meta;
+      if (x < R.priv.x + R.priv.w / 2) { if (meta.privacy_url) game.openPolicy('privacy'); }
+      else if (meta.terms_url) game.openPolicy('terms');
+      return true;
+    }
     if (hit(x, y, R.login)) { try { game.yandexLogin(); } catch (e) {} return true; }
     void t;
     return false;

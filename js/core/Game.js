@@ -94,6 +94,9 @@ export class Game {
     this.daily = null;
     this.leaderEntries = null;
     this._autosaveT = 30;
+    // Этап 7: реклама
+    this._adBusy = false;
+    this._lastInter = 0;
     this.ready = false;
   }
 
@@ -135,20 +138,82 @@ export class Game {
   yandexLogin() {
     try { window.ysdk?.auth?.openAuthDialog?.(); } catch (e) {}
   }
+  // --- реклама (только через SDK, никогда во время боя) ---
   dailyReady() { return this.daily ? this.daily.ready(this.save.data.dailyLast) : false; }
+  async _showFullscreen() {
+    try {
+      await window.ysdk?.adv?.showFullscreenAdv?.({});
+      return true;
+    } catch (e) { return false; }
+  }
+  async _showRewarded() {
+    try {
+      await window.ysdk?.adv?.showRewardedVideo?.({});
+      return true;
+    } catch (e) { return false; }
+  }
+  // Interstitial ДО окна gameover: каждые N смертей, min-интервал, пропуск первого забега
+  async _maybeInterstitial() {
+    const m = this.config.game_config.monetization;
+    if (m.interstitial_skip_first_run && (this.save.data.stats.totalRuns || 0) <= 1) return;
+    if ((m.interstitial_ad_every_n_deaths || 3) <= 0) return;
+    if (this.deaths % (m.interstitial_ad_every_n_deaths || 3) !== 0) return;
+    if (Date.now() - this._lastInter < (m.interstitial_min_interval_sec || 60) * 1000) return;
+    this._lastInter = Date.now();
+    this.states.set('ads');
+    await this._showFullscreen();
+  }
+  menuAdReady() {
+    const cd = (this.config.game_config.monetization.rewarded_cooldown_sec || 600) * 1000;
+    return !!this.daily && (Date.now() - (this.save.data.menuAdLast || 0) >= cd);
+  }
+  menuAdRemain() {
+    const cd = (this.config.game_config.monetization.rewarded_cooldown_sec || 600) * 1000;
+    const ms = Math.max(0, cd - (Date.now() - (this.save.data.menuAdLast || 0)));
+    const m = String(Math.floor(ms / 60000)).padStart(2, '0');
+    const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
+    return m + ':' + s;
+  }
+  async claimMenuAd() {
+    if (!this.menuAdReady() || this._adBusy) return false;
+    this._adBusy = true;
+    const ok = await this._showRewarded();
+    this._adBusy = false;
+    if (!ok) return false;
+    this.save.data.menuAdLast = Date.now();
+    this.save.addCoins(this.daily.reward * 2); // 📺 ×2 в главном меню (ГДД п.10.2)
+    this.save.save();
+    try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
+    return true;
+  }
+  openPolicy(kind) {
+    const url = kind === 'privacy'
+      ? this.config.game_config.meta.privacy_url
+      : this.config.game_config.meta.terms_url;
+    if (!url) return;
+    try {
+      if (window.ysdk?.openUrl) window.ysdk.openUrl(url);
+      else window.open(url, '_blank');
+    } catch (e) {}
+  }
   // Повторный забор после бесплатного — за рекламу (видео в Этапе 7, пока stub).
   // Кулдаун из monetization.rewarded_cooldown_sec.
   dailyAdReady() {
     const cd = (this.config.game_config.monetization.rewarded_cooldown_sec || 600) * 1000;
     return !!this.daily && (Date.now() - (this.save.data.dailyAdLast || 0) >= cd);
   }
-  claimDailyAd() {
-    if (!this.dailyAdReady()) return false;
+  async claimDailyAd() {
+    if (!this.dailyAdReady() || this._adBusy) return false;
+    this._adBusy = true;
+    const ok = await this._showRewarded(); // повторный забор — за видео
+    this._adBusy = false;
+    if (!ok) return false;
     this.save.data.dailyAdLast = Date.now();
     this.save.addCoins(this.daily.reward);
     this.save.save();
     if (this.fx && this.player) this.fx.play('daily_bonus_burst', this.player.x, this.player.y);
     try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
+    this.uiBonus = false;
     return true;
   }
   claimDaily() {
@@ -318,9 +383,13 @@ export class Game {
   }
   pauseGame() { if (this.states.is('playing')) this.states.set('paused'); }
   resumeGame() { if (this.states.is('paused')) this.states.set('playing'); }
-  revive() {
-    if (this.reviveUsed) return;
-    this.reviveUsed = true; // Этап 7: rewarded-видео перед этим
+  async revive() {
+    if (this.reviveUsed || this._adBusy) return;
+    this._adBusy = true;
+    const ok = await this._showRewarded(); // воскрешение за видео (макс 1/забег)
+    this._adBusy = false;
+    if (!ok) return;
+    this.reviveUsed = true;
     this.player.hp = Math.ceil(this.player.maxHp * (this.config.game_config.monetization.revive_hp_percent || 50) / 100);
     this.player.alive = true;
     this.player.invT = 2;
@@ -547,7 +616,7 @@ export class Game {
     }
   }
 
-  _die() {
+  async _die() {
     this.deaths++;
     const t = this.time;
     // монеты забега -> мета-баланс
@@ -564,6 +633,7 @@ export class Game {
       coins: this.player.coins,
       record
     };
+    await this._maybeInterstitial(); // реклама ДО окна (ГДД п.6.8)
     this.states.set('gameover');
     try { this.audio.stopMusic(); this.audio.playSfx('gameover.mp3'); } catch (e) {}
   }
@@ -785,6 +855,15 @@ export class Game {
     else if (this.uiBonus) this.bonusPopup.draw(ctx, this, W, H);
     else if (this.uiStats) this.statsPopup.draw(ctx, this, W, H);
     else if (this.uiLeaders) this.leadersPopup.draw(ctx, this, W, H);
+    // межстраничная реклама (SDK-оверлей поверх, игра заморожена)
+    if (st === 'ads') {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 20px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('📺', W / 2, H / 2);
+    }
 
     if (st !== 'menu') this.input.drawJoystick(ctx);
     if (g.ui.show_fps) {

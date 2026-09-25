@@ -229,8 +229,8 @@ export class DailyBonusPopup {
         game.claimDaily();
         return 'close';
       }
-      game.claimDailyAd(); // повторный забор — за рекламу
-      return game.dailyAdReady() ? true : 'close';
+      game.claimDailyAd(); // async: закроется сам при успехе
+      return true;
     }
     if (this._close && hit(x, y, this._close)) return 'close';
     return false;

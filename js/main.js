@@ -14,8 +14,23 @@ function fitPortrait() {
 window.addEventListener('resize', fitPortrait);
 fitPortrait();
 
+// GDD п.11.1: правильная инициализация SDK с таймаутом, fallback — локальный stub.
+async function initSdk() {
+  try {
+    if (window.YaGames && typeof window.YaGames.init === 'function') {
+      const sdk = await Promise.race([
+        window.YaGames.init(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('sdk timeout')), 4000))
+      ]);
+      if (sdk) window.ysdk = sdk;
+    }
+  } catch (e) {
+    console.warn('[SDK] init fallback:', e && e.message);
+  }
+}
+
 const game = new Game(canvas, (msg) => { if (bootText) bootText.textContent = msg; });
-game.boot().then(() => {
+initSdk().then(() => game.boot()).then(() => {
   const boot = document.getElementById('boot');
   if (boot) boot.style.display = 'none';
 }).catch((e) => {

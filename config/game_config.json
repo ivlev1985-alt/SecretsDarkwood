@@ -5,7 +5,9 @@
     "title": "Secrets of the Darkwood",
     "studio": "K.O Studio",
     "age_rating": "12+",
-    "yandex_app_id": ""
+    "yandex_app_id": "",
+    "privacy_url": "",
+    "terms_url": ""
   },
   "localization": {
     "default_lang": "ru",

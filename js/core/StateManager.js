@@ -1,4 +1,4 @@
-export const STATES = ['boot', 'menu', 'playing', 'paused', 'upgrade', 'gameover'];
+export const STATES = ['boot', 'menu', 'playing', 'paused', 'upgrade', 'gameover', 'ads'];
 
 export class StateManager {
   constructor(initial = 'boot') {
