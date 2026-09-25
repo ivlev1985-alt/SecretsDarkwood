@@ -157,6 +157,24 @@ export class ShopMenu {
     return [l1.slice(0, 40), l2.slice(0, 40)];
   }
 
+  // Название предмета в ≤2 строки чтобы влезло в ячейку (до ~12 символов на строку)
+  static wrapName(name) {
+    const words = String(name).split(' ');
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      const add = cur ? cur + ' ' + w : w;
+      if (add.length <= 12) cur = add;
+      else {
+        if (cur) lines.push(cur);
+        cur = w;
+        if (lines.length >= 1) break;
+      }
+    }
+    if (cur && lines.length < 2) lines.push(cur.length > 12 ? cur.slice(0, 12) : cur);
+    return lines.slice(0, 2);
+  }
+
   // ---------- вкладка Инвентарь ----------
   // Сетка 4×2 квадратных слотов: 50..406 строго (83px + зазор 8).
   // Иконка-заглушка на всю ячейку (место под картинку), характеристики — столбиком,
@@ -185,11 +203,19 @@ export class ShopMenu {
       ctx.lineWidth = this.selected === s.id ? 3 : 2;
       ctx.strokeRect(cx, cy, cell, cell);
       ctx.fillStyle = item ? (rar ? rar.color : '#fff') : '#555';
-      ctx.font = 'bold 24px monospace';
-      ctx.fillText(item ? game.itemName(item).slice(0, 7) : s.icon_letter, cx + cell / 2, cy + 44);
+      if (item) {
+        // название полностью: мелко, в 1–2 строки
+        const lines = ShopMenu.wrapName(game.itemName(item));
+        ctx.font = 'bold 11px monospace';
+        const y1 = lines.length > 1 ? cy + 30 : cy + 38;
+        lines.forEach((ln, li) => ctx.fillText(ln, cx + cell / 2, y1 + li * 14));
+      } else {
+        ctx.font = 'bold 24px monospace';
+        ctx.fillText(s.icon_letter, cx + cell / 2, cy + 44);
+      }
       ctx.fillStyle = '#999';
-      ctx.font = '10px monospace';
-      ctx.fillText(game._t(s.name_key).slice(0, 16), cx + cell / 2, cy + 68);
+      ctx.font = '9px monospace';
+      ctx.fillText(game._t(s.name_key).slice(0, 18), cx + cell / 2, cy + 72);
       this._slotRects.push({ id: s.id, r: { x: cx, y: cy, w: cell, h: cell } });
     });
     // низ: название + характеристики столбиком + Продать над Закрыть (грани 50..406)

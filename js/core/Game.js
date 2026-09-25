@@ -309,7 +309,8 @@ export class Game {
       }
     }, { passive: false });
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (e.code === 'Escape' || e.code === 'KeyP' || e.code === 'Space') {
+        if (e.code === 'Space') e.preventDefault();
         if (this.states.is('playing')) this.pauseGame();
         else if (this.states.is('paused')) this.resumeGame();
       }
@@ -737,7 +738,8 @@ export class Game {
   }
 
   update(dt) {
-    if (this.states.is('upgrade')) {
+    // Пауза мира с живой анимацией цифр: окно levelup ИЛИ открытый инвентарь (авто-пауза)
+    if (this.states.is('upgrade') || (this.uiInventory && this.states.is('playing'))) {
       this.combat.updateTexts(dt);
       return;
     }
