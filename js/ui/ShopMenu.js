@@ -1,13 +1,13 @@
 ﻿import { drawButton, drawPanel, hit } from './widgets.js';
 
 // Магазин меты (GDD п.5.5): вкладки, карточки, подтверждение, тост.
+// Раскладка: карточки слева, справа отдельная колонка ▲/▼ + скроллбар между ними.
 export class ShopMenu {
   constructor() {
     this.tab = 'stats';
     this.scroll = 0;
     this.confirmId = null;
     this.toast = null; // { text, t }
-    this.PER_PAGE = 3;
   }
   open(game) {
     this.tab = 'stats';
@@ -19,9 +19,24 @@ export class ShopMenu {
   _items(game) {
     return game.shop.itemsOf(this.tab);
   }
+  _perPage() { return 3; }
+  _cardH() { return this.tab === 'spells' ? 96 : 92; }
+  _step() { return this._cardH() + 8; }
+  // Строка урона/кд для unlock-товара из skills_config
+  _spellStats(game, item) {
+    const m = /^weapon\.(.+)\.unlocked$/.exec(item.target || '');
+    if (!m) return '';
+    const w = (game.config.skills_config.weapons || []).find((x) => x.id === m[1]);
+    if (!w) return '';
+    let s = 'Урон: ' + (w.damage ?? '?');
+    if (w.cooldown_ms) s += ' · КД ' + (w.cooldown_ms / 1000) + 'с';
+    if (w.type === 'around_player' && w.aura_radius) s += ' · R' + w.aura_radius;
+    if (w.type === 'area' && w.area_radius) s += ' · R' + w.area_radius;
+    return s;
+  }
   draw(ctx, game, W, H) {
     void H;
-    const t = (k) => game._t(k);
+    const t = (k, p) => game._t(k, p);
     const shop = game.shop;
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -35,54 +50,83 @@ export class ShopMenu {
     const cats = shop.cfg.categories || [];
     let tx = 50;
     this._tabRects = [];
+    const tabW = (360 - 6) / Math.max(1, cats.length);
     for (const c of cats) {
-      const r = { x: tx, y: 195, w: (W - 100) / cats.length - 6, h: 36 };
+      const r = { x: tx, y: 195, w: tabW, h: 36 };
       drawButton(ctx, r, game._t(c.name_key), { primary: this.tab === c.id });
       this._tabRects.push({ id: c.id, r });
-      tx += r.w + 6;
+      tx += tabW + 6;
     }
-    // товары
+    // товары: колонка карточек 50..410, скроллбар 412..417, кнопки 421..448 (всё внутри панели 30..450)
+    const cardX = 50, cardW = 360;
     const items = this._items(game);
-    const maxScroll = Math.max(0, items.length - this.PER_PAGE);
+    const perPage = this._perPage();
+    const maxScroll = Math.max(0, items.length - perPage);
     this.scroll = Math.max(0, Math.min(maxScroll, this.scroll));
+    const cardH = this._cardH(), step = this._step();
     let y = 245;
     this._buyRects = [];
-    ctx.textAlign = 'left';
-    for (let i = this.scroll; i < Math.min(items.length, this.scroll + this.PER_PAGE); i++) {
+    for (let i = this.scroll; i < Math.min(items.length, this.scroll + perPage); i++) {
       const it = items[i];
       const lv = game.save.shopLevel(it.id);
       const maxed = lv >= (it.max_level || 1);
       ctx.fillStyle = '#1c1c34';
-      ctx.fillRect(50, y, W - 100, 92);
+      ctx.fillRect(cardX, y, cardW, cardH);
       ctx.strokeStyle = '#ffd34d';
-      ctx.strokeRect(50, y, W - 100, 92);
+      ctx.strokeRect(cardX, y, cardW, cardH);
+      // ВАЖНО: выравнивание влево для каждой карточки (drawButton ниже ставит center)
+      ctx.textAlign = 'left';
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 13px monospace';
-      ctx.fillText(game._t(it.name_key), 62, y + 22);
+      ctx.fillText(game._t(it.name_key), cardX + 12, y + 22);
       ctx.fillStyle = '#aaa';
       ctx.font = '11px monospace';
-      ctx.fillText((game._t(it.desc_key) || '').slice(0, 44), 62, y + 40);
-      ctx.fillStyle = '#8f8';
-      ctx.fillText('Lv. ' + lv + ' / ' + (it.max_level || 1), 62, y + 58);
+      ctx.fillText((game._t(it.desc_key) || '').slice(0, 44), cardX + 12, y + 40);
+      if (this.tab === 'spells') {
+        ctx.fillStyle = '#ff9d4d';
+        ctx.font = '11px monospace';
+        ctx.fillText(this._spellStats(game, it).slice(0, 44), cardX + 12, y + 56);
+        ctx.fillStyle = '#8f8';
+        ctx.fillText(maxed ? t('shop_max_level') : ('Lv. ' + lv + ' / ' + (it.max_level || 1)), cardX + 12, y + 70);
+      } else {
+        ctx.fillStyle = '#8f8';
+        ctx.font = '11px monospace';
+        ctx.fillText('Lv. ' + lv + ' / ' + (it.max_level || 1), cardX + 12, y + 58);
+      }
       const chk = shop.check(it, lv, game.save.data.coins);
-      const label = maxed ? game._t('shop_max_level') : (game._t('shop_price_format', { price: chk.price }));
-      const r = { x: 62, y: y + 64, w: W - 124, h: 24 };
+      const label = maxed ? t('shop_max_level') : (t('buy') + ' · ' + t('shop_price_format', { price: chk.price }));
+      const r = { x: cardX + 12, y: y + cardH - 28, w: cardW - 24, h: 22 };
       const confirming = this.confirmId === it.id;
-      drawButton(ctx, r, confirming ? game._t('confirm') + '?' : (t('buy') + ' · ' + label), { disabled: maxed || (!confirming && !chk.ok) });
+      drawButton(ctx, r, confirming ? t('confirm') + '?' : label, { disabled: maxed || (!confirming && !chk.ok) });
       this._buyRects.push({ id: it.id, r });
-      y += 100;
+      y += step;
     }
-    // скролл
-    this._upRect = { x: W - 84, y: 245, w: 34, h: 40 };
-    this._downRect = { x: W - 84, y: 245 + 100 * this.PER_PAGE - 40, w: 34, h: 40 };
-    if (items.length > this.PER_PAGE) {
+    const listTop = 245, listH = perPage * step - 8;
+    // скроллбар между карточками и кнопками
+    if (items.length > perPage) {
+      ctx.fillStyle = '#333';
+      ctx.fillRect(412, listTop, 5, listH);
+      const th = Math.max(20, (listH * perPage) / items.length);
+      const ty = listTop + ((listH - th) * this.scroll) / maxScroll;
+      ctx.fillStyle = '#ffd34d';
+      ctx.fillRect(412, ty, 5, th);
+    }
+    // кнопки ▲▼ в отдельной колонке справа
+    this._upRect = { x: 421, y: listTop, w: 27, h: 44 };
+    this._downRect = { x: 421, y: listTop + listH - 44, w: 27, h: 44 };
+    if (items.length > perPage) {
       drawButton(ctx, this._upRect, '▲');
       drawButton(ctx, this._downRect, '▼');
+    } else {
+      this._upRect = null;
+      this._downRect = null;
     }
-    //confirm-отмена
+    // отмена подтверждения
+    const afterList = listTop + listH + 4;
     if (this.confirmId) {
-      drawButton(ctx, { x: 62, y: 245 + 100 * this.PER_PAGE + 6, w: W - 124, h: 26 }, t('cancel'));
-      this._cancelRect = { x: 62, y: 245 + 100 * this.PER_PAGE + 6, w: W - 124, h: 26 };
+      const r = { x: cardX, y: afterList, w: cardW, h: 26 };
+      drawButton(ctx, r, t('cancel'));
+      this._cancelRect = r;
     } else this._cancelRect = null;
     drawButton(ctx, { x: W / 2 - 90, y: 600, w: 180, h: 44 }, t('close'), { primary: true });
     this._close = { x: W / 2 - 90, y: 600, w: 180, h: 44 };

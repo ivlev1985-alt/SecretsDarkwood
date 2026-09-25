@@ -43,16 +43,14 @@ export class MainMenu {
     drawButton(ctx, R.bonus, '🎁 ' + t('daily_bonus_title') + (bonusReady ? '!' : ''), { disabled: !bonusReady });
     drawButton(ctx, R.shop, '🛒 ' + t('shop'));
     drawButton(ctx, R.stats, '📊 ' + t('stats'));
-    // низ
-    ctx.fillStyle = '#888';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(game.config.game_config.meta.version + ' · ' + game.config.game_config.meta.studio, 12, H - 16);
-    drawButton(ctx, R.login, t('login'));
+    // низ: три строки без наложений — политики по центру выше, версия слева, вход справа
     ctx.textAlign = 'center';
     ctx.fillStyle = '#888';
     ctx.font = '11px monospace';
-    ctx.fillText(t('privacy_policy') + ' · ' + t('terms_of_use'), W / 2, H - 16);
+    ctx.fillText(t('privacy_policy') + ' · ' + t('terms_of_use'), W / 2, H - 72);
+    ctx.textAlign = 'left';
+    ctx.fillText(game.config.game_config.meta.version + ' · ' + game.config.game_config.meta.studio, 12, H - 24);
+    drawButton(ctx, R.login, t('login'));
   }
   click(game, x, y) {
     const R = this.R;
