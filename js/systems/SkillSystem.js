@@ -82,6 +82,11 @@ export class SkillSystem {
       st.cd -= dt;
       if (st.cd > 0) continue;
       const c = st.cfg;
+      // зоны (смерч, стена) не кастуются без монстров — короткий ретрай вместо полного кд
+      if (c.type === 'area' && !enemies.some((e) => e.alive && !e.deathT)) {
+        st.cd = 0.25;
+        continue;
+      }
       if (c.type === 'to_target') this._fireToTarget(st, ctx);
       else if (c.type === 'around_player') this._fireAura(st, ctx);
       else if (c.type === 'area') this._fireArea(st, ctx);

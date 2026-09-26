@@ -174,7 +174,7 @@
     }
   ],
   "waves": {
-    "first_spawn_delay_sec": 15,
+    "first_spawn_delay_sec": 10,
     "first_spawn_trigger_on_chest": true,
     "spawn_interval_start_ms": 2000,
     "spawn_interval_min_ms": 300,
