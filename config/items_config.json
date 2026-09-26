@@ -113,8 +113,21 @@
     { "id": "pet_owl",         "slot": "pet", "name_key": "item_pet_owl",   "base_radius": 120 },
     { "id": "pet_bat",         "slot": "pet", "name_key": "item_pet_bat",   "base_radius": 160 },
     { "id": "pet_fairy",       "slot": "pet", "name_key": "item_pet_fairy", "base_radius": 200 },
-    { "id": "pet_raven",       "slot": "pet", "name_key": "item_pet_raven", "base_radius": 240 }
+    // Особый питомец: в магазине НЕ продаётся (special), падает только из
+    // самого редкого сундука. Умеет подбирать ещё и аптечки.
+    { "id": "pet_raven",       "slot": "pet", "name_key": "item_pet_raven", "base_radius": 240, "special": true, "fetches_potions": true }
   ],
+
+  // ------------------------------------------------------------
+  // ОСОБЫЙ ПИТОМЕЦ — дроп из сундука (модалка замены в игре)
+  // ------------------------------------------------------------
+  "special_pet": {
+    "enabled": true,
+    "template": "pet_raven",                   // какой шаблон падает
+    "rarity": "legendary",                     // с какой редкостью (радиус 240 * 2.0 = 480)
+    "chest_id": "legendary",                   // id типа сундука из balance_config.chests.types
+    "chance": 0.1                              // 10% при открытии такого сундука
+  },
 
   // ------------------------------------------------------------
   // МАГАЗИН: ассортимент, обновление, продажа, питомец в бою

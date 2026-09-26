@@ -155,7 +155,12 @@
     "pet_up_range": "Дальность полёта",
     "pet_up_range_desc": "+40 к дальности полёта питомца",
     "pet_up_magnet": "Радиус притяжения",
-    "pet_up_magnet_desc": "+20 к радиусу притяжения питомца"
+    "pet_up_magnet_desc": "+20 к радиусу притяжения питомца",
+    "pet_swap_title": "Питомец из сундука!",
+    "pet_swap_current": "Твой",
+    "pet_swap_new": "Новый",
+    "pet_swap_swap": "Поменять",
+    "pet_fetches_potions": "Собирает аптечки"
   },
   "en": {
     "play": "Play",
@@ -313,7 +318,12 @@
     "pet_up_range": "Flight Range",
     "pet_up_range_desc": "+40 pet flight range",
     "pet_up_magnet": "Attraction Radius",
-    "pet_up_magnet_desc": "+20 pet attraction radius"
+    "pet_up_magnet_desc": "+20 pet attraction radius",
+    "pet_swap_title": "Chest Pet!",
+    "pet_swap_current": "Yours",
+    "pet_swap_new": "New",
+    "pet_swap_swap": "Swap",
+    "pet_fetches_potions": "Fetches potions"
   },
   "tr": {
     "play": "Oyna",
@@ -471,7 +481,12 @@
     "pet_up_range": "Uçuş Menzili",
     "pet_up_range_desc": "+40 evcil hayvan uçuş menzili",
     "pet_up_magnet": "Çekim Yarıçapı",
-    "pet_up_magnet_desc": "+20 evcil hayvan çekim yarıçapı"
+    "pet_up_magnet_desc": "+20 evcil hayvan çekim yarıçapı",
+    "pet_swap_title": "Sandık Evcil Hayvanı!",
+    "pet_swap_current": "Seninki",
+    "pet_swap_new": "Yeni",
+    "pet_swap_swap": "Değiştir",
+    "pet_fetches_potions": "İksir toplar"
   },
   "de": {
     "play": "Spielen",
@@ -629,7 +644,12 @@
     "pet_up_range": "Flugweite",
     "pet_up_range_desc": "+40 Flugweite des Begleiters",
     "pet_up_magnet": "Anziehungsradius",
-    "pet_up_magnet_desc": "+20 Anziehungsradius des Begleiters"
+    "pet_up_magnet_desc": "+20 Anziehungsradius des Begleiters",
+    "pet_swap_title": "Truhen-Begleiter!",
+    "pet_swap_current": "Deiner",
+    "pet_swap_new": "Neuer",
+    "pet_swap_swap": "Tauschen",
+    "pet_fetches_potions": "Holt Tränke"
   },
   "es": {
     "play": "Jugar",
@@ -787,7 +807,12 @@
     "pet_up_range": "Alcance de vuelo",
     "pet_up_range_desc": "+40 alcance de vuelo de la mascota",
     "pet_up_magnet": "Radio de atracción",
-    "pet_up_magnet_desc": "+20 radio de atracción de la mascota"
+    "pet_up_magnet_desc": "+20 radio de atracción de la mascota",
+    "pet_swap_title": "¡Mascota del cofre!",
+    "pet_swap_current": "Tuyo",
+    "pet_swap_new": "Nuevo",
+    "pet_swap_swap": "Cambiar",
+    "pet_fetches_potions": "Recoge pociones"
   },
   "fr": {
     "play": "Jouer",
@@ -945,6 +970,11 @@
     "pet_up_range": "Portée de vol",
     "pet_up_range_desc": "+40 portée de vol du familier",
     "pet_up_magnet": "Rayon d’attraction",
-    "pet_up_magnet_desc": "+20 rayon d’attraction du familier"
+    "pet_up_magnet_desc": "+20 rayon d’attraction du familier",
+    "pet_swap_title": "Familier du coffre !",
+    "pet_swap_current": "Le tien",
+    "pet_swap_new": "Nouveau",
+    "pet_swap_swap": "Échanger",
+    "pet_fetches_potions": "Ramasse les potions"
   }
 }

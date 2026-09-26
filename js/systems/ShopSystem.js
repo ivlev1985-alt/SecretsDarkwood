@@ -30,10 +30,12 @@ export class ShopSystem {
   }
 
   // Полная генерация одного товара: { tpl, slot, rarity, stats:[{id,value}], price, spell?, spell_level? }
-  rollOffer(tpl, rand = Math.random) {
+  // forceRarityId — для особого дропа (питомец из сундука).
+  rollOffer(tpl, rand = Math.random, forceRarityId = null) {
     const slot = this.slotById.get(tpl.slot);
-    const rarity = this.pickRarity(rand);
+    const rarity = forceRarityId ? this.rarById.get(forceRarityId) : this.pickRarity(rand);
     const offer = { tpl: tpl.id, slot: tpl.slot, rarity: rarity.id, stats: [], price: 0 };
+    if (tpl.fetches_potions) offer.fetch_potions = true;
     if (tpl.slot === 'staff') {
       offer.spell = tpl.spell;
       offer.spell_level = rarity.spell_level || 1;
@@ -58,7 +60,8 @@ export class ShopSystem {
     return offer;
   }
 
-  // Ассортимент: offers_count товаров, слоты не повторяются
+  // Ассортимент: offers_count товаров, слоты не повторяются.
+  // Особые шаблоны (special: ворон) в магазине не продаются — только дроп.
   rollStock(rand = Math.random) {
     const n = this.shop.offers_count || 6;
     const slots = [...this.cfg.slots];
@@ -68,7 +71,7 @@ export class ShopSystem {
     }
     const out = [];
     for (const s of slots.slice(0, n)) {
-      const tpls = this.cfg.templates.filter((t) => t.slot === s.id);
+      const tpls = this.cfg.templates.filter((t) => t.slot === s.id && !t.special);
       if (!tpls.length) continue;
       const tpl = tpls[Math.floor(rand() * tpls.length)];
       out.push(this.rollOffer(tpl, rand));

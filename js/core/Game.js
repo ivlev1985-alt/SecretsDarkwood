@@ -28,6 +28,7 @@ import { GameOverScreen } from '../ui/GameOverScreen.js';
 import { SettingsMenu } from '../ui/SettingsMenu.js';
 import { UpgradeMenu } from '../ui/UpgradeMenu.js';
 import { ShopMenu, DailyBonusPopup, StatsPopup, LeadersPopup } from '../ui/ShopMenu.js';
+import { PetSwapPopup } from '../ui/PetSwapPopup.js';
 import { fmtTime } from '../utils/math.js';
 
 export const MovementRegistry = { chase: 'chase', patrol: 'patrol', ranged: 'ranged', teleport: 'teleport' };
@@ -100,6 +101,11 @@ export class Game {
     // Этап 7: реклама
     this._adBusy = false;
     this._lastInter = 0;
+    // TEST (убрать позже): стартовый легендарный сундук + гарант. дроп питомца
+    this.TEST_LEGENDARY_CHEST = true;
+    this.TEST_PET_DROP = true;
+    this.uiPetSwap = null;
+    this.petSwapPopup = new PetSwapPopup();
     this.ready = false;
   }
 
@@ -349,6 +355,12 @@ export class Game {
     const x = this._toX(cx), y = this._toY(cy);
     const W = this.canvas.width;
     // попапы поверх всего
+    if (this.uiPetSwap) {
+      const r = this.petSwapPopup.click(this, x, y);
+      if (r === 'close') this.uiPetSwap = null;
+      else if (r === 'swap') this.doPetSwap();
+      return;
+    }
     if (this.uiInventory) {
       const r = this.hud.invCloseRect(W);
       if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) this.uiInventory = false;
@@ -481,6 +493,22 @@ export class Game {
     return { hasPet: !!this.pet, levels: this.petLevels || {} };
   }
 
+  // Замена питомца из сундука: старый автовыкупается за 50%, новый надевается
+  doPetSwap() {
+    const d = this.uiPetSwap;
+    if (!d) return;
+    if (d.old) this.save.addCoins(this.shop.sellPrice(d.old));
+    this.save.data.gear.pet = JSON.parse(JSON.stringify(d.new));
+    this.save.save();
+    // обновить боевого питомца на месте (без рестарта забега)
+    const pcfg = (this.shop.cfg.pet || {});
+    this.pet = new Pet(this.player.x, this.player.y - 40,
+      (d.new.stats[0] || {}).value || 200, pcfg.speed || 260, pcfg.magnet_radius || 60, !!d.new.fetch_potions);
+    this.pet.tpl = d.new.tpl;
+    this.petLevels = {};
+    this.uiPetSwap = null;
+  }
+
   _initRun() {
     const g = this.config.game_config, b = this.config.balance_config, s = this.config.skills_config;
     // Надетое снаряжение -> стартовые статы
@@ -536,7 +564,8 @@ export class Game {
     const petItem = gear.pet;
     if (petItem && petItem.stats && petItem.stats[0] && petItem.stats[0].value > 0) {
       this.pet = new Pet(this.player.x, this.player.y - 40, petItem.stats[0].value,
-        (this.shop.cfg.pet || {}).speed || 260, (this.shop.cfg.pet || {}).magnet_radius || 60);
+        (this.shop.cfg.pet || {}).speed || 260, (this.shop.cfg.pet || {}).magnet_radius || 60,
+        !!petItem.fetch_potions);
       this.pet.tpl = petItem.tpl;
     }
     this.progression = new ProgressionSystem(b.progression);
@@ -554,6 +583,11 @@ export class Game {
     if (b.waves.first_spawn_trigger_on_chest && b.chests.enabled) {
       const wood = b.chests.types.find((t) => t.id === 'wooden') || b.chests.types[0];
       if (wood) this.chestSys.chests.push(new Chest(wood, 150, 0));
+    }
+    // TEST: стартовый легендарный сундук рядом (убрать позже)
+    if (this.TEST_LEGENDARY_CHEST && b.chests.enabled) {
+      const leg = b.chests.types.find((t) => t.id === 'legendary');
+      if (leg) this.chestSys.chests.push(new Chest(leg, -150, 0));
     }
     this.camera.snap(0, 0);
   }
@@ -673,6 +707,18 @@ export class Game {
     }
     this.combat.pushText(c.x, c.y - 24, '+' + reward.coins, '#ffd34d');
     if (this.fx) this.fx.play('chest_burst', c.x, c.y);
+    // особый питомец из самого редкого сундука (10%) — модалка замены с паузой
+    const sp = this.shop.cfg.special_pet;
+    if (sp && sp.enabled && c.typeCfg.id === sp.chest_id) {
+      const force = this.TEST_PET_DROP ? 1 : 0; // TEST: убрать позже
+      if (Math.random() < (force ? 1 : sp.chance)) {
+        const tpl = this.shop.tplById.get(sp.template);
+        if (tpl) {
+          const offer = this.shop.rollOffer(tpl, Math.random, sp.rarity);
+          this.uiPetSwap = { old: this.save.data.gear.pet || null, new: offer };
+        }
+      }
+    }
     try { this.audio.playSfx(this.config.balance_config.chests.sfx_open); } catch (e) {}
     if (this.config.game_config.save.save_on_important_events) this.save.save();
   }
@@ -741,8 +787,8 @@ export class Game {
   }
 
   update(dt) {
-    // Пауза мира с живой анимацией цифр: окно levelup ИЛИ открытый инвентарь (авто-пауза)
-    if (this.states.is('upgrade') || (this.uiInventory && this.states.is('playing'))) {
+    // Пауза мира с живой анимацией цифр: levelup, инвентарь, модалка питомца
+    if (this.states.is('upgrade') || (this.uiInventory && this.states.is('playing')) || this.uiPetSwap) {
       this.combat.updateTexts(dt);
       return;
     }
@@ -834,6 +880,9 @@ export class Game {
           if (this.fx) this.fx.play('pickup_xp', this.player.x, this.player.y);
         } else if (got.kind === 'coin') {
           this.player.coins += got.value;
+        } else if (got.kind === 'potion') {
+          const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
+          this.player.heal(this.player.maxHp * pct);
         }
       }
       for (let i = this.pickups.length - 1; i >= 0; i--) {
@@ -941,7 +990,8 @@ export class Game {
         ctx.strokeStyle = '#fff';
         ctx.stroke();
         if (this.pet.carrying) {
-          ctx.fillStyle = this.pet.carrying.kind === 'coin' ? '#ffd34d' : '#4da6ff';
+          const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[this.pet.carrying.kind] || '#fff';
+          ctx.fillStyle = cc;
           ctx.beginPath();
           ctx.arc(this.pet.x, this.pet.y + bobY - 14, 5, 0, Math.PI * 2);
           ctx.fill();
@@ -972,6 +1022,7 @@ export class Game {
         ctx.fillText(this.bossWarn.text, W / 2, H / 2);
       }
       if (st === 'upgrade') this.upgradeMenu.draw(ctx, this, W, H);
+      if (this.uiPetSwap) this.petSwapPopup.draw(ctx, this, W, H);
       if (st === 'paused') this.pauseMenu.draw(ctx, this, W, H);
       if (st === 'gameover') this.gameover.draw(ctx, this, W, H);
       if (this.uiInventory && st === 'playing') this.hud.drawInventory(ctx, this, W, H);
