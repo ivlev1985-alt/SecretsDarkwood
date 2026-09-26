@@ -296,11 +296,14 @@ export class Game {
     this._initRun();
     this.canvas.addEventListener('mousedown', (e) => this._tap(e.clientX, e.clientY));
     this.canvas.addEventListener('touchend', (e) => {
+      // блокируем эмулированный mousedown: иначе один тап закрывает попап
+      // И тут же кликает по меню под ним (авт. открытие магазина и т.п.)
+      if (e.cancelable) e.preventDefault();
       if (e.changedTouches.length) {
         const t = e.changedTouches[0];
         this._tap(t.clientX, t.clientY);
       }
-    });
+    }, { passive: false });
     // колесико — скролл магазина
     this.canvas.addEventListener('wheel', (e) => {
       if (this.uiShop) {

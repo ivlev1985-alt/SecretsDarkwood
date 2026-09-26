@@ -12,6 +12,7 @@ export class Pet extends Entity {
     this.target = null; // Pickup
     this.carrying = null; // { kind, value }
     this.bob = Math.random() * 6;
+    this.wob = Math.random() * 6; // фаза синусоиды полёта
     this.anim = null;
   }
 
@@ -48,6 +49,12 @@ export class Pet extends Entity {
       const step = Math.min(d, sp * dt);
       this.x += (dx / d) * step;
       this.y += (dy / d) * step;
+      // синусоида полёта: боковое колебание перпендикулярно курсу
+      this.wob += dt * 7;
+      const wAmp = 30; // px/s
+      const w = Math.sin(this.wob) * wAmp * dt;
+      this.x += (-dy / d) * w;
+      this.y += (dx / d) * w;
     }
     this.facing = dx >= 0 ? 1 : -1;
     // захват
