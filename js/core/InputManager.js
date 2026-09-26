@@ -5,6 +5,8 @@ export class InputManager {
     this.keys = new Set();
     this.mouse = { x: 0, y: 0, down: false };
     this.joySide = opts.joystickSide || 'left';
+    // подсказка-круг нужна только на тачскринах, на ПК с клавиатурой — нет
+    this.isTouch = ('ontouchstart' in window) || ((navigator.maxTouchPoints || 0) > 0);
     // Активный джойстик: база (где палец встал) + вектор -1..1
     this.joy = { active: false, baseX: 0, baseY: 0, x: 0, y: 0, id: null };
     this.JOY_RADIUS = 60;
@@ -29,6 +31,7 @@ export class InputManager {
     });
 
     canvas.addEventListener('touchstart', (e) => {
+      this.isTouch = true;
       for (const t of e.changedTouches) {
         const p = this._toCanvas(t.clientX, t.clientY);
         // Нижние 55% экрана — зона джойстика, верх — для UI-кликов (Этап 4)
@@ -99,8 +102,10 @@ export class InputManager {
     return Math.hypot(v.x, v.y) > 0.15;
   }
 
-  // Отрисовка джойстика поверх мира (серая, конфиг-независимая)
+  // Отрисовка джойстика поверх мира (серая, конфиг-независимая).
+  // Ненажатая подсказка-круг — только на мобильных; на ПК её нет.
   drawJoystick(ctx) {
+    if (!this.joy.active && !this.isTouch) return;
     if (!this.joy.active) {
       // подсказка позиции по умолчанию
       const bx = this.joySide === 'left' ? 80 : ctx.canvas.width - 80;
