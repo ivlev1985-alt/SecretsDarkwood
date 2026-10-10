@@ -61,6 +61,35 @@ export class SkillSystem {
     return player ? cd / (player.attackSpeedMul || 1) : cd;
   }
 
+  // Статус с оружия на текущем уровне. Все константы — из skills_config.
+  // slow: factor (множитель скорости) + duration (сек). burn: dps + duration (сек).
+  weaponSlow(st) {
+    const c = st.cfg;
+    if (!(c.slow_factor < 1) || !(c.slow_duration_ms > 0)) return null;
+    const lvl = (st.level || 1) - 1;
+    const factor = Math.min(0.95, Math.max(0.05,
+      c.slow_factor + (c.slow_factor_per_level || 0) * lvl));
+    const dur = (c.slow_duration_ms + (c.slow_duration_per_level_ms || 0) * lvl) / 1000;
+    return { factor, duration: dur };
+  }
+
+  weaponBurn(st, player) {
+    const c = st.cfg;
+    if (!(c.burn_dps > 0) || !(c.burn_duration_ms > 0)) return null;
+    const lvl = (st.level || 1) - 1;
+    const dps = ((c.burn_dps || 0) + (c.burn_dps_per_level || 0) * lvl) * (player ? player.damageMul : 1);
+    const dur = (c.burn_duration_ms + (c.burn_duration_per_level_ms || 0) * lvl) / 1000;
+    return { dps, duration: dur };
+  }
+
+  // Нанести статусы оружия на врага (вызывается из Combat/ауры/зон).
+  applyWeaponStatus(e, st, player) {
+    const slow = this.weaponSlow(st);
+    if (slow) e.applySlow(slow.factor, slow.duration);
+    const burn = this.weaponBurn(st, player);
+    if (burn) e.applyBurn(burn.dps, burn.duration, st.cfg.id);
+  }
+
   nearest(px, py, enemies, range) {
     let best = null, bd = range * range;
     for (const e of enemies) {
@@ -96,7 +125,7 @@ export class SkillSystem {
     // аура-ти idle не нужен; урон ауры — тиком
     this.auraTick -= dt;
 
-    // зоны: тик-урон + время жизни
+    // зоны: тик-урон + статусы (burn/slow из конфига оружия) + время жизни
     for (let i = this.areas.length - 1; i >= 0; i--) {
       const a = this.areas[i];
       a.ttl -= dt * 1000; a.tickT -= dt * 1000;
@@ -109,6 +138,8 @@ export class SkillSystem {
             const was = e.hp;
             const { damage, crit } = this.combat.rollDamage(a.damage);
             e.takeDamage(damage, 0, 0);
+            if (a.slow) e.applySlow(a.slow.factor, a.slow.duration);
+            if (a.burn) e.applyBurn(a.burn.dps, a.burn.duration, a.weaponId);
             if (crit) this.combat.pushText(e.x, e.y - 20, Math.round(damage) + '!');
             if (e.hp <= 0 && was > 0) { this.combat.addKill(a.weaponId); if (onKill) onKill(e, a.weaponId); }
           }
@@ -192,6 +223,8 @@ export class SkillSystem {
     const spread = ((c.spread_angle || 0) * Math.PI) / 180;
     const baseA = Math.atan2(target.y - player.y, target.x - player.x);
     const { damage, crit } = this.combat.rollDamage(this.weaponDamage(st, player));
+    const slow = this.weaponSlow(st);
+    const burn = this.weaponBurn(st, player);
     for (let i = 0; i < n; i++) {
       const off = n === 1 ? 0 : -spread / 2 + (spread * i) / (n - 1);
       const a = baseA + off;
@@ -206,6 +239,10 @@ export class SkillSystem {
         life: (c.projectile_lifetime_ms || 1000) / 1000,
         explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),
         explosionDmg: c.explosion_damage || 0,
+        slowFactor: slow ? slow.factor : 1,
+        slowDuration: slow ? slow.duration : 0,
+        burnDps: burn ? burn.dps : 0,
+        burnDuration: burn ? burn.duration : 0,
         weaponId: c.id, friendly: true,
         spritePath: c.projectile_sprite,
         frames: c.projectile_frames, animName: 'fly'
@@ -218,8 +255,8 @@ export class SkillSystem {
   _fireAura(st, ctx) {
     const c = st.cfg, { player, enemies } = ctx;
     const radius = (c.aura_radius || 150) + (c.aura_radius_per_level || 0) * (st.level - 1);
-    const { damage } = this.combat; // noop guard
-    void damage;
+    const slow = this.weaponSlow(st);
+    const burn = this.weaponBurn(st, player);
     for (const e of enemies) {
       if (!e.alive || e.deathT > 0) continue;
       const dx = e.x - player.x, dy = e.y - player.y;
@@ -227,6 +264,8 @@ export class SkillSystem {
         const was = e.hp;
         const r = this.combat.rollDamage(this.weaponDamage(st, player));
         e.takeDamage(r.damage, (dx / (Math.hypot(dx, dy) || 1)) * 120, (dy / (Math.hypot(dx, dy) || 1)) * 120);
+        if (slow) e.applySlow(slow.factor, slow.duration);
+        if (burn) e.applyBurn(burn.dps, burn.duration, c.id);
         if (r.crit) this.combat.pushText(e.x, e.y - 20, Math.round(r.damage) + '!');
         if (e.hp <= 0 && was > 0) { this.combat.addKill(c.id); if (ctx.onKill) ctx.onKill(e, c.id); }
       }
@@ -242,9 +281,12 @@ export class SkillSystem {
     const cx = target ? target.x : player.x + 100;
     const cy = target ? target.y : player.y;
     const radius = (c.area_radius || 120) + (c.area_radius_per_level || 0) * (st.level - 1);
+    const slow = this.weaponSlow(st);
+    const burn = this.weaponBurn(st, player);
     this.areas.push({
       cfg: c, weaponId: c.id, x: cx, y: cy, radius,
       damage: this.weaponDamage(st, player),
+      slow: slow || null, burn: burn || null,
       ttl: c.area_duration_ms || 4000, tickT: 0,
       color: c.area_color || '#ff4400',
       spritePath: c.area_sprite, frames: c.area_frames

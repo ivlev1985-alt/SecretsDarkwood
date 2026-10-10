@@ -14,6 +14,11 @@ export class Projectile extends Entity {
     this.maxLife = 1;
     this.explosionR = 0;
     this.explosionDmg = 0;
+    // статусы с оружия (все цифры — из skills_config): slow {factor, duration}, burn {dps, duration}
+    this.slowFactor = 1;
+    this.slowDuration = 0; // сек
+    this.burnDps = 0;
+    this.burnDuration = 0; // сек
     this.weaponId = '';
     this.spritePath = '';
   }
@@ -31,6 +36,10 @@ export class Projectile extends Entity {
     this.life = 0; this.maxLife = o.life || 1;
     this.explosionR = o.explosionR || 0;
     this.explosionDmg = o.explosionDmg || 0;
+    this.slowFactor = o.slowFactor ?? 1;
+    this.slowDuration = o.slowDuration || 0;
+    this.burnDps = o.burnDps || 0;
+    this.burnDuration = o.burnDuration || 0;
     this.weaponId = o.weaponId || '';
     this.friendly = o.friendly !== false;
     this.spritePath = o.spritePath || '';

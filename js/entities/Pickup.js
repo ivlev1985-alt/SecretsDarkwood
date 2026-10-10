@@ -16,6 +16,16 @@ export class Pickup extends Entity {
     this.anim = null;
   }
 
+  // Задать вылет из сундука: старт со сдвигом от центра + скорость по углу.
+  // Все цифры (радиус/скорость) — из chests.loot_scatter, здесь только применение.
+  launchFrom(x, y, angle, speed, radius = 12) {
+    this.x = x + Math.cos(angle) * radius;
+    this.y = y + Math.sin(angle) * radius;
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+    return this;
+  }
+
   update(dt, px, py, pickupRadius) {
     this.age += dt;
     // трение разброса

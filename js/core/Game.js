@@ -15,6 +15,7 @@ import { UpgradeSystem } from '../systems/UpgradeSystem.js';
 import { ChestSystem } from '../systems/ChestSystem.js';
 import { LootSystem } from '../systems/LootSystem.js';
 import { Chest } from '../entities/Chest.js';
+import { Pickup } from '../entities/Pickup.js';
 import { Prop } from '../entities/Prop.js';
 import { Pet } from '../entities/Pet.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
@@ -695,18 +696,27 @@ export class Game {
   }
 
   _openChest(c, reward) {
-    this.player.coins += reward.coins || 0;
-    if (reward.potions > 0) {
-      const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
-      this.player.heal(this.player.maxHp * pct * reward.potions);
+    // Лут вылетает вокруг сундука (кольцом) и подбирается как обычный дроп.
+    // Все цифры разлёта — из balance.chests.loot_scatter.
+    const ls = (this.config.balance_config.chests || {}).loot_scatter || {};
+    const r0 = ls.scatter_radius ?? 12;
+    const sMin = ls.scatter_speed_min ?? 140;
+    const sMax = ls.scatter_speed_max ?? 320;
+    const specs = Chest.scatterLoot(reward, ls, Math.random);
+    for (const s of specs) {
+      const p = new Pickup(s.kind, c.x, c.y, s.value);
+      const speed = sMin + Math.random() * Math.max(0, sMax - sMin);
+      p.launchFrom(c.x, c.y, s.angle, speed, r0);
+      this.pickups.push(p);
     }
+    // заклинания и уровни — мгновенно (физического представления нет)
     for (let i = 0; i < (reward.spells || 0); i++) this.skills.grantRandomSpell();
     if (reward.levels > 0) {
       const ups = this.progression.grantLevels(reward.levels);
       this.pendingLevels += ups;
     }
-    this.combat.pushText(c.x, c.y - 24, '+' + reward.coins, '#ffd34d');
-    if (this.fx) this.fx.play('chest_burst', c.x, c.y);
+    this.combat.pushText(c.x, c.y - 24, '+' + (reward.coins || 0), '#ffd34d');
+    if (this.fx) this.fx.play(this.config.balance_config.chests.open_effect_id || 'chest_burst', c.x, c.y);
     // особый питомец из самого редкого сундука (10%) — модалка замены с паузой
     const sp = this.shop.cfg.special_pet;
     if (sp && sp.enabled && c.typeCfg.id === sp.chest_id) {
@@ -838,8 +848,10 @@ export class Game {
       } else {
         try { e.setAnim('walk'); } catch (err) {}
       }
-      e.x += mx * e.speed * dt;
-      e.y += my * e.speed * dt;
+      // холод замедляет: скорость из effectiveSpeed (slowT/slowFactor из Enemy)
+      const spd = (typeof e.effectiveSpeed === 'number') ? e.effectiveSpeed : e.speed;
+      e.x += mx * spd * dt;
+      e.y += my * spd * dt;
       e.applyKnock(dt);
       this._pushOut(e, false);
       e.updateAnim(dt);
@@ -851,6 +863,17 @@ export class Game {
     this.skills.updateProjectiles(dt);
     this.skills.updateFx(dt);
     this.combat.projectilesVsEnemies(this.skills.projectiles, this.enemies, onKill, onHit);
+    // огонь: тик поджигания после всех прямых попаданий (убийства — через onKill)
+    for (const e of this.enemies) {
+      if (!e.alive || e.deathT > 0 || typeof e.updateStatus !== 'function') continue;
+      const was = e.hp;
+      e.updateStatus(dt);
+      if (e.hp <= 0 && was > 0) {
+        const wid = e.burnWeaponId || null;
+        this.combat.addKill(wid);
+        onKill(e, wid);
+      }
+    }
     this.combat.enemyProjectilesVsPlayer(this.skills.enemyShots, this.player);
     this.combat.separate(this.enemies);
     this.combat.contactDamage(this.player, this.enemies);
@@ -961,14 +984,40 @@ export class Game {
       }
       for (const c of this.chestSys.chests) {
         if (!c.alive) continue;
-        const col = { wooden: '#8B5A2B', silver: '#C0C0C0', golden: '#FFD700', legendary: '#B400FF' }[c.typeCfg.id] || '#8B5A2B';
-        ctx.fillStyle = c.opened ? '#444' : col;
-        ctx.fillRect(c.x - 14, c.y - 14, 28, 28);
-        ctx.strokeStyle = '#000'; ctx.strokeRect(c.x - 14, c.y - 14, 28, 28);
+        // Смена спрайта: idle-мерцание -> open-анимация (кадры из chests.types[].frames).
+        // Спрайт из конфига; плейсхолдер — только если ассета нет.
+        const img = this.assets.get(c.typeCfg.sprite);
+        if (img && c.anim) {
+          const sc = g.visuals.global_sprite_scale || 1;
+          c.draw(ctx, this.assets, c.typeCfg.sprite, c.rw, c.rh, sc, '#8B5A2B');
+        } else {
+          const col = { wooden: '#8B5A2B', silver: '#C0C0C0', golden: '#FFD700', legendary: '#B400FF' }[c.typeCfg.id] || '#8B5A2B';
+          ctx.fillStyle = c.opened ? '#444' : col;
+          ctx.fillRect(c.x - 14, c.y - 14, 28, 28);
+          ctx.strokeStyle = '#000'; ctx.strokeRect(c.x - 14, c.y - 14, 28, 28);
+        }
       }
       for (const e of this.enemies) {
         if (!e.alive) continue;
         e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), e.isBoss ? '#c0c' : '#a33');
+        // статусы: цвета ТОЛЬКО из balance.status_effects (без хардкода в коде по смыслу)
+        const stCfg = (this.config.balance_config && this.config.balance_config.status_effects) || {};
+        if (e.slowT > 0) {
+          ctx.save();
+          ctx.globalAlpha = 0.85;
+          ctx.strokeStyle = (stCfg.slow && stCfg.slow.tint) || '#00ccff';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 4, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+        }
+        if (e.burnT > 0) {
+          ctx.save();
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = (stCfg.burn && stCfg.burn.tint) || '#ff4400';
+          const flick = 3 + Math.sin((this.time || 0) * 18 + e.x) * 1.5;
+          ctx.beginPath(); ctx.arc(e.x, e.y - e.radius - 4, flick, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
         if (e.isBoss || e.maxHp >= 100) {
           const w = 60 * e.scale;
           ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - w / 2, e.y - e.rh * e.scale / 2 - 12, w, 6);

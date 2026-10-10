@@ -63,11 +63,42 @@ export class ConfigLoader {
       if (String(m.sprite || '').includes('#')) errors.push('monster ' + m.id + ' sprite contains #');
     }
 
+    const st = (b.status_effects || {});
+    if (st.slow) {
+      if (!(st.slow.default_factor > 0 && st.slow.default_factor < 1)) errors.push('status_effects.slow.default_factor must be 0..1');
+      if (!(st.slow.default_duration_ms > 0)) errors.push('status_effects.slow.default_duration_ms missing');
+      if (typeof st.slow.tint !== 'string') errors.push('status_effects.slow.tint missing');
+    }
+    if (st.burn) {
+      if (!(st.burn.default_dps > 0)) errors.push('status_effects.burn.default_dps missing');
+      if (!(st.burn.default_duration_ms > 0)) errors.push('status_effects.burn.default_duration_ms missing');
+      if (!(st.burn.tick_ms > 0)) errors.push('status_effects.burn.tick_ms missing');
+      if (typeof st.burn.tint !== 'string') errors.push('status_effects.burn.tint missing');
+    }
+    for (const m of (b.monsters || [])) {
+      for (const k of ['slow_resist', 'burn_resist']) {
+        if (m[k] !== undefined && !(m[k] >= 0 && m[k] <= 0.95)) errors.push('monster ' + m.id + ' bad ' + k);
+      }
+    }
+    if (b.chests && b.chests.loot_scatter) {
+      const ls = b.chests.loot_scatter;
+      if (!(ls.scatter_speed_min >= 0) || !(ls.scatter_speed_max >= ls.scatter_speed_min)) errors.push('chests.loot_scatter bad speeds');
+      if (!(ls.coin_value_per_pickup > 0)) errors.push('chests.loot_scatter.coin_value_per_pickup missing');
+      if (!(ls.max_coin_pickups > 0)) errors.push('chests.loot_scatter.max_coin_pickups missing');
+    }
+    if (b.chests && b.chests.open_hold_ms !== undefined && !(b.chests.open_hold_ms >= 0)) {
+      errors.push('chests.open_hold_ms bad');
+    }
+
     for (const w of (s.weapons || [])) {
       if (!w.id) errors.push('weapon without id');
       if (registries && registries.weapon && !registries.weapon[w.type]) {
         errors.push('weapon ' + w.id + ' unknown type=' + w.type);
       }
+      if (w.slow_factor !== undefined && !(w.slow_factor > 0 && w.slow_factor < 1)) errors.push('weapon ' + w.id + ' bad slow_factor (0..1)');
+      if (w.slow_duration_ms !== undefined && !(w.slow_duration_ms > 0)) errors.push('weapon ' + w.id + ' bad slow_duration_ms');
+      if (w.burn_dps !== undefined && !(w.burn_dps > 0)) errors.push('weapon ' + w.id + ' bad burn_dps');
+      if (w.burn_duration_ms !== undefined && !(w.burn_duration_ms > 0)) errors.push('weapon ' + w.id + ' bad burn_duration_ms');
       if (typeof w.unlocked !== 'boolean') errors.push('weapon ' + w.id + ' missing unlocked:boolean');
       const fr = w.projectile_frames || w.area_frames;
       if (fr) errors.push(...ConfigLoader.validateFrames(fr, 'weapon ' + w.id));
