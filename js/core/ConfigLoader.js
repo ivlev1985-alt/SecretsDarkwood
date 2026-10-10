@@ -75,6 +75,21 @@ export class ConfigLoader {
       if (!(st.burn.tick_ms > 0)) errors.push('status_effects.burn.tick_ms missing');
       if (typeof st.burn.tint !== 'string') errors.push('status_effects.burn.tint missing');
     }
+    if (st.particle_budget !== undefined && !(st.particle_budget >= 16)) errors.push('status_effects.particle_budget must be >= 16');
+    for (const key of ['slow', 'burn']) {
+      const ps = st[key] && st[key].particles;
+      if (!ps) continue;
+      if (typeof ps.enabled !== 'boolean') errors.push('status_effects.' + key + '.particles.enabled must be boolean');
+      if (!(ps.emission_per_sec >= 0)) errors.push('status_effects.' + key + '.particles bad emission_per_sec');
+      if (!(ps.size > 0)) errors.push('status_effects.' + key + '.particles bad size');
+      if (!(ps.life_ms > 0)) errors.push('status_effects.' + key + '.particles bad life_ms');
+      for (const vk of ['vx', 'vy']) {
+        if (!Array.isArray(ps[vk]) || ps[vk].length !== 2 || !(ps[vk][0] <= ps[vk][1])) {
+          errors.push('status_effects.' + key + '.particles bad ' + vk + ' range');
+        }
+      }
+      if (!Array.isArray(ps.colors) || !ps.colors.length) errors.push('status_effects.' + key + '.particles.colors missing');
+    }
     for (const m of (b.monsters || [])) {
       for (const k of ['slow_resist', 'burn_resist']) {
         if (m[k] !== undefined && !(m[k] >= 0 && m[k] <= 0.95)) errors.push('monster ' + m.id + ' bad ' + k);

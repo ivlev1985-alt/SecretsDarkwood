@@ -205,18 +205,39 @@
     "bomb_chance": 0.005
   },
   "status_effects": {
+    "particle_budget": 300,
     "slow": {
       "tint": "#00ccff",
       "default_factor": 0.5,
       "default_duration_ms": 2000,
       "min_factor": 0.05,
-      "max_factor": 0.95
+      "max_factor": 0.95,
+      "particles": {
+        "enabled": true,
+        "emission_per_sec": 16,
+        "size": 3,
+        "life_ms": 800,
+        "vx": [-30, 30],
+        "vy": [-50, -10],
+        "gravity": 20,
+        "colors": ["#d8f6ff", "#00ccff", "#ffffff"]
+      }
     },
     "burn": {
       "tint": "#ff4400",
       "default_dps": 5,
       "default_duration_ms": 3000,
-      "tick_ms": 500
+      "tick_ms": 500,
+      "particles": {
+        "enabled": true,
+        "emission_per_sec": 24,
+        "size": 4,
+        "life_ms": 500,
+        "vx": [-25, 25],
+        "vy": [-90, -40],
+        "gravity": -40,
+        "colors": ["#ffd34d", "#ff8800", "#ff4400"]
+      }
     }
   },
   "environment_props": [

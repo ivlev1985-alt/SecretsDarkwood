@@ -22,6 +22,7 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
 import { EffectSystem } from '../systems/EffectSystem.js';
+import { ParticleSystem } from '../systems/ParticleSystem.js';
 import { MainMenu } from '../ui/MainMenu.js';
 import { HUD } from '../ui/HUD.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
@@ -572,6 +573,8 @@ export class Game {
     this.pickups = [];
     this.props = [];
     this.fx = new EffectSystem(this.config.effects_config, this.assets);
+    const stFx = (b.status_effects || {});
+    this.particles = new ParticleSystem(stFx.particle_budget || 300);
     // заклинания: дефолтные + купленные (сейв) + надетый посох (с его уровнем)
     const byId = new Map((s.weapons || []).map((w) => [w.id, w]));
     for (const id of (this.save.data.unlockedSpells || [])) {
@@ -928,6 +931,11 @@ export class Game {
     this.skills.updateFx(dt);
     this.combat.projectilesVsEnemies(this.skills.projectiles, this.enemies, onKill, onHit);
     // огонь: тик поджигания после всех прямых попаданий (убийства — через onKill)
+    // + живые частицы статусов: угольки на горящих, снежинки на замедленных
+    // (частоты/виды — из status_effects.*.particles, бюджет ограничен пулом)
+    const stFx = (this.config.balance_config && this.config.balance_config.status_effects) || {};
+    const burnPs = stFx.burn && stFx.burn.particles;
+    const slowPs = stFx.slow && stFx.slow.particles;
     for (const e of this.enemies) {
       if (!e.alive || e.deathT > 0 || typeof e.updateStatus !== 'function') continue;
       const was = e.hp;
@@ -937,7 +945,16 @@ export class Game {
         this.combat.addKill(wid);
         onKill(e, wid);
       }
+      if (this.particles && e.alive && e.deathT <= 0) {
+        if (e.burnT > 0 && burnPs && burnPs.enabled && Math.random() < (burnPs.emission_per_sec || 0) * dt) {
+          this.particles.emit(e.x, e.y, e.radius, burnPs, Math.random);
+        }
+        if (e.slowT > 0 && slowPs && slowPs.enabled && Math.random() < (slowPs.emission_per_sec || 0) * dt) {
+          this.particles.emit(e.x, e.y, e.radius, slowPs, Math.random);
+        }
+      }
     }
+    if (this.particles) this.particles.update(dt);
     this.combat.enemyProjectilesVsPlayer(this.skills.enemyShots, this.player);
     this.combat.separate(this.enemies);
     this.combat.contactDamage(this.player, this.enemies);
@@ -1114,6 +1131,7 @@ export class Game {
       for (const p of this.skills.enemyShots) this._drawShot(ctx, p, '#ff4d4d');
       this.skills.drawLightning(ctx);
       if (this.fx) this.fx.draw(ctx);
+      if (this.particles) this.particles.draw(ctx);
       ctx.textAlign = 'center';
       for (const t of this.combat.texts) {
         ctx.globalAlpha = 1 - t.life / t.maxLife;
