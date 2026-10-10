@@ -101,6 +101,57 @@ export class SkillSystem {
     return best;
   }
 
+  // Случайный живой враг в радиусе (для targeting:"random" и прыжков цепи).
+  // exclude — Set уже поражённых (цепь не бьёт дважды). Чистая логика + rand.
+  randomInRange(px, py, enemies, range, exclude, rand = Math.random) {
+    const r2 = range * range;
+    let n = 0;
+    for (const e of enemies) {
+      if (!e.alive || e.deathT > 0) continue;
+      if (exclude && exclude.has(e)) continue;
+      const dx = e.x - px, dy = e.y - py;
+      if (dx * dx + dy * dy <= r2) n++;
+    }
+    if (!n) return null;
+    let k = (rand() * n) | 0;
+    for (const e of enemies) {
+      if (!e.alive || e.deathT > 0) continue;
+      if (exclude && exclude.has(e)) continue;
+      const dx = e.x - px, dy = e.y - py;
+      if (dx * dx + dy * dy <= r2) {
+        if (k === 0) return e;
+        k--;
+      }
+    }
+    return null;
+  }
+
+  // Следующий прыжок цепи: случайная непоражённая цель в chainRange от точки
+  // попадания. Доводит снаряд на неё; если целей нет — цепь гаснет.
+  chainNext(p, enemies, fromX, fromY, rand = Math.random) {
+    if (!p || !p.active || !(p.chainRange > 0)) return null;
+    const next = this.randomInRange(fromX, fromY, enemies, p.chainRange, p.hitIds, rand);
+    if (!next) { p.active = false; p.alive = false; return null; }
+    p.chainTarget = next;
+    const sp = Math.hypot(p.vx, p.vy) || 400;
+    const dx = next.x - p.x, dy = next.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    p.vx = (dx / d) * sp; p.vy = (dy / d) * sp;
+    return next;
+  }
+
+  // Цель цепи могла умереть от другого оружия пока снаряд летел —
+  // перенацеливаем в полёте, иначе цепь гаснет. Вызывается каждый кадр из Game.
+  updateChains(enemies, rand = Math.random) {
+    for (const p of this.projectiles) {
+      if (!p.active || !(p.chainRange > 0) || !p.chainTarget) continue;
+      const t = p.chainTarget;
+      if (!t.alive || t.deathT > 0 || t.hp <= 0 || (p.hitIds && p.hitIds.has(t))) {
+        this.chainNext(p, enemies, p.x, p.y, rand);
+      }
+    }
+  }
+
   update(dt, ctx) {
     // ctx: { player, enemies, onKill }
     const { player, enemies, onKill } = ctx;
@@ -215,9 +266,14 @@ export class SkillSystem {
     }
   }
 
-  _fireToTarget(st, ctx) {
+  _fireToTarget(st, ctx, rand = Math.random) {
     const c = st.cfg, { player, enemies } = ctx;
-    const target = c.auto_aim === false ? null : this.nearest(player.x, player.y, enemies, c.auto_aim_range || 400);
+    // targeting:"random" (цепная молния) — первая цель случайная в радиусе
+    // наводки, а не ближайшая; остальные типы — как раньше по ближайшей.
+    const target = c.auto_aim === false ? null
+      : (c.targeting === 'random'
+        ? this.randomInRange(player.x, player.y, enemies, c.auto_aim_range || 400, null, rand)
+        : this.nearest(player.x, player.y, enemies, c.auto_aim_range || 400));
     if (!target) return;
     const n = c.projectiles_per_shot || 1;
     const spread = ((c.spread_angle || 0) * Math.PI) / 180;
@@ -243,6 +299,8 @@ export class SkillSystem {
         slowDuration: slow ? slow.duration : 0,
         burnDps: burn ? burn.dps : 0,
         burnDuration: burn ? burn.duration : 0,
+        chainRange: c.chain_range || 0,
+        chainTarget: (c.chain_range > 0) ? target : null,
         weaponId: c.id, friendly: true,
         spritePath: c.projectile_sprite,
         frames: c.projectile_frames, animName: 'fly'

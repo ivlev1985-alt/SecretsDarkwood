@@ -95,6 +95,8 @@ export class ConfigLoader {
       if (registries && registries.weapon && !registries.weapon[w.type]) {
         errors.push('weapon ' + w.id + ' unknown type=' + w.type);
       }
+      if (w.targeting !== undefined && w.targeting !== 'nearest' && w.targeting !== 'random') errors.push('weapon ' + w.id + ' bad targeting (nearest|random)');
+      if (w.chain_range !== undefined && !(w.chain_range > 0)) errors.push('weapon ' + w.id + ' bad chain_range');
       if (w.slow_factor !== undefined && !(w.slow_factor > 0 && w.slow_factor < 1)) errors.push('weapon ' + w.id + ' bad slow_factor (0..1)');
       if (w.slow_duration_ms !== undefined && !(w.slow_duration_ms > 0)) errors.push('weapon ' + w.id + ' bad slow_duration_ms');
       if (w.burn_dps !== undefined && !(w.burn_dps > 0)) errors.push('weapon ' + w.id + ' bad burn_dps');

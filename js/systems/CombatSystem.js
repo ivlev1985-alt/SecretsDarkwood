@@ -101,6 +101,9 @@ export class CombatSystem {
       if (!p.active) continue;
       for (const e of enemies) {
         if (!e.alive || e.deathT > 0) continue;
+        // цепная молния бьёт только цель-замок (случайную), пролетая сквозь
+        // остальных, — иначе в толпе цепь вырождалась бы в пробитие по прямой
+        if (p.chainRange > 0 && e !== p.chainTarget) continue;
         if (p.hitIds.has(e)) continue;
         const dx = e.x - p.x, dy = e.y - p.y;
         const rr = e.radius + p.radius;

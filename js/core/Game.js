@@ -107,6 +107,14 @@ export class Game {
     this.TEST_PET_DROP = true;
     this.uiPetSwap = null;
     this.petSwapPopup = new PetSwapPopup();
+    // Защита от «протухших» тапов на тачскринах: помним, где/когда палец лёг,
+    // и когда открылась текущая модалка. Тап засчитывается только если палец
+    // лёг УЖЕ на открытую модалку и почти не двигался (иначе это был джойстик
+    // или палец, лежавший на экране до паузы/levelup).
+    this._touchStarts = new Map(); // touchId -> { x, y, t }
+    this._modalTs = 0; // performance.now() открытия текущей модалки
+    this._wasModal = false;
+    this.TAP_SLOP = 24; // макс. сдвиг пальца (px канваса) чтобы считаться тапом
     this.ready = false;
   }
 
@@ -302,15 +310,35 @@ export class Game {
 
     this._initRun();
     this.canvas.addEventListener('mousedown', (e) => this._tap(e.clientX, e.clientY));
+    // Трекинг начала касаний — нужен чтобы отличать свежий тап по модалке
+    // от отпускания пальца, лежавшего на экране до её открытия (джойстик).
+    this.canvas.addEventListener('touchstart', (e) => {
+      for (const t of e.changedTouches) {
+        this._touchStarts.set(t.identifier, {
+          x: this._toX(t.clientX), y: this._toY(t.clientY), t: performance.now()
+        });
+      }
+      // страховка от утечки карты
+      if (this._touchStarts.size > 12) {
+        const first = this._touchStarts.keys().next();
+        if (!first.done) this._touchStarts.delete(first.value);
+      }
+    }, { passive: true });
     this.canvas.addEventListener('touchend', (e) => {
       // блокируем эмулированный mousedown: иначе один тап закрывает попап
       // И тут же кликает по меню под ним (авт. открытие магазина и т.п.)
       if (e.cancelable) e.preventDefault();
-      if (e.changedTouches.length) {
-        const t = e.changedTouches[0];
-        this._tap(t.clientX, t.clientY);
+      for (const t of e.changedTouches) {
+        const s = this._touchStarts.get(t.identifier);
+        this._touchStarts.delete(t.identifier);
+        if (Game.isFreshTap(s, this._toX(t.clientX), this._toY(t.clientY), this._modalTs, this.TAP_SLOP)) {
+          this._tap(t.clientX, t.clientY);
+        }
       }
     }, { passive: false });
+    this.canvas.addEventListener('touchcancel', (e) => {
+      for (const t of e.changedTouches) this._touchStarts.delete(t.identifier);
+    });
     // колесико — скролл магазина
     this.canvas.addEventListener('wheel', (e) => {
       if (this.uiShop) {
@@ -342,6 +370,16 @@ export class Game {
     this.ready = true;
     this.onStatus('OK');
     window.__game = this;
+  }
+
+  // Чистая функция-фильтр тапов (тестируется в node): тап засчитывается
+  // только если палец лёг ПОСЛЕ открытия модалки и почти не двигался.
+  // Отсекает: отпускание джойстика и пальца, лежавшего до паузы/levelup.
+  static isFreshTap(start, endX, endY, modalTs, slop) {
+    if (!start) return false; // начало неизвестно — протухшее касание
+    if (start.t < modalTs) return false; // палец лёг до открытия модалки
+    if (Math.hypot(endX - start.x, endY - start.y) > slop) return false; // свайп
+    return true;
   }
 
   _toX(cx) {
@@ -604,9 +642,14 @@ export class Game {
     if (this.fx) this.fx.play(fxId, e.x, e.y);
   }
 
-  // эффект попадания по hit_effect оружия + молния
+  // эффект попадания по hit_effect оружия + молния + следующий прыжок цепи
   _onHit(p, e) {
     this.skills.registerHitFx(p, e);
+    // цепь прыгает дальше только если остались прыжки (pierce ещё не списан:
+    // Combat уменьшает его сразу после onHit). Нет целей рядом — цепь гаснет.
+    if (p.chainRange > 0 && p.pierce > 0) {
+      this.skills.chainNext(p, this.enemies, e.x, e.y, Math.random);
+    }
     if (p.weaponId) {
       const st = this.skills.weapons.get(p.weaponId);
       if (st && st.cfg.hit_effect && this.fx) this.fx.play(st.cfg.hit_effect, e.x, e.y);
@@ -790,10 +833,30 @@ export class Game {
     if (this._fpsT >= 0.5) { this.fps = Math.round(this._fpsN / this._fpsAcc); this._fpsAcc = 0; this._fpsN = 0; this._fpsT = 0; }
     const st = this.states.get();
     const paused = st === 'paused' || document.hidden;
+    // Модалка могла открыться в прошлом кадре (levelup из update, попапы из
+    // тапов): фиксируем момент ДО обработки новых тапов. JS однопоточен —
+    // тач-события приходят только между кадрами, поэтому проверка до и после
+    // update закрывает гонку полностью: палец, лёгший до модалки, протухает.
+    this._syncModalTs();
     if (!paused && (st === 'playing' || st === 'upgrade')) this.update(dt);
+    this._syncModalTs();
     if (this.uiShop) this.shopMenu.update(dt);
     this.render();
     requestAnimationFrame((tt) => this.frame(tt));
+  }
+
+  // Модалка = любое состояние/попап, перекрывающее мир и ловящее тапы.
+  _isModal() {
+    const st = this.states.get();
+    return st === 'upgrade' || st === 'paused' || st === 'gameover' || st === 'ads'
+      || !!this.uiPetSwap || !!this.uiInventory || !!this.uiSettings || !!this.uiShop
+      || !!this.uiBonus || !!this.uiStats || !!this.uiLeaders;
+  }
+
+  _syncModalTs() {
+    const m = this._isModal();
+    if (m && !this._wasModal) this._modalTs = performance.now();
+    this._wasModal = m;
   }
 
   update(dt) {
@@ -861,6 +924,7 @@ export class Game {
     const onHit = (p, e) => this._onHit(p, e);
     this.skills.update(dt, { player: this.player, enemies: this.enemies, onKill });
     this.skills.updateProjectiles(dt);
+    this.skills.updateChains(this.enemies, Math.random);
     this.skills.updateFx(dt);
     this.combat.projectilesVsEnemies(this.skills.projectiles, this.enemies, onKill, onHit);
     // огонь: тик поджигания после всех прямых попаданий (убийства — через onKill)

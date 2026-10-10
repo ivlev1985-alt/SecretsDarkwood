@@ -216,6 +216,8 @@
       "desc_key": "weapon_lightning_chain_desc",
       "icon": "ui/icons.png#lightning_chain",
       "type": "to_target",
+      "targeting": "random",
+      "chain_range": 300,
       "damage": 15,
       "cooldown_ms": 2500,
       "projectile_speed": 800,

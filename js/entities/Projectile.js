@@ -19,6 +19,9 @@ export class Projectile extends Entity {
     this.slowDuration = 0; // сек
     this.burnDps = 0;
     this.burnDuration = 0; // сек
+    // цепная молния: радиус прыжка к следующей случайной цели + текущая цель-замок
+    this.chainRange = 0;
+    this.chainTarget = null;
     this.weaponId = '';
     this.spritePath = '';
   }
@@ -40,6 +43,8 @@ export class Projectile extends Entity {
     this.slowDuration = o.slowDuration || 0;
     this.burnDps = o.burnDps || 0;
     this.burnDuration = o.burnDuration || 0;
+    this.chainRange = o.chainRange || 0;
+    this.chainTarget = o.chainTarget || null;
     this.weaponId = o.weaponId || '';
     this.friendly = o.friendly !== false;
     this.spritePath = o.spritePath || '';
