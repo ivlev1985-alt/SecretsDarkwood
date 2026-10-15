@@ -49,6 +49,8 @@
       "scale": 1.0,
       "hit_flash_color": "#ffffff",
       "knockback_resist": 0.0,
+      "slow_resist": 0.0,
+      "burn_resist": 0.0,
       "spawn_weight": 100
     },
     {
@@ -79,6 +81,8 @@
       "scale": 0.9,
       "hit_flash_color": "#ffcccc",
       "knockback_resist": 0.0,
+      "slow_resist": 0.0,
+      "burn_resist": 0.0,
       "spawn_weight": 80
     },
     {
@@ -109,6 +113,8 @@
       "scale": 1.4,
       "hit_flash_color": "#ffffff",
       "knockback_resist": 0.7,
+      "slow_resist": 0.3,
+      "burn_resist": 0.2,
       "spawn_weight": 20
     },
     {
@@ -139,6 +145,8 @@
       "scale": 1.0,
       "hit_flash_color": "#ffffff",
       "knockback_resist": 0.2,
+      "slow_resist": 0.1,
+      "burn_resist": 0.1,
       "spawn_weight": 40
     },
     {
@@ -169,6 +177,8 @@
       "scale": 2.0,
       "hit_flash_color": "#ff00ff",
       "knockback_resist": 1.0,
+      "slow_resist": 0.5,
+      "burn_resist": 0.3,
       "spawn_weight": 0,
       "is_boss": true
     }
@@ -193,6 +203,42 @@
     "health_potion_heal_percent": 25,
     "magnet_chance": 0.01,
     "bomb_chance": 0.005
+  },
+  "status_effects": {
+    "particle_budget": 300,
+    "slow": {
+      "tint": "#00ccff",
+      "default_factor": 0.5,
+      "default_duration_ms": 2000,
+      "min_factor": 0.05,
+      "max_factor": 0.95,
+      "particles": {
+        "enabled": true,
+        "emission_per_sec": 16,
+        "size": 3,
+        "life_ms": 800,
+        "vx": [-30, 30],
+        "vy": [-50, -10],
+        "gravity": 20,
+        "colors": ["#d8f6ff", "#00ccff", "#ffffff"]
+      }
+    },
+    "burn": {
+      "tint": "#ff4400",
+      "default_dps": 5,
+      "default_duration_ms": 3000,
+      "tick_ms": 500,
+      "particles": {
+        "enabled": true,
+        "emission_per_sec": 24,
+        "size": 4,
+        "life_ms": 500,
+        "vx": [-25, 25],
+        "vy": [-90, -40],
+        "gravity": -40,
+        "colors": ["#ffd34d", "#ff8800", "#ff4400"]
+      }
+    }
   },
   "environment_props": [
     {
@@ -274,9 +320,19 @@
     "max_chests_on_map": 3,
     "chest_lifetime_sec": 120,
     "open_radius": 60,
+    "open_hold_ms": 150,
     "indicator_enabled": true,
     "sfx_open": "audio/sfx/chest_open.mp3",
     "open_effect": "effects/chest_burst.png",
+    "open_effect_id": "chest_burst",
+    "loot_scatter": {
+      "scatter_radius": 12,
+      "scatter_speed_min": 140,
+      "scatter_speed_max": 320,
+      "coin_value_per_pickup": 5,
+      "max_coin_pickups": 12,
+      "potion_as_pickup": true
+    },
     "types": [
       {
         "id": "wooden",

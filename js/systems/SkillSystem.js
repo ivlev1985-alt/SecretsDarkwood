@@ -61,6 +61,35 @@ export class SkillSystem {
     return player ? cd / (player.attackSpeedMul || 1) : cd;
   }
 
+  // Статус с оружия на текущем уровне. Все константы — из skills_config.
+  // slow: factor (множитель скорости) + duration (сек). burn: dps + duration (сек).
+  weaponSlow(st) {
+    const c = st.cfg;
+    if (!(c.slow_factor < 1) || !(c.slow_duration_ms > 0)) return null;
+    const lvl = (st.level || 1) - 1;
+    const factor = Math.min(0.95, Math.max(0.05,
+      c.slow_factor + (c.slow_factor_per_level || 0) * lvl));
+    const dur = (c.slow_duration_ms + (c.slow_duration_per_level_ms || 0) * lvl) / 1000;
+    return { factor, duration: dur };
+  }
+
+  weaponBurn(st, player) {
+    const c = st.cfg;
+    if (!(c.burn_dps > 0) || !(c.burn_duration_ms > 0)) return null;
+    const lvl = (st.level || 1) - 1;
+    const dps = ((c.burn_dps || 0) + (c.burn_dps_per_level || 0) * lvl) * (player ? player.damageMul : 1);
+    const dur = (c.burn_duration_ms + (c.burn_duration_per_level_ms || 0) * lvl) / 1000;
+    return { dps, duration: dur };
+  }
+
+  // Нанести статусы оружия на врага (вызывается из Combat/ауры/зон).
+  applyWeaponStatus(e, st, player) {
+    const slow = this.weaponSlow(st);
+    if (slow) e.applySlow(slow.factor, slow.duration);
+    const burn = this.weaponBurn(st, player);
+    if (burn) e.applyBurn(burn.dps, burn.duration, st.cfg.id);
+  }
+
   nearest(px, py, enemies, range) {
     let best = null, bd = range * range;
     for (const e of enemies) {
@@ -70,6 +99,57 @@ export class SkillSystem {
       if (d2 < bd) { bd = d2; best = e; }
     }
     return best;
+  }
+
+  // Случайный живой враг в радиусе (для targeting:"random" и прыжков цепи).
+  // exclude — Set уже поражённых (цепь не бьёт дважды). Чистая логика + rand.
+  randomInRange(px, py, enemies, range, exclude, rand = Math.random) {
+    const r2 = range * range;
+    let n = 0;
+    for (const e of enemies) {
+      if (!e.alive || e.deathT > 0) continue;
+      if (exclude && exclude.has(e)) continue;
+      const dx = e.x - px, dy = e.y - py;
+      if (dx * dx + dy * dy <= r2) n++;
+    }
+    if (!n) return null;
+    let k = (rand() * n) | 0;
+    for (const e of enemies) {
+      if (!e.alive || e.deathT > 0) continue;
+      if (exclude && exclude.has(e)) continue;
+      const dx = e.x - px, dy = e.y - py;
+      if (dx * dx + dy * dy <= r2) {
+        if (k === 0) return e;
+        k--;
+      }
+    }
+    return null;
+  }
+
+  // Следующий прыжок цепи: случайная непоражённая цель в chainRange от точки
+  // попадания. Доводит снаряд на неё; если целей нет — цепь гаснет.
+  chainNext(p, enemies, fromX, fromY, rand = Math.random) {
+    if (!p || !p.active || !(p.chainRange > 0)) return null;
+    const next = this.randomInRange(fromX, fromY, enemies, p.chainRange, p.hitIds, rand);
+    if (!next) { p.active = false; p.alive = false; return null; }
+    p.chainTarget = next;
+    const sp = Math.hypot(p.vx, p.vy) || 400;
+    const dx = next.x - p.x, dy = next.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    p.vx = (dx / d) * sp; p.vy = (dy / d) * sp;
+    return next;
+  }
+
+  // Цель цепи могла умереть от другого оружия пока снаряд летел —
+  // перенацеливаем в полёте, иначе цепь гаснет. Вызывается каждый кадр из Game.
+  updateChains(enemies, rand = Math.random) {
+    for (const p of this.projectiles) {
+      if (!p.active || !(p.chainRange > 0) || !p.chainTarget) continue;
+      const t = p.chainTarget;
+      if (!t.alive || t.deathT > 0 || t.hp <= 0 || (p.hitIds && p.hitIds.has(t))) {
+        this.chainNext(p, enemies, p.x, p.y, rand);
+      }
+    }
   }
 
   update(dt, ctx) {
@@ -96,7 +176,7 @@ export class SkillSystem {
     // аура-ти idle не нужен; урон ауры — тиком
     this.auraTick -= dt;
 
-    // зоны: тик-урон + время жизни
+    // зоны: тик-урон + статусы (burn/slow из конфига оружия) + время жизни
     for (let i = this.areas.length - 1; i >= 0; i--) {
       const a = this.areas[i];
       a.ttl -= dt * 1000; a.tickT -= dt * 1000;
@@ -109,6 +189,8 @@ export class SkillSystem {
             const was = e.hp;
             const { damage, crit } = this.combat.rollDamage(a.damage);
             e.takeDamage(damage, 0, 0);
+            if (a.slow) e.applySlow(a.slow.factor, a.slow.duration);
+            if (a.burn) e.applyBurn(a.burn.dps, a.burn.duration, a.weaponId);
             if (crit) this.combat.pushText(e.x, e.y - 20, Math.round(damage) + '!');
             if (e.hp <= 0 && was > 0) { this.combat.addKill(a.weaponId); if (onKill) onKill(e, a.weaponId); }
           }
@@ -184,14 +266,21 @@ export class SkillSystem {
     }
   }
 
-  _fireToTarget(st, ctx) {
+  _fireToTarget(st, ctx, rand = Math.random) {
     const c = st.cfg, { player, enemies } = ctx;
-    const target = c.auto_aim === false ? null : this.nearest(player.x, player.y, enemies, c.auto_aim_range || 400);
+    // targeting:"random" (цепная молния) — первая цель случайная в радиусе
+    // наводки, а не ближайшая; остальные типы — как раньше по ближайшей.
+    const target = c.auto_aim === false ? null
+      : (c.targeting === 'random'
+        ? this.randomInRange(player.x, player.y, enemies, c.auto_aim_range || 400, null, rand)
+        : this.nearest(player.x, player.y, enemies, c.auto_aim_range || 400));
     if (!target) return;
     const n = c.projectiles_per_shot || 1;
     const spread = ((c.spread_angle || 0) * Math.PI) / 180;
     const baseA = Math.atan2(target.y - player.y, target.x - player.x);
     const { damage, crit } = this.combat.rollDamage(this.weaponDamage(st, player));
+    const slow = this.weaponSlow(st);
+    const burn = this.weaponBurn(st, player);
     for (let i = 0; i < n; i++) {
       const off = n === 1 ? 0 : -spread / 2 + (spread * i) / (n - 1);
       const a = baseA + off;
@@ -206,6 +295,12 @@ export class SkillSystem {
         life: (c.projectile_lifetime_ms || 1000) / 1000,
         explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),
         explosionDmg: c.explosion_damage || 0,
+        slowFactor: slow ? slow.factor : 1,
+        slowDuration: slow ? slow.duration : 0,
+        burnDps: burn ? burn.dps : 0,
+        burnDuration: burn ? burn.duration : 0,
+        chainRange: c.chain_range || 0,
+        chainTarget: (c.chain_range > 0) ? target : null,
         weaponId: c.id, friendly: true,
         spritePath: c.projectile_sprite,
         frames: c.projectile_frames, animName: 'fly'
@@ -218,8 +313,8 @@ export class SkillSystem {
   _fireAura(st, ctx) {
     const c = st.cfg, { player, enemies } = ctx;
     const radius = (c.aura_radius || 150) + (c.aura_radius_per_level || 0) * (st.level - 1);
-    const { damage } = this.combat; // noop guard
-    void damage;
+    const slow = this.weaponSlow(st);
+    const burn = this.weaponBurn(st, player);
     for (const e of enemies) {
       if (!e.alive || e.deathT > 0) continue;
       const dx = e.x - player.x, dy = e.y - player.y;
@@ -227,6 +322,8 @@ export class SkillSystem {
         const was = e.hp;
         const r = this.combat.rollDamage(this.weaponDamage(st, player));
         e.takeDamage(r.damage, (dx / (Math.hypot(dx, dy) || 1)) * 120, (dy / (Math.hypot(dx, dy) || 1)) * 120);
+        if (slow) e.applySlow(slow.factor, slow.duration);
+        if (burn) e.applyBurn(burn.dps, burn.duration, c.id);
         if (r.crit) this.combat.pushText(e.x, e.y - 20, Math.round(r.damage) + '!');
         if (e.hp <= 0 && was > 0) { this.combat.addKill(c.id); if (ctx.onKill) ctx.onKill(e, c.id); }
       }
@@ -242,9 +339,12 @@ export class SkillSystem {
     const cx = target ? target.x : player.x + 100;
     const cy = target ? target.y : player.y;
     const radius = (c.area_radius || 120) + (c.area_radius_per_level || 0) * (st.level - 1);
+    const slow = this.weaponSlow(st);
+    const burn = this.weaponBurn(st, player);
     this.areas.push({
       cfg: c, weaponId: c.id, x: cx, y: cy, radius,
       damage: this.weaponDamage(st, player),
+      slow: slow || null, burn: burn || null,
       ttl: c.area_duration_ms || 4000, tickT: 0,
       color: c.area_color || '#ff4400',
       spritePath: c.area_sprite, frames: c.area_frames

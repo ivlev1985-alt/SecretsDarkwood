@@ -85,6 +85,14 @@ export class CombatSystem {
     }
   }
 
+  // Применить статусы снаряда (slow/burn из skills_config) с учётом резистов врага.
+  // Чистый хелпер — вызывается и для прямого попадания, и для взрыва.
+  static applyProjectileStatus(e, p) {
+    if (!e || typeof e.applySlow !== 'function') return;
+    if (p.slowDuration > 0 && p.slowFactor < 1) e.applySlow(p.slowFactor, p.slowDuration);
+    if (p.burnDuration > 0 && p.burnDps > 0) e.applyBurn(p.burnDps, p.burnDuration, p.weaponId);
+  }
+
   // Снаряды игрока по врагам. Возвращает число убийств за кадр.
   // onHit(p, e) — визуальные эффекты попадания (молния и т.п.).
   projectilesVsEnemies(projectiles, enemies, onKill, onHit) {
@@ -93,18 +101,22 @@ export class CombatSystem {
       if (!p.active) continue;
       for (const e of enemies) {
         if (!e.alive || e.deathT > 0) continue;
+        // цепная молния бьёт только цель-замок (случайную), пролетая сквозь
+        // остальных, — иначе в толпе цепь вырождалась бы в пробитие по прямой
+        if (p.chainRange > 0 && e !== p.chainTarget) continue;
         if (p.hitIds.has(e)) continue;
         const dx = e.x - p.x, dy = e.y - p.y;
         const rr = e.radius + p.radius;
         if (dx * dx + dy * dy < rr * rr) {
           const wasAlive = e.hp;
           e.takeDamage(p.damage, p.vx * 0.15, p.vy * 0.15);
+          CombatSystem.applyProjectileStatus(e, p);
           if (onHit) onHit(p, e);
           if (p.crit || (e.isBoss && this.showBossAlways)) {
             this.pushText(e.x, e.y - 20, Math.round(p.damage) + (p.crit ? '!' : ''), p.crit ? '#ffcc00' : '#fff');
           }
           if (e.hp <= 0 && wasAlive > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(e, p.weaponId); }
-          // взрыв fireball
+          // взрыв fireball (урон + поджигание по площади из конфига оружия)
           if (p.explosionR > 0) {
             for (const o of enemies) {
               if (o === e || !o.alive || o.deathT > 0) continue;
@@ -112,6 +124,7 @@ export class CombatSystem {
               if (ox * ox + oy * oy < p.explosionR * p.explosionR) {
                 const w = o.hp;
                 o.takeDamage(p.explosionDmg, 0, 0);
+                CombatSystem.applyProjectileStatus(o, p);
                 if (o.hp <= 0 && w > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(o, p.weaponId); }
               }
             }
