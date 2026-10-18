@@ -130,7 +130,7 @@ export class CombatSystem {
             }
           }
           if (p.pierce > 0) { p.pierce--; p.hitIds.add(e); }
-          else { p.active = false; p.alive = false; }
+          else { p.explode(); } // анимация взрыва (второй ряд fireball.png)
           break;
         }
       }

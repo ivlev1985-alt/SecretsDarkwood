@@ -38,36 +38,21 @@ export class Entity {
         const isCanvas = img.tagName === 'CANVAS';
         const r = isCanvas ? null : this.anim.getRect();
 
-        // Без подсветки — рисуем напрямую
-        if (this.hitFlash <= 0) {
-          if (isCanvas) {
-            ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
-          } else {
-            ctx.drawImage(img, r.sx, r.sy, r.sw, r.sh, -dw / 2, -dh / 2, dw, dh);
-          }
+        // Всегда рисуем спрайт сначала
+        if (isCanvas) {
+          ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
         } else {
-          // С подсветкой — через offscreen-канвас, чтобы source-atop
-          // применялся только к пикселям спрайта, а не к фону уровня.
-          const off = document.createElement('canvas');
-          off.width = Math.max(1, Math.ceil(dw));
-          off.height = Math.max(1, Math.ceil(dh));
-          const o = off.getContext('2d');
+          ctx.drawImage(img, r.sx, r.sy, r.sw, r.sh, -dw / 2, -dh / 2, dw, dh);
+        }
 
-          // 1) Рисуем спрайт в offscreen
-          if (isCanvas) {
-            o.drawImage(img, 0, 0, dw, dh);
-          } else {
-            o.drawImage(img, r.sx, r.sy, r.sw, r.sh, 0, 0, dw, dh);
-          }
-
-          // 2) Мягкая светлая заливка строго по непрозрачным пикселям спрайта
-          o.globalCompositeOperation = 'source-atop';
-          o.globalAlpha = Math.min(0.35, this.hitFlash * 2.5);
-          o.fillStyle = this.flashColor || '#ff6666';
-          o.fillRect(0, 0, dw, dh);
-
-          // 3) Выводим результат на основной холст
-          ctx.drawImage(off, -dw / 2, -dh / 2);
+        // Если есть подсветка — накладываем красный оттенок только на пиксели спрайта
+        if (this.hitFlash > 0) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'source-atop';
+          ctx.globalAlpha = Math.min(0.7, this.hitFlash * 4);
+          ctx.fillStyle = this.flashColor || '#ff0000';
+          ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+          ctx.restore();
         }
       } catch (e) {
         ctx.fillStyle = placeholderColor;

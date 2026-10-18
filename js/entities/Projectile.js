@@ -49,11 +49,32 @@ export class Projectile extends Entity {
     this.friendly = o.friendly !== false;
     this.spritePath = o.spritePath || '';
     this.hitFlash = 0;
+    this.exploding = false;
     if (o.frames && o.animName) this.makeAnim(o.frames, o.animName);
     else this.anim = null;
   }
 
+  // Переход на анимацию взрыва (второй ряд спрайт-листа) при попадании
+  explode() {
+    if (this.anim && this.anim.frames && this.anim.frames.animations.impact) {
+      this.exploding = true;
+      this.vx = 0;
+      this.vy = 0;
+      this.anim.setAnimation('impact');
+      this.life = 0;
+      this.maxLife = this.anim.frames.animations.impact.frames / this.anim.frames.animations.impact.fps;
+    } else {
+      this.active = false; this.alive = false;
+    }
+  }
+
   update(dt) {
+    if (this.exploding) {
+      if (this.anim) this.anim.update(dt);
+      this.life += dt;
+      if (this.life >= this.maxLife) { this.active = false; this.alive = false; }
+      return;
+    }
     this.x += this.vx * dt; this.y += this.vy * dt;
     this.life += dt;
     if (this.anim) this.anim.update(dt);
