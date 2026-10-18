@@ -342,8 +342,9 @@ export class SkillSystem {
   _fireArea(st, ctx) {
     const c = st.cfg, { player, enemies } = ctx;
     const target = c.auto_aim === false ? null : this.nearest(player.x, player.y, enemies, c.auto_aim_range || 400);
-    const cx = target ? target.x : player.x + 100;
-    const cy = target ? target.y : player.y;
+    if (!target) return;
+    const cx = target.x;
+    const cy = target.y;
     const radius = (c.area_radius || 120) + (c.area_radius_per_level || 0) * (st.level - 1);
     const slow = this.weaponSlow(st);
     const burn = this.weaponBurn(st, player);

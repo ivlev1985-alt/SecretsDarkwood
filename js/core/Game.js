@@ -1188,13 +1188,15 @@ export class Game {
 
   _drawShot(ctx, p, color) {
     const img = this.assets.get(p.spritePath);
-    if (img && p.anim) {
+    if (img && p.anim && img.tagName !== 'CANVAS') {
       try {
-        if (img.tagName === 'CANVAS') { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill(); }
-        else {
-          const r = p.anim.getRect();
-          ctx.drawImage(img, r.sx, r.sy, r.sw, r.sh, p.x - r.sw / 2, p.y - r.sh / 2, r.sw, r.sh);
-        }
+        const r = p.anim.getRect();
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        const angle = Math.atan2(p.vy, p.vx);
+        ctx.rotate(angle);
+        ctx.drawImage(img, r.sx, r.sy, r.sw, r.sh, -r.sw / 2, -r.sh / 2, r.sw, r.sh);
+        ctx.restore();
         return;
       } catch (e) {}
     }

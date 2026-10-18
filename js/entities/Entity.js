@@ -44,16 +44,16 @@ export class Entity {
       // направление взгляда
       ctx.fillStyle = '#fff'; ctx.fillRect(this.facing > 0 ? 4 : -10, -4, 6, 8);
     }
-    // hit-flash: подкрашиваем только спрайт мага (не пустые места вокруг него).
-    // source-in рисует красный прямоугольник ТОЛЬКО там, где уже есть цель (спрайт).
-    // Если спрайта нет (placeholder), подсветки не будет вообще.
-    if (this.hitFlash > 0 && img && img.tagName !== 'CANVAS') {
+    // hit-flash: красное свечение вокруг спрайта мага, не закрашивает весь кадр
+    if (this.hitFlash > 0 && img) {
       const r = this.anim ? this.anim.getRect() : { sx: 0, sy: 0, sw: w, sh: h };
+      const radius = Math.max(r.sw, r.sh) * 0.55 * scale;
       ctx.save();
-      ctx.globalCompositeOperation = 'source-in';
       ctx.globalAlpha = Math.min(0.7, this.hitFlash * 4);
       ctx.fillStyle = this.flashColor || '#ff0000';
-      ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
     ctx.restore();
