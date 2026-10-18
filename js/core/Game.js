@@ -480,6 +480,9 @@ export class Game {
     try { this.audio.playMusic(this.config.game_config.audio.music_battle); } catch (e) {}
   }
   toMenu() {
+    // Сохранить заработанные монеты перед выходом в меню (чтобы не терялись при выходе не через смерть)
+    if (this.player) this.save.addCoins(this.player.coins);
+    this.save.save();
     this.states.set('menu');
     this.uiSettings = null;
     try { this.audio.playMusic(this.config.game_config.audio.music_menu); } catch (e) {}

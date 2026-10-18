@@ -44,10 +44,13 @@ export class Entity {
       // направление взгляда
       ctx.fillStyle = '#fff'; ctx.fillRect(this.facing > 0 ? 4 : -10, -4, 6, 8);
     }
-    // hit-flash цветом из конфига (hit_flash_color / hurt_flash_color)
+    // hit-flash: подкрашиваем только спрайт (не пустые места вокруг него)
     if (this.hitFlash > 0) {
+      ctx.globalCompositeOperation = 'source-atop';
       ctx.globalAlpha = Math.min(0.7, this.hitFlash * 4);
-      ctx.fillStyle = this.flashColor || '#fff'; ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+      ctx.fillStyle = this.flashColor || '#ff0000';
+      ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+      ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
     }
     ctx.restore();
