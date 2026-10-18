@@ -60,10 +60,10 @@ export class Entity {
             o.drawImage(img, r.sx, r.sy, r.sw, r.sh, 0, 0, dw, dh);
           }
 
-          // 2) Красная заливка строго по непрозрачным пикселям спрайта
+          // 2) Мягкая светлая заливка строго по непрозрачным пикселям спрайта
           o.globalCompositeOperation = 'source-atop';
-          o.globalAlpha = Math.min(0.7, this.hitFlash * 4);
-          o.fillStyle = this.flashColor || '#ff0000';
+          o.globalAlpha = Math.min(0.35, this.hitFlash * 2.5);
+          o.fillStyle = this.flashColor || '#ff6666';
           o.fillRect(0, 0, dw, dh);
 
           // 3) Выводим результат на основной холст
