@@ -31,29 +31,45 @@ export class Entity {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(this.facing, 1);
+
     if (img && this.anim) {
       try {
-        if (img.tagName === 'CANVAS') ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
-        else {
+        // 1. Рисуем спрайт во временный канвас нужного размера
+        const off = document.createElement('canvas');
+        off.width = Math.ceil(dw);
+        off.height = Math.ceil(dh);
+        const octx = off.getContext('2d');
+
+        if (img.tagName === 'CANVAS') {
+          octx.drawImage(img, 0, 0, dw, dh);
+        } else {
           const r = this.anim.getRect();
-          ctx.drawImage(img, r.sx, r.sy, r.sw, r.sh, -dw / 2, -dh / 2, dw, dh);
+          octx.drawImage(img, r.sx, r.sy, r.sw, r.sh, 0, 0, dw, dh);
         }
-      } catch (e) { ctx.fillStyle = placeholderColor; ctx.fillRect(-dw / 2, -dh / 2, dw, dh); }
+
+        // 2. Подсветка только по непрозрачным пикселям спрайта
+        if (this.hitFlash > 0) {
+          octx.save();
+          octx.globalCompositeOperation = 'source-atop';
+          octx.globalAlpha = Math.min(0.7, this.hitFlash * 4);
+          octx.fillStyle = this.flashColor || '#ff0000';
+          octx.fillRect(0, 0, dw, dh);
+          octx.restore();
+        }
+
+        // 3. Выводим результат на основной контекст
+        ctx.drawImage(off, -dw / 2, -dh / 2);
+      } catch (e) {
+        ctx.fillStyle = placeholderColor;
+        ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+      }
     } else {
-      ctx.fillStyle = placeholderColor; ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
-      // направление взгляда
-      ctx.fillStyle = '#fff'; ctx.fillRect(this.facing > 0 ? 4 : -10, -4, 6, 8);
-    }
-    // hit-flash: подкрашивает только пиксели спрайта мага красным,
-    // не затрагивая прозрачные места вокруг фигурки в спрайт-листе.
-    if (this.hitFlash > 0 && img) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-atop';
-      ctx.globalAlpha = Math.min(0.7, this.hitFlash * 4);
-      ctx.fillStyle = this.flashColor || '#ff0000';
+      ctx.fillStyle = placeholderColor;
       ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
-      ctx.restore();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(this.facing > 0 ? 4 : -10, -4, 6, 8);
     }
+
     ctx.restore();
   }
 }
