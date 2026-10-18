@@ -44,16 +44,14 @@ export class Entity {
       // направление взгляда
       ctx.fillStyle = '#fff'; ctx.fillRect(this.facing > 0 ? 4 : -10, -4, 6, 8);
     }
-    // hit-flash: красное свечение вокруг спрайта мага, не закрашивает весь кадр
+    // hit-flash: подкрашивает только пиксели спрайта мага красным (не весь кадр)
     if (this.hitFlash > 0 && img) {
       const r = this.anim ? this.anim.getRect() : { sx: 0, sy: 0, sw: w, sh: h };
-      const radius = Math.max(r.sw, r.sh) * 0.55 * scale;
       ctx.save();
-      ctx.globalAlpha = Math.min(0.7, this.hitFlash * 4);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = Math.min(0.5, this.hitFlash * 3);
       ctx.fillStyle = this.flashColor || '#ff0000';
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
       ctx.restore();
     }
     ctx.restore();
