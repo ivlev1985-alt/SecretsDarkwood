@@ -301,6 +301,10 @@ export class SkillSystem {
         life: (c.projectile_lifetime_ms || 1000) / 1000,
         explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),
         explosionDmg: c.explosion_damage || 0,
+        // цель на момент вылета — снаряд летит в эту точку земли и взрывается там,
+        // даже если цель к тому времени уже мертва
+        destX: target.x,
+        destY: target.y,
         slowFactor: slow ? slow.factor : 1,
         slowDuration: slow ? slow.duration : 0,
         burnDps: burn ? burn.dps : 0,

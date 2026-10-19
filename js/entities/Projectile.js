@@ -14,6 +14,9 @@ export class Projectile extends Entity {
     this.maxLife = 1;
     this.explosionR = 0;
     this.explosionDmg = 0;
+    // точка назначения (земля под целью на момент вылета) для взрывных снарядов
+    this.destX = 0;
+    this.destY = 0;
     // статусы с оружия (все цифры — из skills_config): slow {factor, duration}, burn {dps, duration}
     this.slowFactor = 1;
     this.slowDuration = 0; // сек
@@ -39,6 +42,8 @@ export class Projectile extends Entity {
     this.life = 0; this.maxLife = o.life || 1;
     this.explosionR = o.explosionR || 0;
     this.explosionDmg = o.explosionDmg || 0;
+    this.destX = o.destX ?? 0;
+    this.destY = o.destY ?? 0;
     this.slowFactor = o.slowFactor ?? 1;
     this.slowDuration = o.slowDuration || 0;
     this.burnDps = o.burnDps || 0;

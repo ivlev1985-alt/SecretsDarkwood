@@ -93,12 +93,31 @@ export class CombatSystem {
     if (p.burnDuration > 0 && p.burnDps > 0) e.applyBurn(p.burnDps, p.burnDuration, p.weaponId);
   }
 
+  // Взрыв снаряда в точке (ex, ey): урон + поджигание по площади всем в радиусе.
+  // exclude — враг, уже получивший прямой урон (чтобы не дать взрыв дважды).
+  // Возвращает обновлённый счётчик убийств.
+  static explodeAt(p, ex, ey, enemies, kills, onKill, exclude = null) {
+    for (const o of enemies) {
+      if (o === exclude) continue;
+      if (!o.alive || o.deathT > 0) continue;
+      const ox = o.x - ex, oy = o.y - ey;
+      if (ox * ox + oy * oy < p.explosionR * p.explosionR) {
+        const w = o.hp;
+        o.takeDamage(p.explosionDmg, 0, 0);
+        CombatSystem.applyProjectileStatus(o, p);
+        if (o.hp <= 0 && w > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(o, p.weaponId); }
+      }
+    }
+    return kills;
+  }
+
   // Снаряды игрока по врагам. Возвращает число убийств за кадр.
   // onHit(p, e) — визуальные эффекты попадания (молния и т.п.).
   projectilesVsEnemies(projectiles, enemies, onKill, onHit) {
     let kills = 0;
     for (const p of projectiles) {
       if (!p.active) continue;
+      if (p.exploding) continue; // уже взрывается — дожидаемся анимации impact
       for (const e of enemies) {
         if (!e.alive || e.deathT > 0) continue;
         // цепная молния бьёт только цель-замок (случайную), пролетая сквозь
@@ -116,22 +135,22 @@ export class CombatSystem {
             this.pushText(e.x, e.y - 20, Math.round(p.damage) + (p.crit ? '!' : ''), p.crit ? '#ffcc00' : '#fff');
           }
           if (e.hp <= 0 && wasAlive > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(e, p.weaponId); }
-          // взрыв fireball (урон + поджигание по площади из конфига оружия)
+          // взрыв fireball при прямом попадании
           if (p.explosionR > 0) {
-            for (const o of enemies) {
-              if (o === e || !o.alive || o.deathT > 0) continue;
-              const ox = o.x - p.x, oy = o.y - p.y;
-              if (ox * ox + oy * oy < p.explosionR * p.explosionR) {
-                const w = o.hp;
-                o.takeDamage(p.explosionDmg, 0, 0);
-                CombatSystem.applyProjectileStatus(o, p);
-                if (o.hp <= 0 && w > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(o, p.weaponId); }
-              }
-            }
+            kills = CombatSystem.explodeAt(p, p.x, p.y, enemies, kills, onKill, e);
           }
           if (p.pierce > 0) { p.pierce--; p.hitIds.add(e); }
           else { p.explode(); } // анимация взрыва (второй ряд fireball.png)
           break;
+        }
+      }
+      // Взрыв в точке назначения (земля под целью на момент вылета):
+      // срабатывает даже если цель успела погибнуть до прилёта снаряда.
+      if (p.active && !p.exploding && p.explosionR > 0 && p.destX !== undefined && p.destY !== undefined) {
+        const dx = p.destX - p.x, dy = p.destY - p.y;
+        if (dx * dx + dy * dy < p.radius * p.radius) {
+          kills = CombatSystem.explodeAt(p, p.destX, p.destY, enemies, kills, onKill);
+          p.explode();
         }
       }
     }
