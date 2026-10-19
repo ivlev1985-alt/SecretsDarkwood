@@ -578,6 +578,20 @@ export class Game {
     this.fx = new EffectSystem(this.config.effects_config, this.assets);
     const stFx = (b.status_effects || {});
     this.particles = new ParticleSystem(stFx.particle_budget || 300);
+    // --- сброс прогресса забега: заклинания не переносятся между забегами ---
+    // Оставляем только дефолтные (unlocked_by_default). Заклинания, полученные
+    // в предыдущем забеге (сундуки, апгрейды), должны сбрасываться при "Заново".
+    const defaultSpells = (s.weapons || [])
+      .filter((w) => w.unlocked_by_default === true)
+      .map((w) => w.id);
+    this.save.data.unlockedSpells = defaultSpells;
+
+    // Сбросить runtime-флаги unlocked на объектах конфига к дефолтным,
+    // иначе grantRandomSpell из прошлого забега (w.unlocked = true) переносится.
+    for (const w of (s.weapons || [])) {
+      w.unlocked = !!w.unlocked_by_default;
+    }
+
     // заклинания: дефолтные + купленные (сейв) + надетый посох (с его уровнем)
     const byId = new Map((s.weapons || []).map((w) => [w.id, w]));
     for (const id of (this.save.data.unlockedSpells || [])) {
