@@ -96,7 +96,7 @@ export class CombatSystem {
   // Взрыв снаряда в точке (ex, ey): урон + поджигание по площади всем в радиусе.
   // exclude — враг, уже получивший прямой урон (чтобы не дать взрыв дважды).
   // Возвращает обновлённый счётчик убийств.
-  static explodeAt(p, ex, ey, enemies, kills, onKill, exclude = null) {
+  explodeAt(p, ex, ey, enemies, kills, onKill, exclude = null) {
     for (const o of enemies) {
       if (o === exclude) continue;
       if (!o.alive || o.deathT > 0) continue;
@@ -137,7 +137,7 @@ export class CombatSystem {
           if (e.hp <= 0 && wasAlive > 0) { kills++; this.addKill(p.weaponId); if (onKill) onKill(e, p.weaponId); }
           // взрыв fireball при прямом попадании
           if (p.explosionR > 0) {
-            kills = CombatSystem.explodeAt(p, p.x, p.y, enemies, kills, onKill, e);
+            kills = this.explodeAt(p, p.x, p.y, enemies, kills, onKill, e);
           }
           if (p.pierce > 0) { p.pierce--; p.hitIds.add(e); }
           else { p.explode(); } // анимация взрыва (второй ряд fireball.png)
@@ -149,7 +149,7 @@ export class CombatSystem {
       if (p.active && !p.exploding && p.explosionR > 0 && p.destX !== undefined && p.destY !== undefined) {
         const dx = p.destX - p.x, dy = p.destY - p.y;
         if (dx * dx + dy * dy < p.radius * p.radius) {
-          kills = CombatSystem.explodeAt(p, p.destX, p.destY, enemies, kills, onKill);
+          kills = this.explodeAt(p, p.destX, p.destY, enemies, kills, onKill);
           p.explode();
         }
       }
