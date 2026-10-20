@@ -365,8 +365,8 @@
           "frame_height": 48,
           "columns": 4,
           "animations": {
-            "idle": { "row": 0, "frames": 4, "fps": 8, "loop": true },
-            "open": { "row": 1, "frames": 6, "fps": 12, "loop": false }
+            "idle": { "row": 0, "frames": 1, "fps": 24, "loop": true },
+            "open": { "row": 1, "frames": 4, "fps": 12, "loop": false }
           }
         },
         "drop_weight": 30,
