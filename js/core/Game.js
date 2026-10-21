@@ -1082,6 +1082,10 @@ export class Game {
       }
       for (const c of this.chestSys.chests) {
         if (!c.alive) continue;
+        // Плавное исчезновение открытого сундука за fadeDuration сек
+        if (c.opened && c.fadeDuration) {
+          ctx.globalAlpha = Math.max(0, 1 - c.openT / c.fadeDuration);
+        }
         // Смена спрайта: idle-мерцание -> open-анимация (кадры из chests.types[].frames).
         // Спрайт из конфига; плейсхолдер — только если ассета нет.
         const img = this.assets.get(c.typeCfg.sprite);
@@ -1094,6 +1098,7 @@ export class Game {
           ctx.fillRect(c.x - 14, c.y - 14, 28, 28);
           ctx.strokeStyle = '#000'; ctx.strokeRect(c.x - 14, c.y - 14, 28, 28);
         }
+        ctx.globalAlpha = 1;
       }
       for (const e of this.enemies) {
         if (!e.alive) continue;

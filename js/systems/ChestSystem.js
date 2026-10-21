@@ -28,7 +28,7 @@ export class ChestSystem {
     for (let i = this.chests.length - 1; i >= 0; i--) {
       const c = this.chests[i];
       if (!c.alive) { this.chests.splice(i, 1); continue; }
-      c.update(dt, this.cfg.chest_lifetime_sec || 120, holdMs);
+      c.update(dt, c.opened ? c.fadeDuration : (this.cfg.chest_lifetime_sec || 120), holdMs);
       if (!c.alive) { this.chests.splice(i, 1); continue; }
       if (!c.opened) {
         const dx = ctx.player.x - c.x, dy = ctx.player.y - c.y;

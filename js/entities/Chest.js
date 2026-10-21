@@ -9,6 +9,7 @@ export class Chest extends Entity {
     this.age = 0;
     this.openT = 0;
     this.holdMs = 150; // задержка после open-анимации — задаётся из chests.open_hold_ms
+    this.fadeDuration = 5; // секунды на плавное исчезновение после открытия
     this.makeAnim(typeCfg.frames, 'idle');
   }
 
@@ -18,6 +19,7 @@ export class Chest extends Entity {
     if (this.opened) {
       this.openT += dt;
       this.updateAnim(dt);
+      if (this.openT >= this.fadeDuration) this.alive = false; // исчез через fadeDuration сек
     } else {
       this.updateAnim(dt);
       if (this.age >= lifetime) this.alive = false; // исчез
@@ -37,9 +39,7 @@ export class Chest extends Entity {
 
   get done() {
     if (!this.opened) return false;
-    const a = this.typeCfg.frames.animations.open;
-    const dur = a ? a.frames / a.fps : 0.5;
-    return this.openT >= dur + (this.holdMs || 0) / 1000;
+    return this.openT >= this.fadeDuration;
   }
 
   // Разлёт лута вокруг сундука. Чистая функция для тестов.
