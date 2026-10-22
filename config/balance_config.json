@@ -54,17 +54,17 @@
       "spawn_weight": 100
     },
     {
-      "id": "pixie",
-      "name_key": "monster_pixie",
-      "sprite": "monsters/pixie.png",
+      "id": "dementor",
+      "name_key": "monster_dementor",
+      "sprite": "monsters/dementor.png",
       "frames": {
         "frame_width": 48,
         "frame_height": 48,
         "columns": 4,
         "animations": {
-          "walk": { "row": 0, "frames": 4, "fps": 12, "loop": true },
-          "attack": { "row": 1, "frames": 3, "fps": 10, "loop": false },
-          "death": { "row": 2, "frames": 4, "fps": 8, "loop": false }
+          "walk": { "row": 0, "frames": 6, "fps": 12, "loop": true },
+          "attack": { "row": 1, "frames": 6, "fps": 12, "loop": false },
+          "death": { "row": 2, "frames": 6, "fps": 12, "loop": false }
         }
       },
       "hp": 10,
