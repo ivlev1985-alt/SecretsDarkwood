@@ -165,7 +165,7 @@
         }
       },
       "hp": 1200,
-      "speed": 35,
+      "speed": 45,
       "damage": 18,
       "collision_radius": 40,
       "xp_drop": 60,
@@ -201,7 +201,7 @@
         }
       },
       "hp": 2200,
-      "speed": 55,
+      "speed": 75,
       "damage": 30,
       "collision_radius": 42,
       "xp_drop": 120,
@@ -213,13 +213,15 @@
       "projectile_id": null,
       "boss_pattern": "dasher",
       "dash": {
-        "telegraph_ms": 800,
-        "charge_ms": 500,        "speed_mul": 4.0,
+        "telegraph_ms": 500,
+        "charge_ms": 300,
+        "speed_mul": 4.0,
         "duration_ms": 600,
         "cooldown_ms": 4000,
         "contact_mul": 1.5,
         "range": 520,
-        "hit_radius": 70
+        "hit_radius": 70,
+        "strike_at_end": true
       },
       "scale": 2.0,
       "hit_flash_color": "#ffcc00",
@@ -245,7 +247,7 @@
         }
       },
       "hp": 2000,
-      "speed": 40,
+      "speed": 60,
       "damage": 25,
       "collision_radius": 40,
       "xp_drop": 100,
@@ -257,19 +259,21 @@
       "projectile_id": "fireball_boss",
       "boss_pattern": "shooter_volley",
       "dash": {
-        "telegraph_ms": 800,
-        "charge_ms": 500,
-        "speed_mul": 3.5,
+        "telegraph_ms": 500,
+        "charge_ms": 300,
+        "speed_mul": 5.0,
         "duration_ms": 500,
         "cooldown_ms": 5000,
         "contact_mul": 1.5,
         "range": 520,
-        "hit_radius": 70
+        "hit_radius": 70,
+        "strike_at_end": true
       },
       "volley": {
-        "count": 5,
-        "spread_deg": 40,
-        "cooldown_ms": 2200
+        "count": 7,
+        "spread_deg": 50,
+        "cooldown_ms": 2200,
+        "damage_mul": 1.5
       },
       "scale": 2.0,
       "hit_flash_color": "#ff00ff",

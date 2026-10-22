@@ -744,7 +744,8 @@ export class Game {
       }
       try { e.setAnim('walk'); } catch (err) {}
     }
-    // 2) Веерный залп дракона: count снарядов с разбросом spread_deg
+    // 2) Веерный залп дракона: count снарядов с разбросом spread_deg,
+    // урон каждого = урон босса × volley.damage_mul (1.5)
     if (pattern === 'shooter_volley') {
       const v = e.cfg.volley || {};
       e.volleyT -= dt;
@@ -752,19 +753,22 @@ export class Game {
         e.volleyT = (v.cooldown_ms || 2200) / 1000;
         const proj = this.enemyProjById.get(e.cfg.projectile_id);
         if (proj) {
-          const n = v.count || 5;
-          const spread = ((v.spread_deg || 40) * Math.PI) / 180;
+          const n = v.count || 7;
+          const spread = ((v.spread_deg ?? 50) * Math.PI) / 180;
+          const dmg = e.damage * (v.damage_mul || 1.5);
           const baseA = Math.atan2(this.player.y - e.y, this.player.x - e.x);
           for (let i = 0; i < n; i++) {
             const off = n === 1 ? 0 : -spread / 2 + (spread * i) / (n - 1);
             const a = baseA + off;
-            this.skills.enemyFireDir(e.x, e.y, Math.cos(a), Math.sin(a), proj, e.damage);
+            this.skills.enemyFireDir(e.x, e.y, Math.cos(a), Math.sin(a), proj, dmg);
           }
           try { this.audio.playSfx('explosion.mp3'); } catch (err) {}
         }
       }
     }
-    // 3) Рывок + удар (циклоп и дракон): телеграф -> замах -> рывок -> удар
+    // 3) Рывок + удар (циклоп и дракон): телеграф -> замах -> рывок до
+    // игрока -> удар. Направление и скорость фиксируются в bossDashTick
+    // по текущей позиции игрока на старте рывка (конец замаха).
     const dash = e.cfg.dash;
     if (dash && pattern !== 'shooter') {
       if (e.dashState === 'idle') {
@@ -772,26 +776,23 @@ export class Game {
         else e.tryStartDash(this.player.x, this.player.y);
         return null; // идём к игроку как обычно
       }
-      // Фиксируем направление в конце телеграфа — по текущей позиции игрока,
-      // чтобы от рывка можно было уклониться движением
-      if (e.dashState === 'telegraph' && e.dashT - dt <= 0) {
-        const dx = this.player.x - e.x, dy = this.player.y - e.y;
-        const d = Math.hypot(dx, dy) || 1;
-        e.dashDx = dx / d; e.dashDy = dy / d;
-      }
-      const r = e.bossDashTick(dt);
+      const r = e.bossDashTick(dt, this.player.x, this.player.y);
       if (r.mode === 'hold') {
-        // Телеграф/замах: стоим, мигаем. Направление рывка уже зафиксировано
+        // Телеграф/замах: стоим, мигаем
         e.hitFlash = Math.max(e.hitFlash || 0, 0.06);
         return { hold: true };
       }
       if (r.mode === 'dash') {
         e._bossDmgMul = r.dmgMul || 1;
-        if (!e.dashHitDone) {
-          e.dashHitDone = true;
-          this._bossSlam(e); // удар по площади в начале рывка
+        // Удар — в КОНЦЕ рывка (долетели до игрока), а не в начале
+        if (r.finished) {
+          if (!e.dashHitDone) {
+            e.dashHitDone = true;
+            this._bossSlam(e);
+          }
+          return null; // рывок окончен — дальше обычное движение
         }
-        const spd = e.speed * (dash.speed_mul || 4);
+        const spd = e.dashSpd > 0 ? e.dashSpd : e.speed * (dash.speed_mul || 4);
         // Во время рывка летим строго по зафиксированному направлению
         return { dash: true, dx: e.dashDx, dy: e.dashDy, spdOverride: spd };
       }
@@ -802,6 +803,8 @@ export class Game {
   // Удар по площади в точке рывка: урон всем в hit_radius + отброс.
   // Один раз за рывок (флаг dashHitDone в _updateBoss).
   _bossSlam(e) {
+    // strike_at_end (по умолчанию true): удар в конце рывка, в точке игрока.
+    // Если выключен — удар в начале рывка (старое поведение).
     const dash = e.cfg.dash || {};
     const R = dash.hit_radius || 70;
     const mul = dash.contact_mul || 1.5;

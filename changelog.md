@@ -186,6 +186,7 @@
 
 ## [Фикс учёта + 3 босса]
 - Двойной учёт убран: `recordRun` больше не трогает `totalRuns` (только `startRun` — один старт = один забег); монеты/время/киллы коммитятся дельтой через `_commitRunStats` (`_bankedTime/_bankedKills/_bankedCoins/_bankedFav`) — смерть→меню и revive→смерть больше не задваивают totals; `_die` защищён флагом `_dying`, `revive` его сбрасывает
-- Три босса по волнам: 1–3 Дендроид (`shooter`, медленный, одиночные), 4–6 Циклоп (`dasher`, speed 55, рывок + удар), 7+ Дракон (`shooter_volley`, рывок + удар и веер 5 снарядов); выбор в SpawnSystem по `boss_order_min`, номер волны в `boss_wave_n`
-- `Boss`: состояния рывка idle→telegraph→charge→dashing (`dash: telegraph/charge_ms, speed_mul, duration/cooldown_ms, contact_mul, range, hit_radius`); `Game._updateBoss/_bossSlam` (удар по площади + отброс мелочи), `SkillSystem.enemyFireDir` для залпа (`volley: count/spread_deg/cooldown_ms`), контакт рывка ×`contact_mul` через `Combat.contactDamage(mulFn)`
-- Валидация `boss_pattern/dash/volley/boss_order_min` в ConfigLoader; локализация +2 ключа (`monster_boss_dendroid/cyclops`, 6/6 языков); спрайты `boss_dendroid/cyclops.png` пока плейсхолдеры
+- Три босса по волнам: 1–3 Дендроид (`shooter`, speed 45, одиночные), 4–6 Циклоп (`dasher`, speed 75, рывок + удар), 7+ Дракон (`shooter_volley`, speed 60, рывок + удар и веер 7 снарядов); выбор в SpawnSystem по `boss_order_min`, номер волны в `boss_wave_n`
+- Рывок: телеграф 0.5с + замах 0.3с, скорость подбирается `max(speed*speed_mul, dist/duration)` — долетает ровно до игрока, удар в КОНЦЕ рывка (`_bossSlam`, `strike_at_end`); `Boss.bossDashTick(dt, px, py)` фиксирует направление/следит за игроком
+- Залп дракона: `volley { count 7, spread 50°, cd 2.2с, damage_mul 1.5 }` — урон каждого снаряда ×1.5 от урона босса, валидация `volley.damage_mul`
+- Скейлинг волн оставлен: босс каждые 120с, каждый следующий +10% HP/урона (1.1^(N-1)) + все живые монстры +10%
