@@ -76,7 +76,7 @@
       "coin_drop_chance": 0.15,
       "movement_type": "chase",
       "attack_range": 60,
-      "attack_cooldown_ms": 0,
+      "attack_cooldown_ms": 100,
       "projectile_id": null,
       "scale": 0.9,
       "hit_flash_color": "#ffcccc",
