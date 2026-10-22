@@ -60,7 +60,7 @@
       "frames": {
         "frame_width": 48,
         "frame_height": 48,
-        "columns": 4,
+        "columns": 6,
         "animations": {
           "walk": { "row": 0, "frames": 6, "fps": 12, "loop": true },
           "attack": { "row": 1, "frames": 6, "fps": 12, "loop": false },
