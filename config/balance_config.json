@@ -58,8 +58,8 @@
       "name_key": "monster_dementor",
       "sprite": "monsters/dementor.png",
       "frames": {
-        "frame_width": 48,
-        "frame_height": 48,
+        "frame_width": 64,
+        "frame_height": 64,
         "columns": 6,
         "animations": {
           "walk": { "row": 0, "frames": 6, "fps": 12, "loop": true },
