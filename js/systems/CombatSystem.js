@@ -66,15 +66,24 @@ export class CombatSystem {
     }
   }
 
-  // Контакт: игрок проходит сквозь (блока нет), но урон при пересечении хитбоксов
-  contactDamage(player, enemies) {
+  // Контакт: игрок проходит сквозь (блока нет), но урон при пересечении хитбоксов.
+  // dmgMul — множитель урона (рывок босса: contact_mul из конфига).
+  contactDamage(player, enemies, dmgMulByEnemy) {
     if (!player.alive) return;
     for (const e of enemies) {
       if (!e.alive || e.deathT > 0) continue;
       const dx = player.x - e.x, dy = player.y - e.y;
       const rr = player.radius + e.radius;
       if (dx * dx + dy * dy < rr * rr) {
-        player.takeContactDamage(e.damage);
+        let mul = 1;
+        if (typeof dmgMulByEnemy === 'function') {
+          mul = dmgMulByEnemy(e) || 1;
+        } else if (e && e.isBoss && e.isDashing) {
+          // fallback если колбэк не передали: рывок бьёт сильнее (contact_mul)
+          const d = (e.cfg && e.cfg.dash) || {};
+          mul = d.contact_mul || 1.5;
+        }
+        player.takeContactDamage(e.damage * mul);
         if (this.collidePlayerMonster) {
           // физический блок (выкл по GDD, ветка на будущее)
           const d = Math.sqrt(dx * dx + dy * dy) || 1;

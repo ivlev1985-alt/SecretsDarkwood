@@ -183,3 +183,9 @@
 - При "Заново" (startRun → _initRun) теперь сбрасывается `save.data.unlockedSpells` к дефолтным заклинаниям (`unlocked_by_default: true` в skills_config). Раньше zakлинания, полученные в прошлом забеге (сундуки, апгрейды), оставались разблокированными и переносились в новый забег
 - Runtime-флаги `w.unlocked` на объектах конфига сбрасываются к дефолту перед созданием нового SkillSystem — grantRandomSpell из прошлого забега (`w.unlocked = true`) больше не переносится
 - Мета-прогрессия (монеты, gear, статистика, магазин предметов) остаётся — сбрасывается только прогресс внутри забега (заклинания, уровень, XP)
+
+## [Фикс учёта + 3 босса]
+- Двойной учёт убран: `recordRun` больше не трогает `totalRuns` (только `startRun` — один старт = один забег); монеты/время/киллы коммитятся дельтой через `_commitRunStats` (`_bankedTime/_bankedKills/_bankedCoins/_bankedFav`) — смерть→меню и revive→смерть больше не задваивают totals; `_die` защищён флагом `_dying`, `revive` его сбрасывает
+- Три босса по волнам: 1–3 Дендроид (`shooter`, медленный, одиночные), 4–6 Циклоп (`dasher`, speed 55, рывок + удар), 7+ Дракон (`shooter_volley`, рывок + удар и веер 5 снарядов); выбор в SpawnSystem по `boss_order_min`, номер волны в `boss_wave_n`
+- `Boss`: состояния рывка idle→telegraph→charge→dashing (`dash: telegraph/charge_ms, speed_mul, duration/cooldown_ms, contact_mul, range, hit_radius`); `Game._updateBoss/_bossSlam` (удар по площади + отброс мелочи), `SkillSystem.enemyFireDir` для залпа (`volley: count/spread_deg/cooldown_ms`), контакт рывка ×`contact_mul` через `Combat.contactDamage(mulFn)`
+- Валидация `boss_pattern/dash/volley/boss_order_min` в ConfigLoader; локализация +2 ключа (`monster_boss_dendroid/cyclops`, 6/6 языков); спрайты `boss_dendroid/cyclops.png` пока плейсхолдеры

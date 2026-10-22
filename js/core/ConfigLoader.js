@@ -60,6 +60,35 @@ export class ConfigLoader {
       if (registries && registries.movement && !registries.movement[m.movement_type]) {
         errors.push('monster ' + m.id + ' unknown movement_type=' + m.movement_type);
       }
+      // Боссы: паттерн + параметры рывка/залпа (всё из конфига, код не трогаем)
+      if (m.is_boss) {
+        const pat = m.boss_pattern || 'shooter';
+        if (!['shooter', 'dasher', 'shooter_volley'].includes(pat)) {
+          errors.push('monster ' + m.id + ' bad boss_pattern=' + pat);
+        }
+        if (m.boss_order_min !== undefined && !(m.boss_order_min >= 1)) {
+          errors.push('monster ' + m.id + ' bad boss_order_min (must be >= 1)');
+        }
+        if (m.dash !== undefined) {
+          const d = m.dash;
+          for (const k of ['telegraph_ms', 'charge_ms', 'duration_ms', 'cooldown_ms']) {
+            if (!(d[k] >= 0)) errors.push('monster ' + m.id + ' bad dash.' + k);
+          }
+          if (!(d.speed_mul > 1)) errors.push('monster ' + m.id + ' bad dash.speed_mul (must be > 1)');
+          if (!(d.contact_mul >= 1)) errors.push('monster ' + m.id + ' bad dash.contact_mul (must be >= 1)');
+          if (!(d.range > 0)) errors.push('monster ' + m.id + ' bad dash.range');
+          if (!(d.hit_radius > 0)) errors.push('monster ' + m.id + ' bad dash.hit_radius');
+        }
+        if (m.volley !== undefined) {
+          if (!(m.volley.count >= 1)) errors.push('monster ' + m.id + ' bad volley.count');
+          if (!(m.volley.spread_deg >= 0)) errors.push('monster ' + m.id + ' bad volley.spread_deg');
+          if (!(m.volley.cooldown_ms > 0)) errors.push('monster ' + m.id + ' bad volley.cooldown_ms');
+        }
+        if (pat === 'dasher' && !m.dash) errors.push('monster ' + m.id + ' dasher needs dash{}');
+        if (pat === 'shooter_volley' && (!m.volley || !m.dash)) {
+          errors.push('monster ' + m.id + ' shooter_volley needs volley{} + dash{}');
+        }
+      }
       if (String(m.sprite || '').includes('#')) errors.push('monster ' + m.id + ' sprite contains #');
     }
 

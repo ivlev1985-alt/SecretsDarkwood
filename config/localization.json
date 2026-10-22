@@ -160,7 +160,9 @@
     "pet_swap_current": "Твой",
     "pet_swap_new": "Новый",
     "pet_swap_swap": "Поменять",
-    "pet_fetches_potions": "Собирает аптечки"
+    "pet_fetches_potions": "Собирает аптечки",
+    "monster_boss_dendroid": "Дендроид",
+    "monster_boss_cyclops": "Циклоп"
   },
   "en": {
     "play": "Play",
@@ -323,7 +325,9 @@
     "pet_swap_current": "Yours",
     "pet_swap_new": "New",
     "pet_swap_swap": "Swap",
-    "pet_fetches_potions": "Fetches potions"
+    "pet_fetches_potions": "Fetches potions",
+    "monster_boss_dendroid": "Dendroid",
+    "monster_boss_cyclops": "Cyclops"
   },
   "tr": {
     "play": "Oyna",
@@ -486,7 +490,9 @@
     "pet_swap_current": "Seninki",
     "pet_swap_new": "Yeni",
     "pet_swap_swap": "Değiştir",
-    "pet_fetches_potions": "İksir toplar"
+    "pet_fetches_potions": "İksir toplar",
+    "monster_boss_dendroid": "Dendroid",
+    "monster_boss_cyclops": "Tepegöz"
   },
   "de": {
     "play": "Spielen",
@@ -649,7 +655,9 @@
     "pet_swap_current": "Deiner",
     "pet_swap_new": "Neuer",
     "pet_swap_swap": "Tauschen",
-    "pet_fetches_potions": "Holt Tränke"
+    "pet_fetches_potions": "Holt Tränke",
+    "monster_boss_dendroid": "Dendroid",
+    "monster_boss_cyclops": "Zyklop"
   },
   "es": {
     "play": "Jugar",
@@ -812,7 +820,9 @@
     "pet_swap_current": "Tuyo",
     "pet_swap_new": "Nuevo",
     "pet_swap_swap": "Cambiar",
-    "pet_fetches_potions": "Recoge pociones"
+    "pet_fetches_potions": "Recoge pociones",
+    "monster_boss_dendroid": "Dendroide",
+    "monster_boss_cyclops": "Cíclope"
   },
   "fr": {
     "play": "Jouer",
@@ -975,6 +985,8 @@
     "pet_swap_current": "Le tien",
     "pet_swap_new": "Nouveau",
     "pet_swap_swap": "Échanger",
-    "pet_fetches_potions": "Ramasse les potions"
+    "pet_fetches_potions": "Ramasse les potions",
+    "monster_boss_dendroid": "Dendroïde",
+    "monster_boss_cyclops": "Cyclope"
   }
 }

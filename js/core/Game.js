@@ -94,6 +94,13 @@ export class Game {
     this.runStats = { time: 0, level: 1, kills: 0, coins: 0, record: false };
     this.reviveUsed = false;
     this.bestTime = 0;
+    // банк _die: сколько времени/киллов/монет уже записано в мету
+    // (нужно чтобы revive + повторная смерть не задваивали totals)
+    this._bankedTime = 0;
+    this._bankedKills = 0;
+    this._bankedCoins = 0;
+    this._bankedFav = {};
+    this._dying = false; // _die уже выполняется (защита от повторного входа)
     // Этап 5: мета
     this.save = new SaveSystem('secrets_darkwood_save_v1');
     this.shop = null;
@@ -472,6 +479,9 @@ export class Game {
 
   // --- переходы ---
   startRun() {
+    // Если рестарт из паузы — сначала коммитим незаписанный прогресс
+    // текущего забега (после _die дельта = 0, так что безопасно всегда).
+    this._commitRunStats();
     this._initRun();
     this.save.data.stats.totalRuns++;
     this.save.save();
@@ -479,10 +489,45 @@ export class Game {
     this.uiSettings = null;
     try { this.audio.playMusic(this.config.game_config.audio.music_battle); } catch (e) {}
   }
-  toMenu() {
-    // Сохранить заработанные монеты перед выходом в меню (чтобы не терялись при выходе не через смерть)
-    if (this.player) this.save.addCoins(this.player.coins);
+  // Коммит дельты забега в мету (время/киллы/монеты/любимое оружие).
+  // Вызывается из _die, toMenu и startRun (рестарт). После _die дельта = 0,
+  // поэтому повторные вызовы безопасны и не задваивают totals.
+  _commitRunStats() {
+    if (!this.player || !this.save || !this.combat) return { record: false };
+    const dTime = Math.max(0, this.time - (this._bankedTime || 0));
+    const dKills = Math.max(0, this.combat.kills - (this._bankedKills || 0));
+    const dCoins = Math.max(0, this.player.coins - (this._bankedCoins || 0));
+    const favMap = {};
+    const bankedFav = this._bankedFav || {};
+    for (const [id, k] of Object.entries(this.combat.killsByWeapon || {})) {
+      const d = k - (bankedFav[id] || 0);
+      if (d > 0) favMap[id] = d;
+    }
+    if (!dTime && !dKills && !dCoins && !Object.keys(favMap).length) return { record: false };
+    if (dCoins) this.save.addCoins(dCoins);
+    const { record } = this.save.recordRun({
+      time: dTime, kills: dKills, favMap, fullTime: this.time
+    });
+    this._bankedTime = this.time;
+    this._bankedKills = this.combat.kills;
+    this._bankedCoins = this.player.coins;
+    this._bankedFav = Object.assign({}, this.combat.killsByWeapon || {});
+    this.bestTime = this.save.data.stats.bestTime || 0;
     this.save.save();
+    return { record };
+  }
+  toMenu() {
+    // Коммит дельты перед выходом (чтобы время/киллы/монеты не терялись
+    // при выходе не через смерть и не задваивались при смерть->меню).
+    const { record } = this._commitRunStats();
+    this.runStats = {
+      time: this.time || 0,
+      level: this.progression ? this.progression.level : (this.player ? this.player.level : 1),
+      kills: this.combat ? this.combat.kills : 0,
+      coins: this.player ? this.player.coins : 0,
+      record: !!record
+    };
+    if (record) this.submitScore();
     this.states.set('menu');
     this.uiSettings = null;
     try { this.audio.playMusic(this.config.game_config.audio.music_menu); } catch (e) {}
@@ -496,6 +541,7 @@ export class Game {
     this._adBusy = false;
     if (!ok) return;
     this.reviveUsed = true;
+    this._dying = false; // разрешить повторную смерть после revive (иначе _die заблокирован)
     this.player.hp = Math.ceil(this.player.maxHp * (this.config.game_config.monetization.revive_hp_percent || 50) / 100);
     this.player.alive = true;
     this.player.invT = 2;
@@ -554,6 +600,14 @@ export class Game {
 
   _initRun() {
     const g = this.config.game_config, b = this.config.balance_config, s = this.config.skills_config;
+    // Банк уже записанной в мету части забега (защита от двойного учёта
+    // при revive -> повторная смерть и при выходе в меню). Сбрасывается
+    // каждый новый забег.
+    this._bankedTime = 0;
+    this._bankedKills = 0;
+    this._bankedCoins = 0;
+    this._bankedFav = {};
+    this._dying = false;
     // Надетое снаряжение -> стартовые статы
     const gear = this.save.data.gear || {};
     const mods = this.shop ? this.shop.gearMods(gear) : null;
@@ -639,6 +693,7 @@ export class Game {
     this.bossWarn = null;
     this.reviveUsed = false;
     this.uiInventory = false;
+    this.runStats = { time: 0, level: 1, kills: 0, coins: 0, record: false };
     if (b.waves.first_spawn_trigger_on_chest && b.chests.enabled) {
       const wood = b.chests.types.find((t) => t.id === 'wooden') || b.chests.types[0];
       if (wood) this.chestSys.chests.push(new Chest(wood, 150, 0));
@@ -652,6 +707,11 @@ export class Game {
   }
 
   _onKill(e, weaponId) {
+    // Босс при смерти сбрасывает рывок/залп (иначе тик по мёртвому)
+    if (e && e.isBoss) {
+      e.dashState = 'idle'; e.dashT = 0;
+      e.volleyT = 0; e.volleyFired = false;
+    }
     for (const p of this.loot.dropFor(e)) this.pickups.push(p);
     // эффект смерти по hit_effect оружия (дефолт — искра)
     let fxId = 'hit_spark';
@@ -660,6 +720,106 @@ export class Game {
       if (st && st.cfg.hit_effect) fxId = st.cfg.hit_effect;
     }
     if (this.fx) this.fx.play(fxId, e.x, e.y);
+  }
+
+  // --- Логика боссов: стрельба / рывок + удар / залп ---
+  // Паттерн из конфига (boss_pattern), выбор типа — в SpawnSystem по boss_order_min:
+  //   волны 1–3: dendroid (shooter) — медленный, стреляет одиночными;
+  //   волны 4–6: cyclops (dasher) — быстрее, рывок + удар по площади;
+  //   волны 7+:  dragon (shooter_volley) — рывок + удар и веерный залп.
+  // Возвращает override движения или null (идти как обычно):
+  //   { hold:true } — стоять (телеграф/замах), { dash,dx,dy,spdOverride } — рывок.
+  _updateBoss(e, dt, dist) {
+    const pattern = e.cfg.boss_pattern || 'shooter';
+    // 1) Одиночный выстрел (дендроид и дракон): как ranged-моб
+    if (pattern === 'shooter' || pattern === 'shooter_volley') {
+      if (e.attackCd <= 0 && dist < (e.cfg.attack_range || 400)) {
+        const proj = this.enemyProjById.get(e.cfg.projectile_id);
+        if (proj) {
+          this.skills.enemyFire(e.x, e.y, this.player.x, this.player.y, proj, e.damage);
+          e.attackCd = (e.cfg.attack_cooldown_ms || 1800) / 1000;
+          try { e.setAnim('attack'); } catch (err) {}
+          return null;
+        }
+      }
+      try { e.setAnim('walk'); } catch (err) {}
+    }
+    // 2) Веерный залп дракона: count снарядов с разбросом spread_deg
+    if (pattern === 'shooter_volley') {
+      const v = e.cfg.volley || {};
+      e.volleyT -= dt;
+      if (e.volleyT <= 0 && dist < (e.cfg.attack_range || 400) + 100) {
+        e.volleyT = (v.cooldown_ms || 2200) / 1000;
+        const proj = this.enemyProjById.get(e.cfg.projectile_id);
+        if (proj) {
+          const n = v.count || 5;
+          const spread = ((v.spread_deg || 40) * Math.PI) / 180;
+          const baseA = Math.atan2(this.player.y - e.y, this.player.x - e.x);
+          for (let i = 0; i < n; i++) {
+            const off = n === 1 ? 0 : -spread / 2 + (spread * i) / (n - 1);
+            const a = baseA + off;
+            this.skills.enemyFireDir(e.x, e.y, Math.cos(a), Math.sin(a), proj, e.damage);
+          }
+          try { this.audio.playSfx('explosion.mp3'); } catch (err) {}
+        }
+      }
+    }
+    // 3) Рывок + удар (циклоп и дракон): телеграф -> замах -> рывок -> удар
+    const dash = e.cfg.dash;
+    if (dash && pattern !== 'shooter') {
+      if (e.dashState === 'idle') {
+        if ((e.dashCd || 0) > 0) e.dashCd -= dt;
+        else e.tryStartDash(this.player.x, this.player.y);
+        return null; // идём к игроку как обычно
+      }
+      // Фиксируем направление в конце телеграфа — по текущей позиции игрока,
+      // чтобы от рывка можно было уклониться движением
+      if (e.dashState === 'telegraph' && e.dashT - dt <= 0) {
+        const dx = this.player.x - e.x, dy = this.player.y - e.y;
+        const d = Math.hypot(dx, dy) || 1;
+        e.dashDx = dx / d; e.dashDy = dy / d;
+      }
+      const r = e.bossDashTick(dt);
+      if (r.mode === 'hold') {
+        // Телеграф/замах: стоим, мигаем. Направление рывка уже зафиксировано
+        e.hitFlash = Math.max(e.hitFlash || 0, 0.06);
+        return { hold: true };
+      }
+      if (r.mode === 'dash') {
+        e._bossDmgMul = r.dmgMul || 1;
+        if (!e.dashHitDone) {
+          e.dashHitDone = true;
+          this._bossSlam(e); // удар по площади в начале рывка
+        }
+        const spd = e.speed * (dash.speed_mul || 4);
+        // Во время рывка летим строго по зафиксированному направлению
+        return { dash: true, dx: e.dashDx, dy: e.dashDy, spdOverride: spd };
+      }
+    }
+    return null;
+  }
+
+  // Удар по площади в точке рывка: урон всем в hit_radius + отброс.
+  // Один раз за рывок (флаг dashHitDone в _updateBoss).
+  _bossSlam(e) {
+    const dash = e.cfg.dash || {};
+    const R = dash.hit_radius || 70;
+    const mul = dash.contact_mul || 1.5;
+    const dx = this.player.x - e.x, dy = this.player.y - e.y;
+    if (dx * dx + dy * dy < (R + this.player.radius) * (R + this.player.radius)) {
+      this.player.takeContactDamage(e.damage * mul);
+    }
+    // Эффект + отброс мелочи рядом (визуальный акцент удара)
+    if (this.fx) this.fx.play('explosion_burst', e.x, e.y);
+    try { this.audio.playSfx('explosion.mp3'); } catch (err) {}
+    for (const o of this.enemies) {
+      if (o === e || !o.alive || o.deathT > 0 || o.isBoss) continue;
+      const ox = o.x - e.x, oy = o.y - e.y;
+      const d = Math.hypot(ox, oy) || 1;
+      if (d < R + o.radius) {
+        o.knockX += (ox / d) * 300; o.knockY += (oy / d) * 300;
+      }
+    }
   }
 
   // эффект попадания по hit_effect оружия + молния + следующий прыжок цепи
@@ -824,22 +984,19 @@ export class Game {
   }
 
   async _die() {
+    if (this._dying) return; // защита от повторного входа (мир продолжает тикать до смены состояния)
+    this._dying = true;
     this.deaths++;
-    const t = this.time;
-    // монеты забега -> мета-баланс
-    this.save.addCoins(this.player.coins);
-    const fav = this.combat.favoriteWeapon();
-    const { record } = this.save.recordRun({ time: t, kills: this.combat.kills, fav });
-    this.save.save();
-    this.bestTime = this.save.data.stats.bestTime || 0;
-    if (record) this.submitScore();
+    // коммит дельты забега в мету (revive + повторная смерть не задваивают totals)
+    const { record } = this._commitRunStats();
     this.runStats = {
-      time: t,
+      time: this.time,
       level: this.progression.level,
       kills: this.combat.kills,
       coins: this.player.coins,
       record
     };
+    if (record) this.submitScore();
     await this._maybeInterstitial(); // реклама ДО окна (ГДД п.6.8)
     this.states.set('gameover');
     try { this.audio.stopMusic(); this.audio.playSfx('gameover.mp3'); } catch (e) {}
@@ -905,6 +1062,7 @@ export class Game {
       if (raw.isBoss) {
         const b = new Boss(raw.cfg, raw.x, raw.y, ConfigLoader.t(this.config.localization, this.settings.lang, raw.cfg.name_key));
         b.hp = raw.hp; b.maxHp = raw.maxHp;
+        b.boss_wave_n = raw.boss_wave_n || 0;
         this.enemies.push(b);
         this.bossWarn = { text: ConfigLoader.t(this.config.localization, this.settings.lang, 'boss_warning', { name: b.name || 'BOSS' }), t: 2 };
         if (this.fx) this.fx.play('boss_spawn', b.x, b.y);
@@ -919,9 +1077,26 @@ export class Game {
     for (const e of this.enemies) {
       if (!e.alive) continue;
       if (e.deathT > 0) { e.updateDeath(dt); continue; }
-      const { mx, my, dist } = e.steer(dt, this.player.x, this.player.y);
+      let { mx, my, dist } = e.steer(dt, this.player.x, this.player.y);
       e.facing = (this.player.x >= e.x) ? 1 : -1;
-      if (e.cfg.movement_type === 'ranged' && e.attackCd <= 0 && dist < (e.cfg.attack_range || 300)) {
+      if (e.isBoss) {
+        // Вся логика боссов (стрельба / рывок / залп) — в _updateBoss.
+        // Возвращает override движения: { hold } — стоять (телеграф/замах),
+        // { dash, dx, dy } — лететь по зафиксированному направлению.
+        const bo = this._updateBoss(e, dt, dist);
+        if (bo) {
+          if (bo.hold) { mx = 0; my = 0; }
+          else if (bo.dash) { mx = bo.dx; my = bo.dy; }
+          if (bo.spdOverride > 0) {
+            e.x += mx * bo.spdOverride * dt;
+            e.y += my * bo.spdOverride * dt;
+            e.applyKnock(dt);
+            this._pushOut(e, false);
+            e.updateAnim(dt);
+            continue;
+          }
+        }
+      } else if (e.cfg.movement_type === 'ranged' && e.attackCd <= 0 && dist < (e.cfg.attack_range || 300)) {
         const proj = this.enemyProjById.get(e.cfg.projectile_id);
         if (proj) {
           this.skills.enemyFire(e.x, e.y, this.player.x, this.player.y, proj, e.damage);
@@ -931,7 +1106,7 @@ export class Game {
       } else {
         try { e.setAnim('walk'); } catch (err) {}
       }
-      // холод замедляет: скорость из effectiveSpeed (slowT/slowFactor из Enemy)
+      // Холод замедляет: скорость из effectiveSpeed (slowT/slowFactor из Enemy)
       const spd = (typeof e.effectiveSpeed === 'number') ? e.effectiveSpeed : e.speed;
       e.x += mx * spd * dt;
       e.y += my * spd * dt;
@@ -974,7 +1149,14 @@ export class Game {
     if (this.particles) this.particles.update(dt);
     this.combat.enemyProjectilesVsPlayer(this.skills.enemyShots, this.player);
     this.combat.separate(this.enemies);
-    this.combat.contactDamage(this.player, this.enemies);
+    // Контактный урон: рывок босса бьёт сильнее (contact_mul из dash-конфига)
+    this.combat.contactDamage(this.player, this.enemies, (e) => {
+      if (e && e.isBoss && e.isDashing) {
+        const d = (e.cfg && e.cfg.dash) || {};
+        return d.contact_mul || 1.5;
+      }
+      return 1;
+    });
     this.combat.updateTexts(dt);
 
     const pr = this.player.getPickupRadius();

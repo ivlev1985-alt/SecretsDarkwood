@@ -1,4 +1,5 @@
 ﻿import { Enemy } from '../entities/Enemy.js';
+import { Boss } from '../entities/Boss.js';
 
 // Спавн волн (balance.waves): задержка, затухание интервала, веса, оффскрин.
 // Скейлинг: +2% HP/урона за каждые wave_step_sec выживания И +10% всем за каждого
@@ -94,6 +95,9 @@ export class SpawnSystem {
       }
     }
     // босс по интервалу: сам на 10% сильнее предыдущего + все живые монстры +10%
+    // Выбор типа: боссы с boss_order_min <= N (N = номер волны).
+    // 1–3: дендроид, 4–6: + циклоп, 7+: + дракон. Если несколько подходят —
+    // самый поздний (самый сильный из разблокированных).
     const bossEvery = this.cfg.boss_wave_interval_sec || 120;
     if (this.bosses.length && this.bossTimer >= bossEvery) {
       this.bossTimer = 0;
@@ -104,11 +108,24 @@ export class SpawnSystem {
         e.hp = Math.min(e.maxHp, Math.round(e.hp * (1 + this.BOSS_GROWTH)));
         e.damage = Math.round(e.damage * (1 + this.BOSS_GROWTH) * 10) / 10;
       }
-      const type = this.bosses[(this.bossesSpawned - 1) % this.bosses.length];
+      const bossN = this.bossesSpawned; // 1,2,3… после инкремента выше — номер волны
+      // Обычные мобы из генерации исключены (bosses отдельно). Если вдруг
+      // все боссы без order — берём по кругу (старое поведение).
+      const ordered = this.bosses.filter((m) => (m.boss_order_min || 0) > 0);
+      const pool = ordered.length ? ordered : this.bosses;
+      // Из разблокированных (boss_order_min <= N) — самый поздний
+      const unlocked = pool.filter((m) => (m.boss_order_min || 1) <= bossN);
+      const cand = unlocked.length ? unlocked : pool;
+      let maxOrder = -Infinity;
+      for (const m of cand) maxOrder = Math.max(maxOrder, m.boss_order_min || 1);
+      const top = cand.filter((m) => (m.boss_order_min || 1) === maxOrder);
+      const type = top[(bossN - 1) % top.length];
       const p = this.spawnPoint(ctx.player.x, ctx.player.y, ctx.viewW, ctx.viewH, rand);
       // босс №k: сила 1.1^(k-1) от времени — каждый следующий на 10% сильнее
       const bossScale = this.timeScale * Math.pow(1 + this.BOSS_GROWTH, this.bossesSpawned - 1);
-      out.push(this.applyScale(new Enemy(type, p.x, p.y), bossScale));
+      const boss = this.applyScale(new Boss(type, p.x, p.y), bossScale);
+      boss.boss_wave_n = bossN; // номер волны — для паттерна в Game (dasher/volley)
+      out.push(boss);
       this.count++;
     }
     return out;

@@ -367,11 +367,17 @@ export class SkillSystem {
   enemyFire(x, y, tx, ty, projCfg, damage) {
     const dx = tx - x, dy = ty - y;
     const d = Math.hypot(dx, dy) || 1;
+    this.enemyFireDir(x, y, dx / d, dy / d, projCfg, damage);
+  }
+
+  // Выстрел врага по направлению (для веерного залпа босса).
+  // dx, dy — уже нормализованное направление.
+  enemyFireDir(x, y, dx, dy, projCfg, damage) {
     const p = this.pool.acquire();
     p.fire({
       x, y,
-      vx: (dx / d) * (projCfg.speed || 250),
-      vy: (dy / d) * (projCfg.speed || 250),
+      vx: dx * (projCfg.speed || 250),
+      vy: dy * (projCfg.speed || 250),
       damage, crit: false, pierce: 0,
       radius: projCfg.radius || 6,
       life: (projCfg.lifetime_ms || 2000) / 1000,

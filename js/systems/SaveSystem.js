@@ -77,14 +77,24 @@ export class SaveSystem {
   }
 
   // --- статистика забега ---
-  // fav: { id, kills } любимое оружие забега. Возвращает { record }.
-  recordRun({ time, kills, fav }) {
+  // fav: { id, kills } любимое оружие забега (legacy, 1 запись).
+  // favMap: { id: kills } дельта убийств по всем оружиям (для revive:
+  // смерть -> воскрешение -> смерть, чтобы не задваивать totals).
+  // time/kills — ДЕЛЬТА с последнего коммита, fullTime — полное время
+  // забега (именно оно сравнивается с рекордом). Возвращает { record }.
+  // totalRuns считается в Game.startRun (один старт = один забег).
+  recordRun({ time, kills, fav, favMap, fullTime }) {
     const st = this.data.stats;
-    st.totalRuns++;
     st.totalTime += Math.floor(time);
     st.totalKills += kills;
-    const record = time > (st.bestTime || 0);
-    if (record) st.bestTime = Math.floor(time);
+    const t = (fullTime ?? time);
+    const record = t > (st.bestTime || 0);
+    if (record) st.bestTime = Math.floor(t);
+    if (favMap) {
+      for (const [id, k] of Object.entries(favMap)) {
+        if (k > 0) st.fav[id] = (st.fav[id] || 0) + k;
+      }
+    }
     if (fav && fav.id) st.fav[fav.id] = (st.fav[fav.id] || 0) + fav.kills;
     return { record };
   }
