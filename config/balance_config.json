@@ -67,7 +67,7 @@
           "death": { "row": 2, "frames": 6, "fps": 12, "loop": false }
         }
       },
-      "hp": 100000,
+      "hp": 1000,
       "speed": 140,
       "damage": 3,
       "collision_radius": 12,
@@ -78,7 +78,7 @@
       "attack_range": 60,
       "attack_cooldown_ms": 100,
       "projectile_id": null,
-      "scale": 0.9,
+      "scale": 1.0,
       "hit_flash_color": "#ffcccc",
       "knockback_resist": 0.0,
       "slow_resist": 0.0,
