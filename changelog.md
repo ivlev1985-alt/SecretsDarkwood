@@ -190,3 +190,7 @@
 - Рывок: телеграф 0.5с + замах 0.3с, скорость подбирается `max(speed*speed_mul, dist/duration)` — долетает ровно до игрока, удар в КОНЦЕ рывка (`_bossSlam`, `strike_at_end`); `Boss.bossDashTick(dt, px, py)` фиксирует направление/следит за игроком
 - Залп дракона: `volley { count 7, spread 50°, cd 2.2с, damage_mul 1.5 }` — урон каждого снаряда ×1.5 от урона босса, валидация `volley.damage_mul`
 - Скейлинг волн оставлен: босс каждые 120с, каждый следующий +10% HP/урона (1.1^(N-1)) + все живые монстры +10%
+
+## [Variability пропсов + melee_range]
+- `variability` у пропсов: сколько строк-вариантов в одном PNG (1 = один вариант, 3 = три камешка в едином стиле); `Prop.pickVariant/shiftedFrames/rowsPerVariant`, при спавне строка выбирается случайно (`new Prop(cfg, x, y, pickVariant)`); пример: `grass_patch variability:3`, остальным пока 1; валидация integer 1..16 в ConfigLoader
+- `melee_range` у монстров: ближний бой бьёт на дистанции `max(melee_range, player.radius + enemy.radius)`, а не только «внутри персонажа»; значения = старые rr + запас 2–8px (гоблин 34, пикси 32, тролль 44, лучник 32, дендроид 64, циклоп 66, дракон 64); валидация: chase/teleport без `melee_range` — ошибка

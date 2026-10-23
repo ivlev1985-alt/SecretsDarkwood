@@ -5,13 +5,13 @@
     "pickup_radius": 60,
     "collision_radius": 16,
     "invincibility_ms": 500,
-    "damage_multiplier": 1.0,
-    "attack_speed_multiplier": 1.0,
-    "pickup_radius_multiplier": 1.0,
+    "damage_multiplier": 1,
+    "attack_speed_multiplier": 1,
+    "pickup_radius_multiplier": 1,
     "crit_chance": 0.05,
-    "crit_multiplier": 2.0,
-    "hp_regen_per_sec": 0.0,
-    "xp_multiplier": 1.0
+    "crit_multiplier": 2,
+    "hp_regen_per_sec": 0,
+    "xp_multiplier": 1
   },
   "progression": {
     "xp_base": 10,
@@ -30,9 +30,24 @@
         "frame_height": 64,
         "columns": 5,
         "animations": {
-          "walk": { "row": 0, "frames": 5, "fps": 8, "loop": true },
-          "attack": { "row": 1, "frames": 3, "fps": 10, "loop": false },
-          "death": { "row": 2, "frames": 5, "fps": 8, "loop": false }
+          "walk": {
+            "row": 0,
+            "frames": 5,
+            "fps": 8,
+            "loop": true
+          },
+          "attack": {
+            "row": 1,
+            "frames": 3,
+            "fps": 10,
+            "loop": false
+          },
+          "death": {
+            "row": 2,
+            "frames": 5,
+            "fps": 8,
+            "loop": false
+          }
         }
       },
       "hp": 20,
@@ -46,28 +61,44 @@
       "attack_range": 0,
       "attack_cooldown_ms": 0,
       "projectile_id": null,
-      "scale": 1.0,
+      "scale": 1,
       "hit_flash_color": "#ffffff",
-      "knockback_resist": 0.0,
-      "slow_resist": 0.0,
-      "burn_resist": 0.0,
-      "spawn_weight": 100
+      "knockback_resist": 0,
+      "slow_resist": 0,
+      "burn_resist": 0,
+      "spawn_weight": 100,
+      "melee_range": 34
     },
     {
-      "id": "dementor",
-      "name_key": "monster_dementor",
-      "sprite": "monsters/dementor.png",
+      "id": "pixie",
+      "name_key": "monster_pixie",
+      "sprite": "monsters/pixie.png",
       "frames": {
-        "frame_width": 64,
-        "frame_height": 64,
-        "columns": 6,
+        "frame_width": 48,
+        "frame_height": 48,
+        "columns": 4,
         "animations": {
-          "walk": { "row": 0, "frames": 6, "fps": 12, "loop": true },
-          "attack": { "row": 1, "frames": 6, "fps": 12, "loop": false },
-          "death": { "row": 2, "frames": 6, "fps": 12, "loop": false }
+          "walk": {
+            "row": 0,
+            "frames": 4,
+            "fps": 12,
+            "loop": true
+          },
+          "attack": {
+            "row": 1,
+            "frames": 3,
+            "fps": 10,
+            "loop": false
+          },
+          "death": {
+            "row": 2,
+            "frames": 4,
+            "fps": 8,
+            "loop": false
+          }
         }
       },
-      "hp": 200,
+      "hp": 10,
       "speed": 140,
       "damage": 3,
       "collision_radius": 12,
@@ -75,15 +106,16 @@
       "coin_drop": 0,
       "coin_drop_chance": 0.15,
       "movement_type": "chase",
-      "attack_range": 192,
-      "attack_cooldown_ms": 100,
+      "attack_range": 0,
+      "attack_cooldown_ms": 0,
       "projectile_id": null,
-      "scale": 1.0,
+      "scale": 0.9,
       "hit_flash_color": "#ffcccc",
-      "knockback_resist": 0.0,
-      "slow_resist": 0.0,
-      "burn_resist": 0.0,
-      "spawn_weight": 80
+      "knockback_resist": 0,
+      "slow_resist": 0,
+      "burn_resist": 0,
+      "spawn_weight": 80,
+      "melee_range": 32
     },
     {
       "id": "troll",
@@ -94,9 +126,24 @@
         "frame_height": 96,
         "columns": 5,
         "animations": {
-          "walk": { "row": 0, "frames": 5, "fps": 5, "loop": true },
-          "attack": { "row": 1, "frames": 4, "fps": 6, "loop": false },
-          "death": { "row": 2, "frames": 6, "fps": 6, "loop": false }
+          "walk": {
+            "row": 0,
+            "frames": 5,
+            "fps": 5,
+            "loop": true
+          },
+          "attack": {
+            "row": 1,
+            "frames": 4,
+            "fps": 6,
+            "loop": false
+          },
+          "death": {
+            "row": 2,
+            "frames": 6,
+            "fps": 6,
+            "loop": false
+          }
         }
       },
       "hp": 100,
@@ -115,7 +162,8 @@
       "knockback_resist": 0.7,
       "slow_resist": 0.3,
       "burn_resist": 0.2,
-      "spawn_weight": 20
+      "spawn_weight": 20,
+      "melee_range": 44
     },
     {
       "id": "dark_elf_archer",
@@ -126,9 +174,24 @@
         "frame_height": 64,
         "columns": 5,
         "animations": {
-          "walk": { "row": 0, "frames": 5, "fps": 8, "loop": true },
-          "attack": { "row": 1, "frames": 4, "fps": 10, "loop": false },
-          "death": { "row": 2, "frames": 4, "fps": 8, "loop": false }
+          "walk": {
+            "row": 0,
+            "frames": 5,
+            "fps": 8,
+            "loop": true
+          },
+          "attack": {
+            "row": 1,
+            "frames": 4,
+            "fps": 10,
+            "loop": false
+          },
+          "death": {
+            "row": 2,
+            "frames": 4,
+            "fps": 8,
+            "loop": false
+          }
         }
       },
       "hp": 30,
@@ -142,12 +205,13 @@
       "attack_range": 300,
       "attack_cooldown_ms": 2000,
       "projectile_id": "arrow_basic",
-      "scale": 1.0,
+      "scale": 1,
       "hit_flash_color": "#ffffff",
       "knockback_resist": 0.2,
       "slow_resist": 0.1,
       "burn_resist": 0.1,
-      "spawn_weight": 40
+      "spawn_weight": 40,
+      "melee_range": 32
     },
     {
       "id": "boss_dendroid",
@@ -158,10 +222,30 @@
         "frame_height": 128,
         "columns": 6,
         "animations": {
-          "walk": { "row": 0, "frames": 6, "fps": 6, "loop": true },
-          "attack": { "row": 1, "frames": 6, "fps": 8, "loop": false },
-          "dash": { "row": 2, "frames": 6, "fps": 12, "loop": false },
-          "death": { "row": 3, "frames": 8, "fps": 6, "loop": false }
+          "walk": {
+            "row": 0,
+            "frames": 6,
+            "fps": 6,
+            "loop": true
+          },
+          "attack": {
+            "row": 1,
+            "frames": 6,
+            "fps": 8,
+            "loop": false
+          },
+          "dash": {
+            "row": 2,
+            "frames": 6,
+            "fps": 12,
+            "loop": false
+          },
+          "death": {
+            "row": 3,
+            "frames": 8,
+            "fps": 6,
+            "loop": false
+          }
         }
       },
       "hp": 1200,
@@ -170,20 +254,21 @@
       "collision_radius": 40,
       "xp_drop": 60,
       "coin_drop": 6,
-      "coin_drop_chance": 1.0,
+      "coin_drop_chance": 1,
       "movement_type": "ranged",
       "attack_range": 400,
       "attack_cooldown_ms": 1800,
       "projectile_id": "fireball_boss",
       "boss_pattern": "shooter",
-      "scale": 2.0,
+      "scale": 2,
       "hit_flash_color": "#88ff88",
-      "knockback_resist": 1.0,
+      "knockback_resist": 1,
       "slow_resist": 0.5,
       "burn_resist": 0.3,
       "spawn_weight": 0,
       "is_boss": true,
-      "boss_order_min": 1
+      "boss_order_min": 1,
+      "melee_range": 64
     },
     {
       "id": "boss_cyclops",
@@ -194,10 +279,30 @@
         "frame_height": 128,
         "columns": 6,
         "animations": {
-          "walk": { "row": 0, "frames": 6, "fps": 8, "loop": true },
-          "attack": { "row": 1, "frames": 6, "fps": 10, "loop": false },
-          "dash": { "row": 2, "frames": 6, "fps": 12, "loop": false },
-          "death": { "row": 3, "frames": 8, "fps": 6, "loop": false }
+          "walk": {
+            "row": 0,
+            "frames": 6,
+            "fps": 8,
+            "loop": true
+          },
+          "attack": {
+            "row": 1,
+            "frames": 6,
+            "fps": 10,
+            "loop": false
+          },
+          "dash": {
+            "row": 2,
+            "frames": 6,
+            "fps": 12,
+            "loop": false
+          },
+          "death": {
+            "row": 3,
+            "frames": 8,
+            "fps": 6,
+            "loop": false
+          }
         }
       },
       "hp": 2200,
@@ -206,7 +311,7 @@
       "collision_radius": 42,
       "xp_drop": 120,
       "coin_drop": 12,
-      "coin_drop_chance": 1.0,
+      "coin_drop_chance": 1,
       "movement_type": "chase",
       "attack_range": 0,
       "attack_cooldown_ms": 0,
@@ -215,7 +320,7 @@
       "dash": {
         "telegraph_ms": 500,
         "charge_ms": 300,
-        "speed_mul": 4.0,
+        "speed_mul": 4,
         "duration_ms": 600,
         "cooldown_ms": 4000,
         "contact_mul": 1.5,
@@ -223,14 +328,15 @@
         "hit_radius": 70,
         "strike_at_end": true
       },
-      "scale": 2.0,
+      "scale": 2,
       "hit_flash_color": "#ffcc00",
-      "knockback_resist": 1.0,
+      "knockback_resist": 1,
       "slow_resist": 0.5,
       "burn_resist": 0.3,
       "spawn_weight": 0,
       "is_boss": true,
-      "boss_order_min": 4
+      "boss_order_min": 4,
+      "melee_range": 66
     },
     {
       "id": "boss_dragon",
@@ -241,9 +347,24 @@
         "frame_height": 128,
         "columns": 6,
         "animations": {
-          "walk": { "row": 0, "frames": 6, "fps": 6, "loop": true },
-          "attack": { "row": 1, "frames": 6, "fps": 8, "loop": false },
-          "death": { "row": 2, "frames": 8, "fps": 6, "loop": false }
+          "walk": {
+            "row": 0,
+            "frames": 6,
+            "fps": 6,
+            "loop": true
+          },
+          "attack": {
+            "row": 1,
+            "frames": 6,
+            "fps": 8,
+            "loop": false
+          },
+          "death": {
+            "row": 2,
+            "frames": 8,
+            "fps": 6,
+            "loop": false
+          }
         }
       },
       "hp": 2000,
@@ -252,7 +373,7 @@
       "collision_radius": 40,
       "xp_drop": 100,
       "coin_drop": 10,
-      "coin_drop_chance": 1.0,
+      "coin_drop_chance": 1,
       "movement_type": "ranged",
       "attack_range": 400,
       "attack_cooldown_ms": 1500,
@@ -261,7 +382,7 @@
       "dash": {
         "telegraph_ms": 500,
         "charge_ms": 300,
-        "speed_mul": 5.0,
+        "speed_mul": 5,
         "duration_ms": 500,
         "cooldown_ms": 5000,
         "contact_mul": 1.5,
@@ -275,14 +396,15 @@
         "cooldown_ms": 2200,
         "damage_mul": 1.5
       },
-      "scale": 2.0,
+      "scale": 2,
       "hit_flash_color": "#ff00ff",
-      "knockback_resist": 1.0,
+      "knockback_resist": 1,
       "slow_resist": 0.5,
       "burn_resist": 0.3,
       "spawn_weight": 0,
       "is_boss": true,
-      "boss_order_min": 7
+      "boss_order_min": 7,
+      "melee_range": 64
     }
   ],
   "waves": {
@@ -319,10 +441,20 @@
         "emission_per_sec": 16,
         "size": 3,
         "life_ms": 800,
-        "vx": [-30, 30],
-        "vy": [-50, -10],
+        "vx": [
+          -30,
+          30
+        ],
+        "vy": [
+          -50,
+          -10
+        ],
         "gravity": 20,
-        "colors": ["#d8f6ff", "#00ccff", "#ffffff"]
+        "colors": [
+          "#d8f6ff",
+          "#00ccff",
+          "#ffffff"
+        ]
       }
     },
     "burn": {
@@ -335,10 +467,20 @@
         "emission_per_sec": 24,
         "size": 4,
         "life_ms": 500,
-        "vx": [-25, 25],
-        "vy": [-90, -40],
+        "vx": [
+          -25,
+          25
+        ],
+        "vy": [
+          -90,
+          -40
+        ],
         "gravity": -40,
-        "colors": ["#ffd34d", "#ff8800", "#ff4400"]
+        "colors": [
+          "#ffd34d",
+          "#ff8800",
+          "#ff4400"
+        ]
       }
     }
   },
@@ -346,23 +488,39 @@
     {
       "id": "small_rock",
       "sprite": "environment/prop_small_rock.png",
+      "variability": 1,
       "frames": {
         "frame_width": 64,
         "frame_height": 64,
         "columns": 1,
-        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+        "animations": {
+          "idle": {
+            "row": 0,
+            "frames": 1,
+            "fps": 1,
+            "loop": true
+          }
+        }
       },
       "collidable": false,
-      "slowdown_factor": 1.0
+      "slowdown_factor": 1
     },
     {
       "id": "puddle",
       "sprite": "environment/prop_puddle.png",
+      "variability": 1,
       "frames": {
         "frame_width": 64,
         "frame_height": 64,
         "columns": 1,
-        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+        "animations": {
+          "idle": {
+            "row": 0,
+            "frames": 1,
+            "fps": 1,
+            "loop": true
+          }
+        }
       },
       "collidable": false,
       "slowdown_factor": 0.8
@@ -370,23 +528,39 @@
     {
       "id": "grass_patch",
       "sprite": "environment/prop_grass_patch.png",
+      "variability": 3,
       "frames": {
         "frame_width": 64,
         "frame_height": 64,
         "columns": 1,
-        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+        "animations": {
+          "idle": {
+            "row": 0,
+            "frames": 1,
+            "fps": 1,
+            "loop": true
+          }
+        }
       },
       "collidable": false,
-      "slowdown_factor": 1.0
+      "slowdown_factor": 1
     },
     {
       "id": "big_boulder",
       "sprite": "environment/prop_big_boulder.png",
+      "variability": 1,
       "frames": {
         "frame_width": 96,
         "frame_height": 96,
         "columns": 1,
-        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+        "animations": {
+          "idle": {
+            "row": 0,
+            "frames": 1,
+            "fps": 1,
+            "loop": true
+          }
+        }
       },
       "collidable": true,
       "collision_radius": 48
@@ -394,11 +568,19 @@
     {
       "id": "stone_wall",
       "sprite": "environment/prop_stone_wall.png",
+      "variability": 1,
       "frames": {
         "frame_width": 128,
         "frame_height": 128,
         "columns": 1,
-        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+        "animations": {
+          "idle": {
+            "row": 0,
+            "frames": 1,
+            "fps": 1,
+            "loop": true
+          }
+        }
       },
       "collidable": true,
       "collision_radius": 64
@@ -406,11 +588,19 @@
     {
       "id": "lake",
       "sprite": "environment/prop_lake.png",
+      "variability": 1,
       "frames": {
         "frame_width": 256,
         "frame_height": 256,
         "columns": 1,
-        "animations": { "idle": { "row": 0, "frames": 1, "fps": 1, "loop": true } }
+        "animations": {
+          "idle": {
+            "row": 0,
+            "frames": 1,
+            "fps": 1,
+            "loop": true
+          }
+        }
       },
       "collidable": true,
       "collision_radius": 128
@@ -445,8 +635,18 @@
           "frame_height": 48,
           "columns": 4,
           "animations": {
-            "idle": { "row": 0, "frames": 1, "fps": 6, "loop": true },
-            "open": { "row": 1, "frames": 4, "fps": 12, "loop": false }
+            "idle": {
+              "row": 0,
+              "frames": 1,
+              "fps": 6,
+              "loop": true
+            },
+            "open": {
+              "row": 1,
+              "frames": 4,
+              "fps": 12,
+              "loop": false
+            }
           }
         },
         "drop_weight": 60,
@@ -454,7 +654,7 @@
         "coins_min": 10,
         "coins_max": 30,
         "health_potions": 1,
-        "spell_drop_chance": 0.0,
+        "spell_drop_chance": 0,
         "spell_count": 0,
         "level_up_bonus": 0
       },
@@ -467,8 +667,18 @@
           "frame_height": 48,
           "columns": 4,
           "animations": {
-            "idle": { "row": 0, "frames": 1, "fps": 24, "loop": true },
-            "open": { "row": 1, "frames": 4, "fps": 12, "loop": false }
+            "idle": {
+              "row": 0,
+              "frames": 1,
+              "fps": 24,
+              "loop": true
+            },
+            "open": {
+              "row": 1,
+              "frames": 4,
+              "fps": 12,
+              "loop": false
+            }
           }
         },
         "drop_weight": 30,
@@ -476,7 +686,7 @@
         "coins_min": 50,
         "coins_max": 100,
         "health_potions": 1,
-        "spell_drop_chance": 1.0,
+        "spell_drop_chance": 1,
         "spell_count": 1,
         "level_up_bonus": 0
       },
@@ -489,8 +699,18 @@
           "frame_height": 64,
           "columns": 4,
           "animations": {
-            "idle": { "row": 0, "frames": 4, "fps": 8, "loop": true },
-            "open": { "row": 1, "frames": 8, "fps": 12, "loop": false }
+            "idle": {
+              "row": 0,
+              "frames": 4,
+              "fps": 8,
+              "loop": true
+            },
+            "open": {
+              "row": 1,
+              "frames": 8,
+              "fps": 12,
+              "loop": false
+            }
           }
         },
         "drop_weight": 9,
@@ -498,7 +718,7 @@
         "coins_min": 200,
         "coins_max": 500,
         "health_potions": 2,
-        "spell_drop_chance": 1.0,
+        "spell_drop_chance": 1,
         "spell_count": 1,
         "level_up_bonus": 1
       },
@@ -511,8 +731,18 @@
           "frame_height": 64,
           "columns": 4,
           "animations": {
-            "idle": { "row": 0, "frames": 6, "fps": 10, "loop": true },
-            "open": { "row": 1, "frames": 10, "fps": 15, "loop": false }
+            "idle": {
+              "row": 0,
+              "frames": 6,
+              "fps": 10,
+              "loop": true
+            },
+            "open": {
+              "row": 1,
+              "frames": 10,
+              "fps": 15,
+              "loop": false
+            }
           }
         },
         "drop_weight": 1,
@@ -520,7 +750,7 @@
         "coins_min": 1000,
         "coins_max": 1000,
         "health_potions": 3,
-        "spell_drop_chance": 1.0,
+        "spell_drop_chance": 1,
         "spell_count": 2,
         "level_up_bonus": 2
       }

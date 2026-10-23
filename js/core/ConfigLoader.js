@@ -130,6 +130,17 @@ export class ConfigLoader {
         if (m[k] !== undefined && !(m[k] >= 0 && m[k] <= 0.95)) errors.push('monster ' + m.id + ' bad ' + k);
       }
     }
+    // Ближний бой (melee): монстры с movement_type chase бьют как только
+    // дистанция <= melee_range, а не «внутри персонажа». Боссы — тем же полем.
+    // melee_range = player.radius + enemy.radius + запас (~4-6px).
+    for (const m of (b.monsters || [])) {
+      if (m.melee_range !== undefined && !(m.melee_range > 0)) {
+        errors.push('monster ' + m.id + ' bad melee_range (must be > 0)');
+      }
+      if ((m.movement_type === 'chase' || m.movement_type === 'teleport') && m.melee_range === undefined) {
+        errors.push('monster ' + m.id + ' chase without melee_range (add melee_range: player.radius + enemy.radius + запас)');
+      }
+    }
     if (b.chests && b.chests.loot_scatter) {
       const ls = b.chests.loot_scatter;
       if (!(ls.scatter_speed_min >= 0) || !(ls.scatter_speed_max >= ls.scatter_speed_min)) errors.push('chests.loot_scatter bad speeds');
@@ -176,6 +187,9 @@ export class ConfigLoader {
       if (String(p.sprite || '').includes('#')) errors.push('prop ' + p.id + ' sprite contains # (must be fixed)');
       if (!p.frames) errors.push('prop ' + p.id + ' missing frames');
       else errors.push(...ConfigLoader.validateFrames(p.frames, 'prop ' + p.id));
+      if (p.variability !== undefined && !(Number.isInteger(p.variability) && p.variability >= 1 && p.variability <= 16)) {
+        errors.push('prop ' + p.id + ' bad variability (must be integer 1..16)');
+      }
     }
 
     for (const c of (((b.chests || {}).types) || [])) {

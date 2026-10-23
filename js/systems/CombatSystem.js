@@ -67,14 +67,20 @@ export class CombatSystem {
   }
 
   // Контакт: игрок проходит сквозь (блока нет), но урон при пересечении хитбоксов.
+  // Ближний бой (melee_range): монстр бьёт не «внутри персонажа», а как только
+  // дистанция <= max(melee_range, player.radius + enemy.radius). По умолчанию
+  // melee_range = player.radius + enemy.radius (касание хитбоксов).
   // dmgMul — множитель урона (рывок босса: contact_mul из конфига).
   contactDamage(player, enemies, dmgMulByEnemy) {
     if (!player.alive) return;
     for (const e of enemies) {
       if (!e.alive || e.deathT > 0) continue;
+      const reach = Math.max(
+        player.radius + e.radius,
+        (e.cfg && e.cfg.melee_range) || 0
+      );
       const dx = player.x - e.x, dy = player.y - e.y;
-      const rr = player.radius + e.radius;
-      if (dx * dx + dy * dy < rr * rr) {
+      if (dx * dx + dy * dy < reach * reach) {
         let mul = 1;
         if (typeof dmgMulByEnemy === 'function') {
           mul = dmgMulByEnemy(e) || 1;

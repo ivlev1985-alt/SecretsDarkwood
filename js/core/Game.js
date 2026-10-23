@@ -860,7 +860,8 @@ export class Game {
       const softs = defs.filter((d) => !d.collidable);
       const pool = (Math.random() < 0.3 && solids.length) ? solids : (softs.length ? softs : defs);
       const cfg = pool[(Math.random() * pool.length) | 0];
-      this.props.push(new Prop(cfg, P.x + Math.cos(a) * r, P.y + Math.sin(a) * r));
+      // variability>1: случайный вариант внешности из N строк спрайта
+      this.props.push(new Prop(cfg, P.x + Math.cos(a) * r, P.y + Math.sin(a) * r, Prop.pickVariant(cfg, Math.random)));
     }
   }
 
