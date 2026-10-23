@@ -70,30 +70,30 @@
       "melee_range": 34
     },
     {
-      "id": "pixie",
-      "name_key": "monster_pixie",
-      "sprite": "monsters/pixie.png",
+      "id": "dementor",
+      "name_key": "monster_dementor",
+      "sprite": "monsters/dementor.png",
       "frames": {
-        "frame_width": 48,
-        "frame_height": 48,
-        "columns": 4,
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 6,
         "animations": {
           "walk": {
             "row": 0,
-            "frames": 4,
+            "frames": 6,
             "fps": 12,
             "loop": true
           },
           "attack": {
             "row": 1,
-            "frames": 3,
-            "fps": 10,
+            "frames": 6,
+            "fps": 12,
             "loop": false
           },
           "death": {
             "row": 2,
-            "frames": 4,
-            "fps": 8,
+            "frames": 6,
+            "fps": 12,
             "loop": false
           }
         }
