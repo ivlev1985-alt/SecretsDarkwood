@@ -488,7 +488,7 @@
     {
       "id": "small_rock",
       "sprite": "environment/prop_small_rock.png",
-      "variability": 1,
+      "variability": 10,
       "frames": {
         "frame_width": 64,
         "frame_height": 64,
