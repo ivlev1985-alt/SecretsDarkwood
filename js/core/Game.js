@@ -1237,13 +1237,11 @@ export class Game {
     ctx.fillRect(0, 0, W, H);
 
     if (st === 'menu') {
-      this._drawGrid(ctx, W, H);
       this.menu.draw(ctx, this, W, H);
     } else {
       // мир
       ctx.save();
       this.camera.apply(ctx, W, H);
-      this._drawGrid(ctx, W, H);
       this._drawProps(ctx);
       for (const a of this.skills.areas) {
         ctx.globalAlpha = 0.35;
@@ -1407,18 +1405,5 @@ export class Game {
     }
     ctx.fillStyle = color;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
-  }
-
-  _drawGrid(ctx, W, H) {
-    const step = 64;
-    const cx = this.camera ? this.camera.x : 0, cy = this.camera ? this.camera.y : 0;
-    const x0 = Math.floor((cx - W / 2) / step) * step;
-    const y0 = Math.floor((cy - H / 2) / step) * step;
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = x0; x < cx + W / 2 + step; x += step) { ctx.moveTo(x, cy - H / 2); ctx.lineTo(x, cy + H / 2); }
-    for (let y = y0; y < cy + H / 2 + step; y += step) { ctx.moveTo(cx - W / 2, y); ctx.lineTo(cx + W / 2, y); }
-    ctx.stroke();
   }
 }

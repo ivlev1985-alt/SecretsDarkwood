@@ -30,7 +30,7 @@
     }
   },
   "visuals": {
-    "background_color": "#1a1a2e",
+    "background_color": "#2f3836",
     "damage_text_color": "#ffcc00",
     "heal_text_color": "#00ff88",
     "global_sprite_scale": 1.0,
