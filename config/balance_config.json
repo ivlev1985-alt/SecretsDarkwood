@@ -548,7 +548,7 @@
     {
       "id": "big_boulder",
       "sprite": "environment/prop_big_boulder.png",
-      "variability": 1,
+      "variability": 8,
       "frames": {
         "frame_width": 96,
         "frame_height": 96,
