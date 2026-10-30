@@ -623,7 +623,8 @@
         }
       },
       "collidable": false,
-      "slowdown_factor": 1
+      "slowdown_factor": 1,
+      "layer": 0
     }
   ],
   "chests": {

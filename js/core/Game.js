@@ -897,22 +897,32 @@ export class Game {
   }
 
   _drawProps(ctx) {
+    // Два прохода: сначала слой layer===0 (пятна земли), поверх — остальные пропсы,
+    // иначе пятна 256×256 перекрывают камни/озёра.
     for (const pr of this.props) {
-      if (!pr.alive) continue;
-      const img = this.assets.get(pr.cfg.sprite);
-      if (img && img.tagName !== 'CANVAS') {
-        pr.draw(ctx, this.assets, pr.cfg.sprite, pr.w, pr.h, 1, '#555');
-      } else if (pr.cfg.collidable) {
-        ctx.fillStyle = '#4a4a5e';
-        ctx.fillRect(pr.x - pr.radius, pr.y - pr.radius, pr.radius * 2, pr.radius * 2);
-        ctx.strokeStyle = '#888';
-        ctx.strokeRect(pr.x - pr.radius, pr.y - pr.radius, pr.radius * 2, pr.radius * 2);
-      } else {
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-        ctx.beginPath();
-        ctx.arc(pr.x, pr.y, pr.radius * 0.7, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      if (!pr.alive || pr.cfg.layer !== 0) continue;
+      this._drawProp(ctx, pr);
+    }
+    for (const pr of this.props) {
+      if (!pr.alive || pr.cfg.layer === 0) continue;
+      this._drawProp(ctx, pr);
+    }
+  }
+
+  _drawProp(ctx, pr) {
+    const img = this.assets.get(pr.cfg.sprite);
+    if (img && img.tagName !== 'CANVAS') {
+      pr.draw(ctx, this.assets, pr.cfg.sprite, pr.w, pr.h, 1, '#555');
+    } else if (pr.cfg.collidable) {
+      ctx.fillStyle = '#4a4a5e';
+      ctx.fillRect(pr.x - pr.radius, pr.y - pr.radius, pr.radius * 2, pr.radius * 2);
+      ctx.strokeStyle = '#888';
+      ctx.strokeRect(pr.x - pr.radius, pr.y - pr.radius, pr.radius * 2, pr.radius * 2);
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.beginPath();
+      ctx.arc(pr.x, pr.y, pr.radius * 0.7, 0, Math.PI * 2);
+      ctx.stroke();
     }
   }
 
