@@ -604,33 +604,8 @@
       },
       "collidable": true,
       "collision_radius": 128
-    },
-    {
-      "id": "ground_patch",
-      "sprite": "environment/prop_ground_patch.png",
-      "variability": 16,
-      "frames": {
-        "frame_width": 256,
-        "frame_height": 256,
-        "columns": 1,
-        "animations": {
-          "idle": {
-            "row": 0,
-            "frames": 1,
-            "fps": 1,
-            "loop": true
-          }
-        }
-      },
-      "collidable": false,
-      "slowdown_factor": 1,
-      "layer": 0
     }
   ],
-  "prop_density": {
-    "objects": 40,
-    "ground_patches": 400
-  },
   "chests": {
     "enabled": true,
     "spawn_interval_sec": 60,

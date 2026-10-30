@@ -31,6 +31,11 @@
   },
   "visuals": {
     "background_color": "#2f3836",
+    "ground": {
+      "sprite": "environment/ground_tile.png",
+      "tile_size": 736,
+      "variability": 1
+    },
     "damage_text_color": "#ffcc00",
     "heal_text_color": "#00ff88",
     "global_sprite_scale": 1.0,

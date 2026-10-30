@@ -25,6 +25,7 @@ export class AssetLoader {
     if (g.audio.music_menu) audio.add(g.audio.music_menu);
     if (g.audio.music_battle) audio.add(g.audio.music_battle);
     if (g.ui) for (const k of ['main_menu_bg', 'buttons_sprite', 'panels_sprite', 'icons_sprite']) if (g.ui[k]) img.add(g.ui[k]);
+    if (g.visuals && g.visuals.ground && g.visuals.ground.sprite) img.add(g.visuals.ground.sprite);
     for (const m of (b.monsters || [])) if (m.sprite) img.add(m.sprite);
     for (const p of (b.environment_props || [])) if (p.sprite) img.add(p.sprite);
     for (const c of (((b.chests || {}).types) || [])) if (c.sprite) img.add(c.sprite);

@@ -840,45 +840,28 @@ export class Game {
   }
 
   // --- пропсы окружения: плотность вокруг игрока, slowdown, push-out ---
-  // Два независимых бюджета (prop_density в конфиге): объекты (layer!==0) и пятна
-  // земли (layer===0). Частоту пятен задаём отдельно, не трогая камни/лужи/озёра.
   _updateProps(dt) {
     void dt;
     const defs = this.config.balance_config.environment_props || [];
     if (!defs.length) return;
     const P = this.player;
-    const dens = this.config.balance_config.prop_density || {};
-    const objTarget = dens.objects ?? 40;
-    const patchTarget = dens.ground_patches ?? 0;
-    const objDefs = defs.filter((d) => d.layer !== 0);
-    const patchDefs = defs.filter((d) => d.layer === 0);
-    // чистка далёких + пересчёт живых по бюджетам
-    let objCount = 0, patchCount = 0;
+    // чистка далёких
     for (let i = this.props.length - 1; i >= 0; i--) {
       const pr = this.props[i];
-      if (Math.hypot(pr.x - P.x, pr.y - P.y) > 1200) { this.props.splice(i, 1); continue; }
-      if (pr.cfg.layer === 0) patchCount++; else objCount++;
+      if (Math.hypot(pr.x - P.x, pr.y - P.y) > 1200) this.props.splice(i, 1);
     }
-    // объекты в кольце 500–950: непроходимые реже (30%)
+    // плотность ~40 в кольце 500–950
     let guard = 0;
-    while (objCount < objTarget && objDefs.length && guard++ < 12) {
+    while (this.props.length < 40 && guard++ < 12) {
       const a = Math.random() * Math.PI * 2;
       const r = 500 + Math.random() * 450;
-      const solids = objDefs.filter((d) => d.collidable);
-      const softs = objDefs.filter((d) => !d.collidable);
-      const pool = (Math.random() < 0.3 && solids.length) ? solids : (softs.length ? softs : objDefs);
+      // collidable реже (30%)
+      const solids = defs.filter((d) => d.collidable);
+      const softs = defs.filter((d) => !d.collidable);
+      const pool = (Math.random() < 0.3 && solids.length) ? solids : (softs.length ? softs : defs);
       const cfg = pool[(Math.random() * pool.length) | 0];
+      // variability>1: случайный вариант внешности из N строк спрайта
       this.props.push(new Prop(cfg, P.x + Math.cos(a) * r, P.y + Math.sin(a) * r, Prop.pickVariant(cfg, Math.random)));
-      objCount++;
-    }
-    // пятна земли — отдельный бюджет (variability>1 даёт случайный вариант из N строк)
-    guard = 0;
-    while (patchCount < patchTarget && patchDefs.length && guard++ < 12) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 500 + Math.random() * 450;
-      const cfg = patchDefs[(Math.random() * patchDefs.length) | 0];
-      this.props.push(new Prop(cfg, P.x + Math.cos(a) * r, P.y + Math.sin(a) * r, Prop.pickVariant(cfg, Math.random)));
-      patchCount++;
     }
   }
 
@@ -913,15 +896,51 @@ export class Game {
     }
   }
 
-  _drawProps(ctx) {
-    // Два прохода: сначала слой layer===0 (пятна земли), поверх — остальные пропсы,
-    // иначе пятна 256×256 перекрывают камни/озёра.
-    for (const pr of this.props) {
-      if (!pr.alive || pr.cfg.layer !== 0) continue;
-      this._drawProp(ctx, pr);
+  // Тайловый пол из visuals.ground (world space, вызывается под камерой).
+  // variability>1: вариант тайла детерминированно выбирается из координат ячейки,
+  // чтобы мозаика не «мерцала» при движении камеры.
+  _drawGround(ctx, W, H) {
+    const gr = this.config.game_config.visuals.ground;
+    if (!gr || !gr.sprite) return;
+    const img = this.assets.get(gr.sprite);
+    if (!img || img.tagName === 'CANVAS') return; // нет арта — остаётся background_color
+    const ts = gr.tile_size || 736;
+    const cx = this.camera.x, cy = this.camera.y;
+    const x0 = Math.floor((cx - W / 2) / ts) * ts;
+    const y0 = Math.floor((cy - H / 2) / ts) * ts;
+    const x1 = cx + W / 2, y1 = cy + H / 2;
+    const vars = Math.max(1, gr.variability || 1);
+    for (let x = x0; x < x1; x += ts) {
+      for (let y = y0; y < y1; y += ts) {
+        let src = img;
+        if (vars > 1) {
+          // хеш ячейки -> вариант 0..vars-1 (строка v*ts в атласе)
+          const h = ((x / ts) * 73856093 ^ (y / ts) * 19349663) >>> 0;
+          const v = h % vars;
+          src = this._groundVariant(v, img, ts, vars);
+        }
+        ctx.drawImage(src, x, y, ts, ts);
+      }
     }
+  }
+
+  // Кэш нарезки варианта тайла из вертикального атласа (vars строк по ts).
+  _groundVariant(v, img, ts, vars) {
+    if (!this._groundCache) this._groundCache = new Map();
+    const key = v + ':' + img.src;
+    let c = this._groundCache.get(key);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = ts; c.height = ts;
+      c.getContext('2d').drawImage(img, 0, v * ts, ts, ts, 0, 0, ts, ts);
+      this._groundCache.set(key, c);
+    }
+    return c;
+  }
+
+  _drawProps(ctx) {
     for (const pr of this.props) {
-      if (!pr.alive || pr.cfg.layer === 0) continue;
+      if (!pr.alive) continue;
       this._drawProp(ctx, pr);
     }
   }
@@ -1269,6 +1288,7 @@ export class Game {
       // мир
       ctx.save();
       this.camera.apply(ctx, W, H);
+      this._drawGround(ctx, W, H);
       this._drawProps(ctx);
       for (const a of this.skills.areas) {
         ctx.globalAlpha = 0.35;
