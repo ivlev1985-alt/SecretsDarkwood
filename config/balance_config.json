@@ -627,6 +627,10 @@
       "layer": 0
     }
   ],
+  "prop_density": {
+    "objects": 40,
+    "ground_patches": 400
+  },
   "chests": {
     "enabled": true,
     "spawn_interval_sec": 60,

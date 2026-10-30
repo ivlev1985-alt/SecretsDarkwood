@@ -840,28 +840,45 @@ export class Game {
   }
 
   // --- пропсы окружения: плотность вокруг игрока, slowdown, push-out ---
+  // Два независимых бюджета (prop_density в конфиге): объекты (layer!==0) и пятна
+  // земли (layer===0). Частоту пятен задаём отдельно, не трогая камни/лужи/озёра.
   _updateProps(dt) {
     void dt;
     const defs = this.config.balance_config.environment_props || [];
     if (!defs.length) return;
     const P = this.player;
-    // чистка далёких
+    const dens = this.config.balance_config.prop_density || {};
+    const objTarget = dens.objects ?? 40;
+    const patchTarget = dens.ground_patches ?? 0;
+    const objDefs = defs.filter((d) => d.layer !== 0);
+    const patchDefs = defs.filter((d) => d.layer === 0);
+    // чистка далёких + пересчёт живых по бюджетам
+    let objCount = 0, patchCount = 0;
     for (let i = this.props.length - 1; i >= 0; i--) {
       const pr = this.props[i];
-      if (Math.hypot(pr.x - P.x, pr.y - P.y) > 1200) this.props.splice(i, 1);
+      if (Math.hypot(pr.x - P.x, pr.y - P.y) > 1200) { this.props.splice(i, 1); continue; }
+      if (pr.cfg.layer === 0) patchCount++; else objCount++;
     }
-    // плотность ~40 в кольце 500–950
+    // объекты в кольце 500–950: непроходимые реже (30%)
     let guard = 0;
-    while (this.props.length < 40 && guard++ < 12) {
+    while (objCount < objTarget && objDefs.length && guard++ < 12) {
       const a = Math.random() * Math.PI * 2;
       const r = 500 + Math.random() * 450;
-      // collidable реже (30%)
-      const solids = defs.filter((d) => d.collidable);
-      const softs = defs.filter((d) => !d.collidable);
-      const pool = (Math.random() < 0.3 && solids.length) ? solids : (softs.length ? softs : defs);
+      const solids = objDefs.filter((d) => d.collidable);
+      const softs = objDefs.filter((d) => !d.collidable);
+      const pool = (Math.random() < 0.3 && solids.length) ? solids : (softs.length ? softs : objDefs);
       const cfg = pool[(Math.random() * pool.length) | 0];
-      // variability>1: случайный вариант внешности из N строк спрайта
       this.props.push(new Prop(cfg, P.x + Math.cos(a) * r, P.y + Math.sin(a) * r, Prop.pickVariant(cfg, Math.random)));
+      objCount++;
+    }
+    // пятна земли — отдельный бюджет (variability>1 даёт случайный вариант из N строк)
+    guard = 0;
+    while (patchCount < patchTarget && patchDefs.length && guard++ < 12) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 500 + Math.random() * 450;
+      const cfg = patchDefs[(Math.random() * patchDefs.length) | 0];
+      this.props.push(new Prop(cfg, P.x + Math.cos(a) * r, P.y + Math.sin(a) * r, Prop.pickVariant(cfg, Math.random)));
+      patchCount++;
     }
   }
 
