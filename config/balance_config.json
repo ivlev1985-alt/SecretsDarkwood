@@ -214,9 +214,9 @@
       "melee_range": 32
     },
     {
-      "id": "boss_dendroid",
-      "name_key": "monster_boss_dendroid",
-      "sprite": "monsters/boss_dendroid.png",
+      "id": "boss_golem",
+      "name_key": "monster_boss_golem",
+      "sprite": "monsters/boss_golem.png",
       "frames": {
         "frame_width": 128,
         "frame_height": 128,
