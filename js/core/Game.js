@@ -1151,10 +1151,15 @@ export class Game {
         if (proj) {
           this.skills.enemyFire(e.x, e.y, this.player.x, this.player.y, proj, e.damage);
           e.attackCd = (e.cfg.attack_cooldown_ms || 2000) / 1000;
-          try { e.setAnim('attack'); } catch (err) {}
+          e.playAttack();
         }
-      } else {
+      } else if (e.attackT <= 0) {
+        // walk не перебиваем, пока проигрывается attack
         try { e.setAnim('walk'); } catch (err) {}
+      }
+      if (e.attackT > 0) {
+        e.attackT -= dt;
+        if (e.attackT <= 0) { e.attackT = 0; try { e.setAnim('walk'); } catch (err) {} }
       }
       // Холод замедляет: скорость из effectiveSpeed (slowT/slowFactor из Enemy)
       const spd = (typeof e.effectiveSpeed === 'number') ? e.effectiveSpeed : e.speed;

@@ -26,10 +26,21 @@ export class Enemy extends Entity {
     this.burnResist = cfg.burn_resist ?? 0;
     this.makeAnim(cfg.frames, 'walk');
     this.deathT = 0; // время проигрывания death перед удалением
+    this.attackT = 0; // идёт attack-анимация (сек), walk не перебивает
   }
 
   get rw() { return this.cfg.frames.frame_width; }
   get rh() { return this.cfg.frames.frame_height; }
+
+  // Запуск attack-анимации (ranged-выстрел). Длительность = frames/fps из конфига;
+  // пока attackT > 0, внешняя логика не должна переключать на walk.
+  playAttack() {
+    const a = this.cfg.frames && this.cfg.frames.animations && this.cfg.frames.animations.attack;
+    if (!a) return false;
+    this.attackT = a.frames / a.fps;
+    try { this.setAnim('attack'); } catch (e) {}
+    return true;
+  }
 
   takeDamage(amount, kx = 0, ky = 0) {
     if (!this.alive || this.deathT > 0) return 0;
