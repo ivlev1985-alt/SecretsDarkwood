@@ -1366,10 +1366,16 @@ export class Game {
           ctx.fillStyle = '#f00'; ctx.fillRect(e.x - w / 2, e.y - e.rh * e.scale / 2 - 12, w * (e.hp / e.maxHp), 6);
         }
       }
-      // трупы: проигрывают death-анимацию, но уже не участвуют в логике
+      // трупы: проигрывают death-анимацию, но уже не участвуют в логике.
+      // Плавное исчезновение в конце жизни (по аналогии с открытым сундуком).
       for (const e of this.enemies) {
         if (e.deathT <= 0) continue;
+        const da = e.cfg.frames && e.cfg.frames.animations && e.cfg.frames.animations.death;
+        const dur = (da ? da.frames / da.fps : 0.4) + 0.1; // совпадает с Enemy.updateDeath
+        const fade = Math.min(0.4, dur * 0.5); // секунды на угасание в конце
+        ctx.globalAlpha = Math.max(0, Math.min(1, (dur - e.deathT) / fade));
         e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), '#555');
+        ctx.globalAlpha = 1;
       }
       if (this.player) {
         const hasAnim = !!(this.player.anim && this.player.anim.getRect);
