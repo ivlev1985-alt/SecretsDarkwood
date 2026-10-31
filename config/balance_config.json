@@ -242,7 +242,7 @@
           },
           "death": {
             "row": 3,
-            "frames": 8,
+            "frames": 6,
             "fps": 6,
             "loop": false
           }

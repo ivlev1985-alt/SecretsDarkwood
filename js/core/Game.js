@@ -738,11 +738,14 @@ export class Game {
         if (proj) {
           this.skills.enemyFire(e.x, e.y, this.player.x, this.player.y, proj, e.damage);
           e.attackCd = (e.cfg.attack_cooldown_ms || 1800) / 1000;
-          try { e.setAnim('attack'); } catch (err) {}
+          e.playAttack();
           return null;
         }
       }
-      try { e.setAnim('walk'); } catch (err) {}
+      // walk не перебиваем attack (attackT) и фазы рывка (dashState)
+      if (e.attackT <= 0 && e.dashState === 'idle') {
+        try { e.setAnim('walk'); } catch (err) {}
+      }
     }
     // 2) Веерный залп дракона: count снарядов с разбросом spread_deg,
     // урон каждого = урон босса × volley.damage_mul (1.5)
@@ -1362,6 +1365,11 @@ export class Game {
           ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - w / 2, e.y - e.rh * e.scale / 2 - 12, w, 6);
           ctx.fillStyle = '#f00'; ctx.fillRect(e.x - w / 2, e.y - e.rh * e.scale / 2 - 12, w * (e.hp / e.maxHp), 6);
         }
+      }
+      // трупы: проигрывают death-анимацию, но уже не участвуют в логике
+      for (const e of this.enemies) {
+        if (e.deathT <= 0) continue;
+        e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), '#555');
       }
       if (this.player) {
         const hasAnim = !!(this.player.anim && this.player.anim.getRect);
