@@ -1367,13 +1367,11 @@ export class Game {
         }
       }
       // трупы: проигрывают death-анимацию, но уже не участвуют в логике.
-      // Плавное исчезновение в конце жизни (по аналогии с открытым сундуком).
+      // Плавное исчезновение ПОСЛЕ анимации (по аналогии с открытым сундуком).
       for (const e of this.enemies) {
         if (e.deathT <= 0) continue;
-        const da = e.cfg.frames && e.cfg.frames.animations && e.cfg.frames.animations.death;
-        const dur = (da ? da.frames / da.fps : 0.4) + 0.1; // совпадает с Enemy.updateDeath
-        const fade = Math.min(0.4, dur * 0.5); // секунды на угасание в конце
-        ctx.globalAlpha = Math.max(0, Math.min(1, (dur - e.deathT) / fade));
+        const { dur, fade } = e.deathTiming();
+        ctx.globalAlpha = Math.max(0, Math.min(1, (dur + fade - e.deathT) / fade));
         e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), '#555');
         ctx.globalAlpha = 1;
       }

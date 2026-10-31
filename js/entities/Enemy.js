@@ -117,15 +117,21 @@ export class Enemy extends Entity {
     return { burnDamage };
   }
 
+  // Длительность death и время угасания — единый источник для updateDeath и рендера.
+  // Труп живёт dur (полная анимация, непрозрачный) + fade (плавное исчезновение).
+  deathTiming() {
+    const a = this.cfg.frames && this.cfg.frames.animations && this.cfg.frames.animations.death;
+    const dur = a ? a.frames / a.fps : 0.4;
+    return { dur, fade: Math.min(0.4, dur * 0.5) };
+  }
+
   // Возвращает true когда труп можно удалять
   updateDeath(dt) {
     if (this.deathT <= 0) return false;
     this.deathT += dt;
     this.updateAnim(dt);
-    // длительность death = frames/fps
-    const a = this.cfg.frames.animations.death;
-    const dur = a ? a.frames / a.fps : 0.4;
-    if (this.deathT >= dur + 0.1) { this.alive = false; return true; }
+    const { dur, fade } = this.deathTiming();
+    if (this.deathT >= dur + fade) { this.alive = false; return true; }
     return false;
   }
 
