@@ -1340,7 +1340,7 @@ export class Game {
         ctx.globalAlpha = 1;
       }
       for (const e of this.enemies) {
-        if (!e.alive) continue;
+        if (!e.alive || e.deathT > 0) continue;
         e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), e.isBoss ? '#c0c' : '#a33');
         // статусы: цвета ТОЛЬКО из balance.status_effects (без хардкода в коде по смыслу)
         const stCfg = (this.config.balance_config && this.config.balance_config.status_effects) || {};
