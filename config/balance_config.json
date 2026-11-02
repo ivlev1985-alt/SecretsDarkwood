@@ -568,9 +568,9 @@
     {
       "id": "stone_wall",
       "sprite": "environment/prop_stone_wall.png",
-      "variability": 1,
+      "variability": 5,
       "frames": {
-        "frame_width": 128,
+        "frame_width": 192,
         "frame_height": 128,
         "columns": 1,
         "animations": {
