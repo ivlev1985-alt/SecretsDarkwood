@@ -48,7 +48,7 @@
       "cooldown_ms": 1200,
       "projectile_speed": 400,
       "projectile_lifetime_ms": 600,
-      "projectile_radius": 5,
+      "projectile_radius": 7,
       "projectile_sprite": "projectiles/arcane_nova.png",
       "projectile_frames": {
         "frame_width": 32,
