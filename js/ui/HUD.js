@@ -1,4 +1,5 @@
 ﻿import { drawButton, drawPanel, hit } from './widgets.js';
+import { drawSkillIcon, iconKey, hexRingLayout } from './hexIcons.js';
 
 // HUD по ГДД п.6.2–6.5: всё сверху/снизу, портрет. + попап инвентаря (read-only билд).
 export class HUD {
@@ -60,36 +61,32 @@ export class HUD {
     const R = this.layout(W, H);
     drawButton(ctx, R.pause, '⏸');
     drawButton(ctx, R.inv, '🎒');
-    // Умения СТРОГО между кнопками: иконка-плашка как у сущностей, уровень ПОД иконкой
+    // Умения: шестиугольные иконки в раскладке «олимпийские кольца» (2 ряда, нижний со смещением).
     const owned = game.skills.ownedList();
     const left = R.pause.x + R.pause.w + 8;
     const right = R.inv.x - 8;
+    const cx = (left + right) / 2;
     const avail = right - left;
-    let s = 32, cellW = 46;
-    let perRow = Math.max(1, Math.floor(avail / cellW));
-    if (owned.length > perRow) { s = 24; cellW = 34; perRow = Math.max(1, Math.floor(avail / cellW)); }
-    const baseY = H - 56; // иконка s px + подпись 12px в полосе кнопок
+    let s = 32;
+    // Подбираем размер: если не влезает в один ряд — уменьшаем
+    const stepX = s * Math.sqrt(3) + 4;
+    let perRow = Math.max(1, Math.floor(avail / stepX));
+    if (owned.length > perRow) { s = 24; perRow = Math.max(1, Math.floor(avail / (s * Math.sqrt(3) + 4))); }
+    const baseY = H - 56;
+    const positions = hexRingLayout(owned.length, s, cx, baseY, 4);
     owned.forEach((st, idx) => {
-      const row = Math.floor(idx / perRow);
-      const col = idx % perRow;
-      const inRow = Math.min(perRow, owned.length - row * perRow);
-      const y = baseY - row * (s + 16);
-      const x = left + ((avail - inRow * cellW) / 2) + col * cellW + (cellW - s) / 2;
-      // плашка как у сущностей без арта
-      ctx.fillStyle = '#888';
-      ctx.fillRect(x, y, s, s);
-      ctx.strokeStyle = HUD.skillColor(st.cfg.type);
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, s, s);
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(x + (st.cfg.type === 'to_target' ? s - 10 : 4), y + s / 2 - 4, 6, 8);
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold ' + (s > 24 ? 11 : 9) + 'px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(HUD.skillCode(st.cfg.id), x + s / 2, y + s / 2 + 4);
+      if (idx >= positions.length) return;
+      const p = positions[idx];
+      const key = iconKey(st.cfg);
+      drawSkillIcon(ctx, game, key, p.x, p.y, s, {
+        borderColor: HUD.skillColor(st.cfg.type),
+        label: false
+      });
+      // Уровень под иконкой
       ctx.fillStyle = '#fff';
       ctx.font = (s > 24 ? 11 : 9) + 'px monospace';
-      ctx.fillText('Lv.' + st.level, x + s / 2, y + s + 12);
+      ctx.textAlign = 'center';
+      ctx.fillText('Lv.' + st.level, p.x, p.y + s / 2 + 12);
     });
     ctx.textAlign = 'center';
   }

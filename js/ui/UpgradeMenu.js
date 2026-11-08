@@ -1,4 +1,5 @@
 ﻿import { drawButton, hit } from './widgets.js';
+import { drawSkillIcon, iconKey } from './hexIcons.js';
 
 // Окно levelup (GDD 6.8): 3 карточки, пауза мира.
 export class UpgradeMenu {
@@ -27,14 +28,22 @@ export class UpgradeMenu {
       ctx.fillRect(r.x, r.y, r.w, r.h);
       ctx.strokeStyle = '#ffd34d';
       ctx.strokeRect(r.x, r.y, r.w, r.h);
+      // Иконка слева
+      const key = iconKey(c);
+      const iconSize = 48;
+      drawSkillIcon(ctx, game, key, r.x + 34, r.y + r.h / 2, iconSize, {
+        borderColor: '#ffd34d',
+        label: false
+      });
+      // Текст справа от иконки
       ctx.fillStyle = '#ffd34d';
       ctx.font = 'bold 14px monospace';
-      ctx.fillText(c.title, r.x + 12, r.y + 24);
+      ctx.fillText(c.title, r.x + 60, r.y + 28);
       ctx.fillStyle = '#fff';
       ctx.font = '12px monospace';
-      ctx.fillText((c.desc || '').slice(0, 48), r.x + 12, r.y + 44);
+      ctx.fillText((c.desc || '').slice(0, 48), r.x + 60, r.y + 48);
       ctx.fillStyle = '#8f8';
-      ctx.fillText(c.info || '', r.x + 12, r.y + 64);
+      ctx.fillText(c.info || '', r.x + 60, r.y + 68);
     });
   }
   click(game, x, y) {

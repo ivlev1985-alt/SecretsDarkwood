@@ -48,6 +48,32 @@
       }
     }
   },
+  "icons_hex": {
+    "sprite": "ui/icons_hex.png",
+    "frames": {
+      "frame_width": 96,
+      "frame_height": 96,
+      "columns": 8,
+      "animations": {
+        "magic_bolt": { "row": 0, "col": 0, "frames": 1, "fps": 1, "loop": false },
+        "arcane_nova": { "row": 0, "col": 1, "frames": 1, "fps": 1, "loop": false },
+        "fireball": { "row": 0, "col": 2, "frames": 1, "fps": 1, "loop": false },
+        "frost_ring": { "row": 0, "col": 3, "frames": 1, "fps": 1, "loop": false },
+        "fire_wall": { "row": 0, "col": 4, "frames": 1, "fps": 1, "loop": false },
+        "tornado": { "row": 0, "col": 5, "frames": 1, "fps": 1, "loop": false },
+        "lightning_chain": { "row": 0, "col": 6, "frames": 1, "fps": 1, "loop": false },
+        "passive_hp": { "row": 1, "col": 0, "frames": 1, "fps": 1, "loop": false },
+        "passive_speed": { "row": 1, "col": 1, "frames": 1, "fps": 1, "loop": false },
+        "passive_damage": { "row": 1, "col": 2, "frames": 1, "fps": 1, "loop": false },
+        "passive_attack_speed": { "row": 1, "col": 3, "frames": 1, "fps": 1, "loop": false },
+        "passive_pickup": { "row": 1, "col": 4, "frames": 1, "fps": 1, "loop": false },
+        "passive_crit": { "row": 1, "col": 5, "frames": 1, "fps": 1, "loop": false },
+        "passive_regen": { "row": 1, "col": 6, "frames": 1, "fps": 1, "loop": false },
+        "pet_up_range": { "row": 1, "col": 7, "frames": 1, "fps": 1, "loop": false },
+        "pet_up_magnet": { "row": 0, "col": 7, "frames": 1, "fps": 1, "loop": false }
+      }
+    }
+  },
   "hp_bar": {
     "sprite": "ui/hp_bar.png",
     "frames": {

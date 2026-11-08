@@ -58,6 +58,7 @@ export class UpgradeSystem {
       const d = this.petDefs.find((x) => x.id === c.id);
       return {
         ...c,
+        icon: d.icon || '',
         title: this.t(d.name_key),
         desc: this.t(d.desc_key),
         info: 'Lv. ' + c.levelFrom + ' → Lv. ' + c.levelTo
@@ -67,6 +68,7 @@ export class UpgradeSystem {
       const p = this.passivesCfg.find((x) => x.id === c.id);
       return {
         ...c,
+        icon: p.icon || '',
         title: this.t(p.name_key),
         desc: this.t(p.desc_key),
         info: 'Lv. ' + c.levelFrom + ' → Lv. ' + c.levelTo
@@ -76,6 +78,7 @@ export class UpgradeSystem {
     const w = st ? st.cfg : this.weaponsCfg.find((x) => x.id === c.id);
     return {
       ...c,
+      icon: w.icon || '',
       title: this.t(w.name_key),
       desc: this.t(w.desc_key),
       info: c.kind === 'newWeapon' ? 'NEW' : ('Lv. ' + c.levelFrom + ' → Lv. ' + c.levelTo)

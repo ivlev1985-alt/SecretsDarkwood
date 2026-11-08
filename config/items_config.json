@@ -158,7 +158,7 @@
   // value — прибавка в px за уровень.
   // ------------------------------------------------------------
   "pet_upgrades": [
-    { "id": "pet_range",  "name_key": "pet_up_range",  "desc_key": "pet_up_range_desc",  "value": 40, "max_level": 5 },
-    { "id": "pet_magnet", "name_key": "pet_up_magnet", "desc_key": "pet_up_magnet_desc", "value": 20, "max_level": 5 }
+    { "id": "pet_range",  "name_key": "pet_up_range",  "desc_key": "pet_up_range_desc",  "value": 40, "max_level": 5, "icon": "ui/icons_hex.png#pet_up_range" },
+    { "id": "pet_magnet", "name_key": "pet_up_magnet", "desc_key": "pet_up_magnet_desc",  "value": 20, "max_level": 5, "icon": "ui/icons_hex.png#pet_up_magnet" }
   ]
 }
