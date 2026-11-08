@@ -66,25 +66,45 @@ export function drawSkillIcon(ctx, game, key, x, y, size, opts = {}) {
   return false;
 }
 
-// Раскладка «олимпийские кольца»: 2 ряда со смещением нижнего на полшага.
-// <=3 иконок — один ряд; иначе верхний ряд floor(n/2) ("чуть выше"), нижний — остальные.
+// Раскладка «олимпийские кольца»: 2 ряда со смещением нижнего на полшага вправо.
+// Распределение по рядам:
+//   1 → [1,0]  2 → [1,1]  3 → [1,2]  4 → [2,2]  5 → [2,3]  6 → [3,3]  7 → [3,4]
 // cx — центр зоны по X, bottomY — нижняя граница нижнего ряда.
 // Возвращает [{ x, y }] в порядке: сначала верхний ряд, затем нижний.
 export function hexRingLayout(count, size, cx, bottomY, gap = 4) {
   const r = size / 2;
   const stepX = r * Math.sqrt(3) + gap; // горизонтальный шаг (pointy-top)
-  const stepY = r * 1.5 + gap * 0.5; // вертикальный шаг со сцепкой
+  const stepY = r * 1.5 + gap * 0.5;   // вертикальный шаг со сцепкой
   const pos = [];
-  if (count <= 3) {
+
+  // Распределение: [верхний, нижний]
+  const dist = { 1: [1, 0], 2: [1, 1], 3: [1, 2], 4: [2, 2], 5: [2, 3], 6: [3, 3], 7: [3, 4] };
+  const [topN, botN] = dist[count] || [Math.ceil(count / 2), Math.floor(count / 2)];
+
+  if (botN === 0) {
+    // Один ряд — по центру
     const y = bottomY - r;
-    for (let i = 0; i < count; i++) pos.push({ x: cx + (i - (count - 1) / 2) * stepX, y });
+    for (let i = 0; i < topN; i++) {
+      pos.push({ x: cx + (i - (topN - 1) / 2) * stepX, y });
+    }
     return pos;
   }
-  const topN = Math.floor(count / 2);
-  const botN = count - topN;
+
   const yBot = bottomY - r;
   const yTop = yBot - stepY;
-  for (let i = 0; i < topN; i++) pos.push({ x: cx + (i - (topN - 1) / 2) * stepX, y: yTop });
-  for (let i = 0; i < botN; i++) pos.push({ x: cx + (i - (botN - 1) / 2) * stepX, y: yBot });
+
+  // Верхний ряд — центрирован
+  for (let i = 0; i < topN; i++) {
+    pos.push({ x: cx + (i - (topN - 1) / 2) * stepX, y: yTop });
+  }
+
+  // Нижний ряд:
+  //  - если иконок столько же, сколько сверху (2/4/6) — сдвиг на полшага вправо;
+  //  - если на одну больше (3/5/7) — центрирован: иконки встают в пазы верхнего ряда (влево/вправо).
+  const shift = botN === topN ? stepX / 2 : 0;
+  for (let i = 0; i < botN; i++) {
+    pos.push({ x: cx + (i - (botN - 1) / 2) * stepX + shift, y: yBot });
+  }
+
   return pos;
 }
