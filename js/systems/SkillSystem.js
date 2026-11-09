@@ -12,6 +12,8 @@ export class SkillSystem {
     this.areas = []; // { cfg, level, x, y, ttl, tickT, color, weaponId }
     this.lightningFx = []; // { x1, y1, x2, y2, t, max } — ломаные молний
     this.auraTick = 0;
+    this.clock = 0; // общее время для кулдаунов попаданий орбитальных шаров
+    this._orbHitAt = new WeakMap(); // enemy -> время последнего попадания шаром
     this.pool = new Pool(() => new Projectile(), 128);
     for (const w of weaponsCfg) {
       this.weapons.set(w.id, { cfg: w, level: 0, active: false, cd: Math.random() * 0.5 });
@@ -56,6 +58,7 @@ export class SkillSystem {
 
   weaponCooldown(st, player) {
     const c = st.cfg;
+    if (c.type === 'orbit') return 0; // пассивная магия — без перезарядки
     const red = (c.cooldown_reduction_per_level || 0) * (st.level - 1);
     const cd = (c.cooldown_ms / 1000) * (1 - Math.min(0.7, red));
     return player ? cd / (player.attackSpeedMul || 1) : cd;
@@ -156,9 +159,12 @@ export class SkillSystem {
     // ctx: { player, enemies, onKill }
     const { player, enemies, onKill } = ctx;
     if (!player.alive) return;
+    this.clock += dt;
 
     for (const st of this.weapons.values()) {
       if (st.active === false) continue;
+      // орбитальная пассивка не кастуется по КД — считается каждый кадр ниже
+      if (st.cfg.type === 'orbit') { st.waiting = false; continue; }
       st.cd -= dt;
       if (st.cd > 0) continue;
       const c = st.cfg;
@@ -183,6 +189,9 @@ export class SkillSystem {
       st.waiting = !fired; // HUD: ждём цель — иконка не "перезаряжается"
       st.cd = fired ? this.weaponCooldown(st, player) : 0.25;
     }
+
+    // орбитальная пассивная магия (Кольцо холода): позиции шаров + урон касанием
+    this._updateOrbits(dt, ctx);
 
     // аура-ти idle не нужен; урон ауры — тиком
     this.auraTick -= dt;
@@ -347,6 +356,102 @@ export class SkillSystem {
     this.auraRadius = radius;
     this.auraColor = c.aura_color || '#00ccff';
     this.auraFlash = 0.2;
+  }
+
+  // Пассивная орбитальная магия («Кольцо холода»): ледяные шары летают вокруг
+  // игрока на ближней/дальней орбите. Количество шаров по уровням — из
+  // skills_config.orbit_levels; радиусы, период, размер и КД попадания — тоже.
+  _updateOrbits(dt, ctx) {
+    const { player, enemies, onKill } = ctx;
+    for (const st of this.weapons.values()) {
+      if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
+      const c = st.cfg;
+      const period = c.orbit_period_sec || 4;
+      st.orbitAngle = (st.orbitAngle || 0) + (Math.PI * 2 / period) * dt;
+      const lvls = c.orbit_levels || [];
+      const cnt = lvls[Math.min(st.level, lvls.length) - 1] || lvls[lvls.length - 1] || { near: 2, far: 0 };
+      const nearN = Math.max(0, cnt.near | 0);
+      const farN = Math.max(0, cnt.far | 0);
+      const nearR = c.orbit_near_radius ?? 70;
+      const farR = c.orbit_far_radius ?? 120;
+      const orbR = c.orb_radius ?? 10;
+      const a0 = st.orbitAngle;
+      const orbs = [];
+      for (let i = 0; i < nearN; i++) {
+        const a = a0 + (Math.PI * 2 * i) / nearN;
+        orbs.push({ x: player.x + Math.cos(a) * nearR, y: player.y + Math.sin(a) * nearR, r: orbR, far: false });
+      }
+      // Дальняя орбита смещена на полшага, чтобы шары чередовались с ближними.
+      // Если на дальней орбите всего один шар — берём полшага ближней,
+      // иначе он встал бы ровно за ближним шаром.
+      const farOffset = farN > 1
+        ? Math.PI / farN
+        : (nearN > 1 ? Math.PI / nearN : 0);
+      for (let i = 0; i < farN; i++) {
+        const a = a0 + farOffset + (Math.PI * 2 * i) / farN;
+        orbs.push({ x: player.x + Math.cos(a) * farR, y: player.y + Math.sin(a) * farR, r: orbR, far: true });
+      }
+      st.orbs = orbs;
+      if (!enemies || !enemies.length) continue;
+
+      const slow = this.weaponSlow(st);
+      const dmg = this.weaponDamage(st, player);
+      const hitCd = (c.orb_hit_cooldown_ms ?? 600) / 1000;
+      for (const o of orbs) {
+        for (const e of enemies) {
+          if (!e.alive || e.deathT > 0) continue;
+          const dx = e.x - o.x, dy = e.y - o.y;
+          const rr = orbR + (e.radius || 0);
+          if (dx * dx + dy * dy > rr * rr) continue;
+          const last = this._orbHitAt.get(e);
+          if (last !== undefined && this.clock - last < hitCd) continue;
+          this._orbHitAt.set(e, this.clock);
+          const was = e.hp;
+          const res = this.combat.rollDamage(dmg);
+          const d = Math.hypot(dx, dy) || 1;
+          e.takeDamage(res.damage, (dx / d) * 60, (dy / d) * 60);
+          if (slow) e.applySlow(slow.factor, slow.duration);
+          if (res.crit) this.combat.pushText(e.x, e.y - 20, Math.round(res.damage) + '!');
+          if (e.hp <= 0 && was > 0) {
+            this.combat.addKill(c.id);
+            if (onKill) onKill(e, c.id);
+          }
+        }
+      }
+    }
+  }
+
+  // Отрисовка ледяных шаров (программная — отдельный спрайт не нужен).
+  drawOrbits(ctx) {
+    for (const st of this.weapons.values()) {
+      if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
+      if (st.orbs) for (const o of st.orbs) this._drawOrb(ctx, o, st.cfg);
+    }
+  }
+
+  _drawOrb(ctx, o, c) {
+    const col = c.orb_color || '#00ccff';
+    const core = c.orb_color_core || '#eaffff';
+    const r = o.r || 10;
+    ctx.save();
+    // мягкое свечение
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(o.x, o.y, r * 1.9, 0, Math.PI * 2); ctx.fill();
+    // тело шара
+    ctx.globalAlpha = o.far ? 0.8 : 0.95;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, Math.PI * 2); ctx.fill();
+    // блик
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(o.x - r * 0.28, o.y - r * 0.28, r * 0.42, 0, Math.PI * 2); ctx.fill();
+    // ледяная кромка
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = core;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
   }
 
   _fireArea(st, ctx) {

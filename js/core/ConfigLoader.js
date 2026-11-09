@@ -166,7 +166,7 @@ export class ConfigLoader {
       const fr = w.projectile_frames || w.area_frames;
       if (fr) errors.push(...ConfigLoader.validateFrames(fr, 'weapon ' + w.id));
       else if (w.type === 'to_target' || w.type === 'area') errors.push('weapon ' + w.id + ' missing projectile_frames/area_frames');
-      if (!w.sprite && !w.projectile_sprite && !w.area_sprite && w.type !== 'around_player') {
+      if (!w.sprite && !w.projectile_sprite && !w.area_sprite && w.type !== 'around_player' && w.type !== 'orbit') {
         errors.push('weapon ' + w.id + ' missing sprite');
       }
     }

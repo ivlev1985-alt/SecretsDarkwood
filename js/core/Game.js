@@ -34,7 +34,7 @@ import { PetSwapPopup } from '../ui/PetSwapPopup.js';
 import { fmtTime } from '../utils/math.js';
 
 export const MovementRegistry = { chase: 'chase', patrol: 'patrol', ranged: 'ranged', teleport: 'teleport' };
-export const WeaponRegistry = { to_target: 'to_target', around_player: 'around_player', area: 'area' };
+export const WeaponRegistry = { to_target: 'to_target', around_player: 'around_player', orbit: 'orbit', area: 'area' };
 export const EffectRegistry = { oneshot: 'oneshot', looping: 'looping', attached: 'attached' };
 export const ChestRewardRegistry = { coins: 'coins', spell: 'spell', levelup: 'levelup', mixed: 'mixed' };
 
@@ -1380,6 +1380,8 @@ export class Game {
         const r = hasAnim ? this.player.anim.getRect() : { sw: 32, sh: 32 };
         this.player.draw(ctx, this.assets, g.hero.sprite, r.sw, r.sh, g.visuals.global_sprite_scale || 1, '#888');
       }
+      // орбитальная пассивная магия: ледяные шары вокруг игрока
+      this.skills.drawOrbits(ctx);
       // питомец (монстры его не бьют — коллизий с ним нет)
       if (this.pet) {
         const bobY = Math.sin(this.pet.bob) * 4;

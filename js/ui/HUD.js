@@ -53,7 +53,7 @@ export class HUD {
     return String(id).split('_').filter(Boolean).map((w) => w[0]).join('').slice(0, 3).toUpperCase() || '?';
   }
   static skillColor(type) {
-    if (type === 'around_player') return '#00ccff';
+    if (type === 'around_player' || type === 'orbit') return '#00ccff';
     if (type === 'area') return '#ff4400';
     return '#ffd34d';
   }
