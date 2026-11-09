@@ -455,7 +455,8 @@ export class SkillSystem {
       if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
       if (!st.orbs) continue;
       const c = st.cfg;
-      const img = c.orb_sprite ? this.assets.get(c.orb_sprite) : null;
+      // assets может не прийти (старый кэш модуля Game.js) — не роняем игровой цикл
+      const img = (c.orb_sprite && this.assets) ? this.assets.get(c.orb_sprite) : null;
       const f = c.orb_frames;
       const useArt = img && img.tagName === 'IMG' && f && st.orbSprites;
       st.orbs.forEach((o, i) => {

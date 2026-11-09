@@ -665,7 +665,7 @@ export class Game {
     }
     this.combat = new CombatSystem(g, b);
     this.spawn = new SpawnSystem(b.waves, b.monsters);
-    this.skills = new SkillSystem(s.weapons, this.combat, this.audio);
+    this.skills = new SkillSystem(s.weapons, this.combat, this.audio, this.assets);
     const active = (s.weapons || []).filter((w) => w.unlocked).map((w) => w.id);
     this.skills.setActive(active.length ? active : ['magic_bolt']);
     for (const [id, st] of this.skills.weapons) {
@@ -1056,6 +1056,17 @@ export class Game {
   }
 
   frame(t) {
+    // Любое исключение в update/render не должно убивать игровой цикл:
+    // иначе экран замирает на последнем кадре без HUD и без реакции на ввод.
+    try {
+      this._frameInner(t);
+    } catch (e) {
+      console.error('frame error:', e);
+    }
+    requestAnimationFrame((tt) => this.frame(tt));
+  }
+
+  _frameInner(t) {
     let dt = (t - this.last) / 1000;
     this.last = t;
     if (!(dt >= 0) || dt > 0.05) dt = Math.min(Math.max(dt || 0.016, 0), 0.05);
@@ -1072,7 +1083,6 @@ export class Game {
     this._syncModalTs();
     if (this.uiShop) this.shopMenu.update(dt);
     this.render();
-    requestAnimationFrame((tt) => this.frame(tt));
   }
 
   // Модалка = любое состояние/попап, перекрывающее мир и ловящее тапы.
