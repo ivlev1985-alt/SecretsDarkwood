@@ -82,9 +82,10 @@ export class HUD {
         borderColor: HUD.skillColor(st.cfg.type),
         label: false
       });
-      // Перезарядка: затемнение + светлое заполнение снизу вверх
+      // Перезарядка: затемнение + светлое заполнение снизу вверх.
+      // st.waiting — оружие ждёт цель (короткий ретрай), показываем как "готово".
       const cdMax = game.skills.weaponCooldown(st, game.player);
-      const prog = cdMax > 0 ? 1 - Math.max(0, st.cd) / cdMax : 1;
+      const prog = (cdMax > 0 && !st.waiting) ? 1 - Math.max(0, st.cd) / cdMax : 1;
       drawCooldown(ctx, p.x, p.y, s, prog);
     });
     ctx.textAlign = 'center';

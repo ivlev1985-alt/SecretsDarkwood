@@ -169,14 +169,19 @@ export class SkillSystem {
           if (e.alive && e.deathT <= 0) { hasEnemy = true; break; }
         }
         if (!hasEnemy) {
+          st.waiting = true;
           st.cd = 0.25;
           continue;
         }
       }
-      if (c.type === 'to_target') this._fireToTarget(st, ctx);
+      let fired = true;
+      if (c.type === 'to_target') fired = this._fireToTarget(st, ctx);
       else if (c.type === 'around_player') this._fireAura(st, ctx);
-      else if (c.type === 'area') this._fireArea(st, ctx);
-      st.cd = this.weaponCooldown(st, player);
+      else if (c.type === 'area') fired = this._fireArea(st, ctx);
+      // Полный КД только если каст реально произошёл; иначе — короткий ретрай,
+      // чтобы индикатор перезарядки не крутился впустую без цели.
+      st.waiting = !fired; // HUD: ждём цель — иконка не "перезаряжается"
+      st.cd = fired ? this.weaponCooldown(st, player) : 0.25;
     }
 
     // аура-ти idle не нужен; урон ауры — тиком
@@ -280,7 +285,7 @@ export class SkillSystem {
       : (c.targeting === 'random'
         ? this.randomInRange(player.x, player.y, enemies, c.auto_aim_range || 400, null, rand)
         : this.nearest(player.x, player.y, enemies, c.auto_aim_range || 400));
-    if (!target) return;
+    if (!target) return false;
     const n = c.projectiles_per_shot || 1;
     const spread = ((c.spread_angle || 0) * Math.PI) / 180;
     const baseA = Math.atan2(target.y - player.y, target.x - player.x);
@@ -318,6 +323,7 @@ export class SkillSystem {
       this.projectiles.push(p);
     }
     if (c.sfx_shoot && this.audio) this.audio.playSfx(c.sfx_shoot);
+    return true;
   }
 
   _fireAura(st, ctx) {
@@ -346,7 +352,7 @@ export class SkillSystem {
   _fireArea(st, ctx) {
     const c = st.cfg, { player, enemies } = ctx;
     const target = c.auto_aim === false ? null : this.nearest(player.x, player.y, enemies, c.auto_aim_range || 400);
-    if (!target) return;
+    if (!target) return false;
     const cx = target.x;
     const cy = target.y;
     const radius = (c.area_radius || 120) + (c.area_radius_per_level || 0) * (st.level - 1);
@@ -361,6 +367,7 @@ export class SkillSystem {
       spritePath: c.area_sprite, frames: c.area_frames
     });
     if (c.sfx_hit && this.audio) this.audio.playSfx(c.sfx_hit);
+    return true;
   }
 
   // Выстрел врага (ranged): чистая логика, без поиска цели вне
