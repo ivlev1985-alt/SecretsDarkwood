@@ -66,6 +66,25 @@ export function drawSkillIcon(ctx, game, key, x, y, size, opts = {}) {
   return false;
 }
 
+// Индикатор перезарядки поверх иконки: progress 0 (только что скастовано) .. 1 (готово).
+// Иконка затемнена, светлый слой заполняет шестиугольник снизу вверх.
+export function drawCooldown(ctx, x, y, size, progress) {
+  const p = Math.max(0, Math.min(1, progress));
+  if (p >= 1) return;
+  const r = size / 2;
+  ctx.save();
+  hexPath(ctx, x, y, size);
+  ctx.clip();
+  // Тёмная маска поверх всей иконки
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(x - r, y - r, r * 2, size);
+  // Светлое заполнение снизу вверх на высоту p
+  const h = size * p;
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.fillRect(x - r, y + r - h, r * 2, h);
+  ctx.restore();
+}
+
 // Раскладка «олимпийские кольца»: 2 ряда со смещением нижнего на полшага вправо.
 // Распределение по рядам:
 //   1 → [1,0]  2 → [1,1]  3 → [1,2]  4 → [2,2]  5 → [2,3]  6 → [3,3]  7 → [3,4]

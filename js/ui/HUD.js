@@ -1,5 +1,5 @@
 ﻿import { drawButton, drawPanel, hit } from './widgets.js';
-import { drawSkillIcon, iconKey, hexRingLayout } from './hexIcons.js';
+import { drawSkillIcon, iconKey, hexRingLayout, drawCooldown } from './hexIcons.js';
 
 // HUD по ГДД п.6.2–6.5: всё сверху/снизу, портрет. + попап инвентаря (read-only билд).
 export class HUD {
@@ -67,12 +67,12 @@ export class HUD {
     const right = R.inv.x - 8;
     const cx = (left + right) / 2;
     const avail = right - left;
-    let s = 32;
-    // Подбираем размер: если не влезает в один ряд — уменьшаем
-    const stepX = s * Math.sqrt(3) + 4;
-    let perRow = Math.max(1, Math.floor(avail / stepX));
-    if (owned.length > perRow) { s = 24; perRow = Math.max(1, Math.floor(avail / (s * Math.sqrt(3) + 4))); }
-    const baseY = H - 56;
+    let s = 64;
+    // Подбор размера: ряд из ceil(n/2) иконок должен влезать между кнопками
+    let perRow = Math.max(1, Math.floor(avail / (s * Math.sqrt(3) + 4)));
+    if (Math.ceil(owned.length / 2) > perRow) { s = 48; perRow = Math.max(1, Math.floor(avail / (s * Math.sqrt(3) + 4))); }
+    if (Math.ceil(owned.length / 2) > perRow) { s = 32; perRow = Math.max(1, Math.floor(avail / (s * Math.sqrt(3) + 4))); }
+    const baseY = H - 8; // нижняя граница нижнего ряда
     const positions = hexRingLayout(owned.length, s, cx, baseY, 4);
     owned.forEach((st, idx) => {
       if (idx >= positions.length) return;
@@ -82,11 +82,10 @@ export class HUD {
         borderColor: HUD.skillColor(st.cfg.type),
         label: false
       });
-      // Уровень под иконкой
-      ctx.fillStyle = '#fff';
-      ctx.font = (s > 24 ? 11 : 9) + 'px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Lv.' + st.level, p.x, p.y + s / 2 + 12);
+      // Перезарядка: затемнение + светлое заполнение снизу вверх
+      const cdMax = game.skills.weaponCooldown(st, game.player);
+      const prog = cdMax > 0 ? 1 - Math.max(0, st.cd) / cdMax : 1;
+      drawCooldown(ctx, p.x, p.y, s, prog);
     });
     ctx.textAlign = 'center';
   }
