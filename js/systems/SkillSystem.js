@@ -3,9 +3,10 @@ import { Pool } from '../utils/pool.js';
 
 // Автоатака 3 типов из WeaponRegistry: to_target / around_player / area.
 export class SkillSystem {
-  constructor(weaponsCfg, combat, audio) {
+  constructor(weaponsCfg, combat, audio, assets = null) {
     this.combat = combat;
     this.audio = audio;
+    this.assets = assets;
     this.weapons = new Map(); // id -> { cfg, level, cd }
     this.projectiles = [];
     this.enemyShots = [];
@@ -368,6 +369,11 @@ export class SkillSystem {
       const c = st.cfg;
       const period = c.orbit_period_sec || 4;
       st.orbitAngle = (st.orbitAngle || 0) + (Math.PI * 2 / period) * dt;
+      // Собственное вращение каждого шара вокруг своей оси (rad/s из spinSpeed)
+      if (st.orbSpin) for (let i = 0; i < st.orbSpin.length; i++) {
+        const sp = (st.orbSprites && st.orbSprites[i]) || null;
+        st.orbSpin[i] = (st.orbSpin[i] || 0) + (sp ? sp.spinSpeed * Math.PI * 2 : 0) * dt;
+      }
       const lvls = c.orbit_levels || [];
       const cnt = lvls[Math.min(st.level, lvls.length) - 1] || lvls[lvls.length - 1] || { near: 2, far: 0 };
       const nearN = Math.max(0, cnt.near | 0);
@@ -392,6 +398,7 @@ export class SkillSystem {
         orbs.push({ x: player.x + Math.cos(a) * farR, y: player.y + Math.sin(a) * farR, r: orbR, far: true });
       }
       st.orbs = orbs;
+      this._syncOrbSprites(st, orbs.length);
       if (!enemies || !enemies.length) continue;
 
       const slow = this.weaponSlow(st);
@@ -421,12 +428,53 @@ export class SkillSystem {
     }
   }
 
-  // Отрисовка ледяных шаров (программная — отдельный спрайт не нужен).
+  // Стабильное назначение кадра и вращения каждому шару:
+  // при росте числа орбов существующие сохраняют свой кадр (без повторов),
+  // новым выдаются свободные кадры спрайтшита случайно.
+  _syncOrbSprites(st, count) {
+    if (!st.orbSprites) { st.orbSprites = []; st.orbSpin = []; }
+    const total = (st.cfg.orb_frames && st.cfg.orb_frames.animations.idle.frames) || 6;
+    while (st.orbSprites.length > count) { st.orbSprites.pop(); st.orbSpin.pop(); }
+    while (st.orbSprites.length < count) {
+      const used = new Set(st.orbSprites.map((s) => s.frame));
+      const free = [];
+      for (let i = 0; i < total; i++) if (!used.has(i)) free.push(i);
+      const frame = free.length ? free[Math.floor(Math.random() * free.length)] : Math.floor(Math.random() * total);
+      // 0.5..1.5 об/с с шагом 0.1 (k = 5..15), случайное направление
+      const k = 5 + Math.floor(Math.random() * 11);
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      st.orbSprites.push({ frame, spinSpeed: (k / 10) * dir });
+      st.orbSpin.push(Math.random() * Math.PI * 2); // стартовый угол
+    }
+  }
+
+  // Отрисовка ледяных шаров: спрайт из атласа (кадр + вращение),
+  // программная заглушка — если арта нет.
   drawOrbits(ctx) {
     for (const st of this.weapons.values()) {
       if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
-      if (st.orbs) for (const o of st.orbs) this._drawOrb(ctx, o, st.cfg);
+      if (!st.orbs) continue;
+      const c = st.cfg;
+      const img = c.orb_sprite ? this.assets.get(c.orb_sprite) : null;
+      const f = c.orb_frames;
+      const useArt = img && img.tagName === 'IMG' && f && st.orbSprites;
+      st.orbs.forEach((o, i) => {
+        if (useArt) this._drawOrbSprite(ctx, img, f, o, st.orbSprites[i], st.orbSpin[i], c);
+        else this._drawOrb(ctx, o, c);
+      });
     }
+  }
+
+  _drawOrbSprite(ctx, img, f, o, sp, angle, c) {
+    const size = c.orb_draw_size || (o.r || 10) * 4;
+    const col = sp.frame % f.columns;
+    const row = Math.floor(sp.frame / f.columns);
+    ctx.save();
+    ctx.translate(o.x, o.y);
+    ctx.rotate(angle || 0);
+    ctx.drawImage(img, col * f.frame_width, row * f.frame_height, f.frame_width, f.frame_height,
+      -size / 2, -size / 2, size, size);
+    ctx.restore();
   }
 
   _drawOrb(ctx, o, c) {

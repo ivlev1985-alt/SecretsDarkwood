@@ -138,6 +138,16 @@
       "orb_hit_cooldown_ms": 600,
       "orb_color": "#00ccff",
       "orb_color_core": "#eaffff",
+      "orb_sprite": "projectiles/frost_ring.png",
+      "orb_frames": {
+        "frame_width": 64,
+        "frame_height": 64,
+        "columns": 6,
+        "animations": {
+          "idle": { "row": 0, "frames": 6, "fps": 1, "loop": false }
+        }
+      },
+      "orb_draw_size": 48,
       "orbit_levels": [
         { "near": 2, "far": 0 },
         { "near": 2, "far": 1 },

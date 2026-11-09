@@ -35,6 +35,7 @@ export class AssetLoader {
     for (const w of (s.weapons || [])) {
       if (w.projectile_sprite) img.add(w.projectile_sprite);
       if (w.area_sprite) img.add(w.area_sprite);
+      if (w.orb_sprite) img.add(w.orb_sprite);
       if (w.sfx_shoot) audio.add(AssetLoader.normalizeSfx(w.sfx_shoot));
       if (w.sfx_hit) audio.add(AssetLoader.normalizeSfx(w.sfx_hit));
     }
