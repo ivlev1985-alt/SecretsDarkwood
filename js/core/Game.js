@@ -1442,7 +1442,7 @@ export class Game {
       // питомец (монстры его не бьют — коллизий с ним нет)
       if (this.pet) {
         const pet = this.pet;
-        const size = 16; // размер в игре
+        const size = 32; // размер в игре
         const img = pet.sprite ? this.assets.get(pet.sprite) : null;
         const f = pet.sprite_frames;
         const useArt = img && img.tagName === 'IMG' && f;
