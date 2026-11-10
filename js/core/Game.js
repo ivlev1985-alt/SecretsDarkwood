@@ -1443,6 +1443,9 @@ export class Game {
       if (this.pet) {
         const pet = this.pet;
         const size = 32; // размер в игре
+        // «живое» покачивание: только визуал, коллизии/логика по pet.x/pet.y
+        const vo = pet.visualOffset ? pet.visualOffset() : { ox: 0, oy: 0 };
+        const px = pet.x + vo.ox, py = pet.y + vo.oy;
         const img = pet.sprite ? this.assets.get(pet.sprite) : null;
         const f = pet.sprite_frames;
         const useArt = img && img.tagName === 'IMG' && f;
@@ -1452,23 +1455,22 @@ export class Game {
             const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
             ctx.fillStyle = cc;
             ctx.beginPath();
-            ctx.arc(pet.x, pet.y + size / 2, 5, 0, Math.PI * 2);
+            ctx.arc(px, py + size / 2, 5, 0, Math.PI * 2);
             ctx.fill();
           }
           const col = Math.floor(pet.animT * f.fps) % f.columns;
           const row = 0;
           ctx.save();
-          ctx.translate(pet.x, pet.y);
+          ctx.translate(px, py);
           ctx.scale(pet.facing, 1);
           ctx.drawImage(img, col * f.frame_width, row * f.frame_height, f.frame_width, f.frame_height,
             -size / 2, -size / 2, size, size);
           ctx.restore();
         } else {
           // Фолбэк: программная отрисовка (жёлтый кружок)
-          const bobY = Math.sin(pet.bob) * 4;
           ctx.fillStyle = '#ffd34d';
           ctx.beginPath();
-          ctx.arc(pet.x, pet.y + bobY, 10, 0, Math.PI * 2);
+          ctx.arc(px, py, 10, 0, Math.PI * 2);
           ctx.fill();
           ctx.strokeStyle = '#fff';
           ctx.stroke();
@@ -1476,7 +1478,7 @@ export class Game {
             const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
             ctx.fillStyle = cc;
             ctx.beginPath();
-            ctx.arc(pet.x, pet.y + bobY - 14, 5, 0, Math.PI * 2);
+            ctx.arc(px, py - 14, 5, 0, Math.PI * 2);
             ctx.fill();
           }
         }

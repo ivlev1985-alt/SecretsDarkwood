@@ -16,6 +16,24 @@ export class Pet extends Entity {
     this.wob = Math.random() * 6; // фаза синусоиды полёта
     this.anim = null;
     this.animT = 0; // время для зацикленной спрайт-анимации
+    // «Живой» полёт: уникальные амплитуды/периоды/фазы у каждого питомца,
+    // чтобы два одинаковых питомца двигались по-разному (без механики).
+    this.bobAmp = 3 + Math.random() * 3;                        // вертикальное покачивание, 3..6 px
+    this.bobSpeed = (Math.PI * 2) / (2 + Math.random() * 2);    // период 2..4 c
+    this.floatAmp = 4 + Math.random() * 4;                      // медленное «парение», 4..8 px
+    this.floatSpeed = (Math.PI * 2) / (3 + Math.random() * 2);  // период 3..5 c
+    this.float = Math.random() * Math.PI * 2;                   // фаза парения
+    this.wobAmp = 15 + Math.random() * 10;                      // боковое колебание в полёте, 15..25 px/s
+    this.wobSpeed = 5 + Math.random() * 3;                      // частота боковой синусоиды
+  }
+
+  // Визуальное смещение для отрисовки (на логику/коллизии не влияет):
+  // сумма двух несинхронных синусоид по вертикали + лёгкий дрейф по горизонтали.
+  visualOffset() {
+    return {
+      ox: Math.sin(this.float * 0.7) * 2,
+      oy: Math.sin(this.bob) * this.bobAmp + Math.sin(this.float) * this.floatAmp
+    };
   }
 
   static isLoot(p) {
@@ -29,7 +47,8 @@ export class Pet extends Entity {
   }
 
   update(dt, px, py, pickups, grabR, deliverR, magnetPull = 380) {
-    this.bob += dt * 6;
+    this.bob += dt * this.bobSpeed;
+    this.float += dt * this.floatSpeed;
     this.animT += dt;
     // магнит: монеты и XP (и аптечки у особого) в радиусе притягиваются к питомцу
     for (const p of pickups) {
@@ -59,9 +78,8 @@ export class Pet extends Entity {
       this.x += (dx / d) * step;
       this.y += (dy / d) * step;
       // синусоида полёта: боковое колебание перпендикулярно курсу
-      this.wob += dt * 7;
-      const wAmp = 30; // px/s
-      const w = Math.sin(this.wob) * wAmp * dt;
+      this.wob += dt * this.wobSpeed;
+      const w = Math.sin(this.wob) * this.wobAmp * dt;
       this.x += (-dy / d) * w;
       this.y += (dx / d) * w;
     }
