@@ -71,21 +71,30 @@ export class HUD {
     const right = W - 12;
     const avail = Math.max(60, right - left);
     const cx = (left + right) / 2;
-    const maxN = Math.max(actives.length, passives.length, 1);
-    // Подбор размера: самый длинный ряд должен влезать между кнопкой и краем.
-    let s = 64;
+    const topN = actives.length, botN = passives.length;
+    // Шахматный порядок: нижний ряд смещён на полшага относительно верхнего.
+    // Если разница количества иконок нечётная, они и так попадают в пазы
+    // верхнего ряда, поэтому дополнительный сдвиг не нужен.
+    const rowShiftFor = (step) => (topN > 0 && (topN - botN) % 2 === 0) ? step / 2 : 0;
+    // Подбор размера: учитываем и сдвиг нижнего ряда, чтобы он не вылез за край.
+    let s = 24;
     for (const cand of [64, 48, 32, 24]) {
+      const step = (cand / 2) * Math.sqrt(3) + 4;
+      const shift = rowShiftFor(step);
+      const halfTop = topN > 0 ? ((topN - 1) * step + cand) / 2 : 0;
+      const halfBot = botN > 0 ? ((botN - 1) * step + cand) / 2 + shift : 0;
       s = cand;
-      if (maxN <= Math.max(1, Math.floor(avail / (cand * Math.sqrt(3) + 4)))) break;
+      if (Math.max(halfTop, halfBot) * 2 <= avail) break;
     }
     const r = s / 2;
     const stepX = r * Math.sqrt(3) + 4;
     const stepY = r * 1.5 + 4;
     const yBot = H - 8 - r;
     const yTop = yBot - stepY;
-    const drawRow = (items, y, isPassive) => {
+    const rowShift = rowShiftFor(stepX);
+    const drawRow = (items, y, isPassive, shiftX = 0) => {
       items.forEach((it, i) => {
-        const x = cx + (i - (items.length - 1) / 2) * stepX;
+        const x = cx + (i - (items.length - 1) / 2) * stepX + shiftX;
         const cfg = isPassive ? it : it.cfg;
         drawSkillIcon(ctx, game, iconKey(cfg), x, y, s, {
           borderColor: isPassive ? '#8f8' : HUD.skillColor(cfg.type),
@@ -100,8 +109,8 @@ export class HUD {
         }
       });
     };
-    drawRow(actives, yTop, false);
-    drawRow(passives, yBot, true);
+    drawRow(actives, yTop, false, 0);
+    drawRow(passives, yBot, true, rowShift);
     ctx.textAlign = 'center';
   }
   drawBossBar(ctx, game, W, H) {
