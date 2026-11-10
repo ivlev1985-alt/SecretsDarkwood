@@ -367,8 +367,14 @@ export class SkillSystem {
     for (const st of this.weapons.values()) {
       if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
       const c = st.cfg;
-      const period = c.orbit_period_sec || 4;
-      st.orbitAngle = (st.orbitAngle || 0) + (Math.PI * 2 / period) * dt;
+      // Разные орбиты: свой период и направление. В canvas Y направлен вниз,
+      // поэтому +1 — по часовой стрелке, -1 — против.
+      const nearPeriod = c.orbit_period_sec || 4;
+      const farPeriod = c.orbit_far_period_sec || nearPeriod;
+      const nearDir = c.orbit_near_direction ?? 1;
+      const farDir = c.orbit_far_direction ?? -1;
+      st.orbitAngle = (st.orbitAngle || 0) + (Math.PI * 2 / nearPeriod) * nearDir * dt;
+      st.orbitFarAngle = (st.orbitFarAngle || 0) + (Math.PI * 2 / farPeriod) * farDir * dt;
       // Собственное вращение каждого шара вокруг своей оси (rad/s из spinSpeed)
       if (st.orbSpin) for (let i = 0; i < st.orbSpin.length; i++) {
         const sp = (st.orbSprites && st.orbSprites[i]) || null;
@@ -382,6 +388,7 @@ export class SkillSystem {
       const farR = c.orbit_far_radius ?? 120;
       const orbR = c.orb_radius ?? 10;
       const a0 = st.orbitAngle;
+      const a0Far = st.orbitFarAngle;
       const orbs = [];
       for (let i = 0; i < nearN; i++) {
         const a = a0 + (Math.PI * 2 * i) / nearN;
@@ -394,7 +401,7 @@ export class SkillSystem {
         ? Math.PI / farN
         : (nearN > 1 ? Math.PI / nearN : 0);
       for (let i = 0; i < farN; i++) {
-        const a = a0 + farOffset + (Math.PI * 2 * i) / farN;
+        const a = a0Far + farOffset + (Math.PI * 2 * i) / farN;
         orbs.push({ x: player.x + Math.cos(a) * farR, y: player.y + Math.sin(a) * farR, r: orbR, far: true });
       }
       st.orbs = orbs;

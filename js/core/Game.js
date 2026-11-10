@@ -73,6 +73,8 @@ export class Game {
     this.enemyProjById = new Map();
     this.deaths = 0;
     this.pendingLevels = 0;
+    this.pendingSpellRewards = 0; // заклинания из сундуков, ждущие выбора карточки
+    this.choiceMode = 'levelup'; // 'levelup' | 'spell'
     this.choices = [];
     this.bossWarn = null;
     this.lang = 'ru';
@@ -110,7 +112,8 @@ export class Game {
     // Этап 7: реклама
     this._adBusy = false;
     this._lastInter = 0;
-    // TEST (убрать позже): стартовый легендарный сундук + гарант. дроп питомца
+    // TEST (убрать позже): стартовый легендарный сундук + гарант. дроп питомца.
+    // Заклинания из него теперь выдаются через выбор из 3 карточек, а не сразу.
     this.TEST_LEGENDARY_CHEST = true;
     this.TEST_PET_DROP = true;
     this.uiPetSwap = null;
@@ -357,16 +360,17 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape' || e.code === 'KeyP' || e.code === 'Space') {
         if (e.code === 'Space') e.preventDefault();
+        if (this.uiInventory) { this.uiInventory = false; return; }
         if (this.states.is('playing')) this.pauseGame();
         else if (this.states.is('paused')) this.resumeGame();
       }
     });
     this.canvas.addEventListener('mousemove', (e) => {
-      if (this.states.is('paused')) this.pauseMenu.move(this, this._toX(e.clientX));
+      if (this.states.is('paused') && !this.uiInventory) this.pauseMenu.move(this, this._toX(e.clientX));
       if (this.uiSettings) this.settingsMenu.move(this, this._toX(e.clientX));
     });
     this.canvas.addEventListener('mousedown', (e) => {
-      if (this.states.is('paused')) this.pauseMenu.down(this, this._toX(e.clientX), this._toY(e.clientY));
+      if (this.states.is('paused') && !this.uiInventory) this.pauseMenu.down(this, this._toX(e.clientX), this._toY(e.clientY));
       if (this.uiSettings) this.settingsMenu.down(this, this._toX(e.clientX), this._toY(e.clientY));
     });
 
@@ -556,6 +560,7 @@ export class Game {
   applyUpgrade(i) {
     const c = this.choices[i];
     if (!c) return;
+    const mode = this.choiceMode || 'levelup';
     if (c.kind === 'pet' && this.pet) {
       // апгрейд питомца: дальность полёта / радиус притяжения
       const def = (this.shop.cfg.pet_upgrades || []).find((d) => d.id === c.id);
@@ -567,14 +572,47 @@ export class Game {
     } else {
       this.upgrades.apply(c, this.skills, this.player);
     }
-    this.pendingLevels--;
+    if (mode === 'spell') this.pendingSpellRewards = Math.max(0, this.pendingSpellRewards - 1);
+    else this.pendingLevels = Math.max(0, this.pendingLevels - 1);
     this.player.level = this.progression.level;
     if (this.config.game_config.save.save_on_important_events) this.save.save();
+    // Закрыть текущее окно и, если остались награды, открыть следующее.
+    this.choices = [];
+    this.choiceMode = 'levelup';
+    this.states.set('playing');
+    this._openNextPendingModal(false);
+  }
+
+  // Открывает следующее окно выбора: сначала повышения уровня, затем
+  // заклинания из сундуков. Каждая награда — отдельный выбор из 3 карточек.
+  // announce=false — не повторять звук/вспышку при переходе к следующей карточке.
+  _openNextPendingModal(announce = true) {
+    if (this.states.is('upgrade')) return;
+    // Попап замены питомца показываем первым; выбор наград откроется после него.
+    if (this.uiPetSwap) return;
     if (this.pendingLevels > 0) {
       this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3, Math.random, this._petCtx());
-      if (!this.choices.length) { this.pendingLevels = 0; this.states.set('playing'); }
-    } else {
-      this.states.set('playing');
+      if (this.choices.length) {
+        this.choiceMode = 'levelup';
+        if (announce) {
+          if (this.fx) this.fx.play('levelup_burst', this.player.x, this.player.y);
+          try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
+        }
+        this.states.set('upgrade');
+        this._modalTs = performance.now();
+        return;
+      }
+      this.pendingLevels = 0;
+    }
+    if (this.pendingSpellRewards > 0) {
+      this.choices = this.upgrades.buildWeaponChoices(this.skills, this.config.balance_config.progression.upgrade_options_count || 3, Math.random);
+      if (this.choices.length) {
+        this.choiceMode = 'spell';
+        this.states.set('upgrade');
+        this._modalTs = performance.now();
+        return;
+      }
+      this.pendingSpellRewards = 0;
     }
   }
 
@@ -641,7 +679,7 @@ export class Game {
     this.save.data.unlockedSpells = defaultSpells;
 
     // Сбросить runtime-флаги unlocked на объектах конфига к дефолтным,
-    // иначе grantRandomSpell из прошлого забега (w.unlocked = true) переносится.
+    // иначе флаги из прошлого забега (w.unlocked = true) переносятся.
     for (const w of (s.weapons || [])) {
       w.unlocked = !!w.unlocked_by_default;
     }
@@ -689,6 +727,8 @@ export class Game {
     for (const p of (s.enemy_projectiles || [])) this.enemyProjById.set(p.id, p);
     this.time = 0;
     this.pendingLevels = 0;
+    this.pendingSpellRewards = 0;
+    this.choiceMode = 'levelup';
     this.choices = [];
     this.bossWarn = null;
     this.reviveUsed = false;
@@ -985,8 +1025,11 @@ export class Game {
       p.launchFrom(c.x, c.y, s.angle, speed, r0);
       this.pickups.push(p);
     }
-    // заклинания и уровни — мгновенно (физического представления нет)
-    for (let i = 0; i < (reward.spells || 0); i++) this.skills.grantRandomSpell();
+    // Заклинания из сундука — не выдаём автоматически: игрок выбирает
+    // одну из 3 карточек (окно откроется в конце кадра). Уровни — сразу,
+    // их апгрейды выберутся в следующих окнах.
+    const spellRewards = Math.max(0, reward.spells || 0);
+    if (spellRewards > 0) this.pendingSpellRewards += spellRewards;
     if (reward.levels > 0) {
       const ups = this.progression.grantLevels(reward.levels);
       this.pendingLevels += ups;
@@ -1268,15 +1311,7 @@ export class Game {
       onOpen: (c, r) => this._openChest(c, r)
     });
 
-    if (this.pendingLevels > 0 && this.states.is('playing')) {
-      this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3, Math.random, this._petCtx());
-      if (this.choices.length) {
-        if (this.fx) this.fx.play('levelup_burst', this.player.x, this.player.y);
-        try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
-        this.states.set('upgrade');
-      }
-      else this.pendingLevels = 0;
-    }
+    if (this.states.is('playing')) this._openNextPendingModal();
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       if (!this.enemies[i].alive) this.enemies.splice(i, 1);
@@ -1438,7 +1473,7 @@ export class Game {
       if (this.uiPetSwap) this.petSwapPopup.draw(ctx, this, W, H);
       if (st === 'paused') this.pauseMenu.draw(ctx, this, W, H);
       if (st === 'gameover') this.gameover.draw(ctx, this, W, H);
-      if (this.uiInventory && st === 'playing') this.hud.drawInventory(ctx, this, W, H);
+      if (this.uiInventory && (st === 'playing' || st === 'paused')) this.hud.drawInventory(ctx, this, W, H);
     }
 
     // попапы поверх всего

@@ -1,6 +1,6 @@
 ﻿import { drawButton, drawPanel, drawSlider, hit, sliderSet } from './widgets.js';
 
-// Пауза (GDD 6.8): Продолжить / Заново / В меню + громкости.
+// Пауза (GDD 6.8): Продолжить / Заново / Инвентарь / В меню + громкости.
 export class PauseMenu {
   constructor() {
     this.R = {};
@@ -9,12 +9,13 @@ export class PauseMenu {
   layout(W) {
     const bw = 240, bx = (W - bw) / 2;
     this.R = {
-      panel: { x: (W - 340) / 2, y: 200, w: 340, h: 360 },
-      music: { x: bx, y: 300, w: bw, h: 20 },
-      sfx: { x: bx, y: 360, w: bw, h: 20 },
-      resume: { x: bx, y: 410, w: bw, h: 44 },
-      restart: { x: bx, y: 460, w: bw, h: 44 },
-      menu: { x: bx, y: 510, w: bw, h: 40 }
+      panel: { x: (W - 340) / 2, y: 190, w: 340, h: 430 },
+      music: { x: bx, y: 285, w: bw, h: 20 },
+      sfx: { x: bx, y: 340, w: bw, h: 20 },
+      resume: { x: bx, y: 395, w: bw, h: 44 },
+      restart: { x: bx, y: 445, w: bw, h: 44 },
+      inventory: { x: bx, y: 495, w: bw, h: 44 },
+      menu: { x: bx, y: 545, w: bw, h: 40 }
     };
     return this.R;
   }
@@ -29,6 +30,7 @@ export class PauseMenu {
     drawSlider(ctx, R.sfx, t('settings_sfx'), game.settings.sfx);
     drawButton(ctx, R.resume, '▶ ' + t('resume'), { primary: true });
     drawButton(ctx, R.restart, '🔄 ' + t('restart'));
+    drawButton(ctx, R.inventory, '🎒 ' + t('inventory_title'));
     drawButton(ctx, R.menu, '🏠 ' + t('to_menu'));
   }
   down(game, x, y) {
@@ -46,6 +48,7 @@ export class PauseMenu {
     const R = this.R;
     if (hit(x, y, R.resume)) { game.resumeGame(); return true; }
     if (hit(x, y, R.restart)) { game.startRun(); return true; }
+    if (hit(x, y, R.inventory)) { game.uiInventory = true; game._modalTs = performance.now(); return true; }
     if (hit(x, y, R.menu)) { game.toMenu(); return true; }
     return false;
   }

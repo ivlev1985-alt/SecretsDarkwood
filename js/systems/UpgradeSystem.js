@@ -53,6 +53,30 @@ export class UpgradeSystem {
     return pool.slice(0, n).map((c) => this.describe(c, skills));
   }
 
+  // Кандидаты только по заклинаниям — для награды из сундука
+  // (пасcивки и питомцы в такой выбор не попадают).
+  weaponCandidates(skills) {
+    const out = [];
+    for (const [id, st] of skills.weapons) {
+      const owned = (st.level || 0) > 0 && st.active !== false;
+      if (owned && st.cfg.upgradeable !== false && st.level < (st.cfg.max_level || 5)) {
+        out.push({ kind: 'weapon', id, levelFrom: st.level, levelTo: st.level + 1 });
+      } else if (!owned) {
+        out.push({ kind: 'newWeapon', id, levelFrom: 0, levelTo: 1 });
+      }
+    }
+    return out;
+  }
+
+  buildWeaponChoices(skills, n = 3, rand = Math.random) {
+    const pool = this.weaponCandidates(skills);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, n).map((c) => this.describe(c, skills));
+  }
+
   describe(c, skills) {
     if (c.kind === 'pet') {
       const d = this.petDefs.find((x) => x.id === c.id);
