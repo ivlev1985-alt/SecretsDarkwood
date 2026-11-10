@@ -48,6 +48,8 @@ export class AssetLoader {
         if (v) audio.add(AssetLoader.normalizeSfx(v));
       }
     }
+    // спрайты питомцев из шаблонов (pets/*.png)
+    for (const t of ((items && items.templates) || [])) if (t.sprite) img.add(t.sprite);
     return { images: [...img], audio: [...audio] };
   }
 

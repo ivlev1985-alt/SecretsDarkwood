@@ -632,6 +632,12 @@ export class Game {
     this.pet = new Pet(this.player.x, this.player.y - 40,
       (d.new.stats[0] || {}).value || 200, pcfg.speed || 260, pcfg.magnet_radius || 60, !!d.new.fetch_potions);
     this.pet.tpl = d.new.tpl;
+    // спрайт питомца из шаблона (как при старте забега)
+    const tpl = this.shop.tplById.get(d.new.tpl);
+    if (tpl && tpl.sprite) {
+      this.pet.sprite = tpl.sprite;
+      this.pet.sprite_frames = tpl.sprite_frames;
+    }
     this.petLevels = {};
     this.uiPetSwap = null;
   }
@@ -718,6 +724,12 @@ export class Game {
         (this.shop.cfg.pet || {}).speed || 260, (this.shop.cfg.pet || {}).magnet_radius || 60,
         !!petItem.fetch_potions);
       this.pet.tpl = petItem.tpl;
+      // спрайт питомца из шаблона
+      const tpl = this.shop.tplById.get(petItem.tpl);
+      if (tpl && tpl.sprite) {
+        this.pet.sprite = tpl.sprite;
+        this.pet.sprite_frames = tpl.sprite_frames;
+      }
     }
     this.progression = new ProgressionSystem(b.progression);
     this.upgrades = new UpgradeSystem(s, this.config.localization, this.settings.lang, this.config.items_config.pet_upgrades);
@@ -1429,19 +1441,44 @@ export class Game {
       this.skills.drawOrbits(ctx);
       // питомец (монстры его не бьют — коллизий с ним нет)
       if (this.pet) {
-        const bobY = Math.sin(this.pet.bob) * 4;
-        ctx.fillStyle = '#ffd34d';
-        ctx.beginPath();
-        ctx.arc(this.pet.x, this.pet.y + bobY, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.stroke();
-        if (this.pet.carrying) {
-          const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[this.pet.carrying.kind] || '#fff';
-          ctx.fillStyle = cc;
+        const pet = this.pet;
+        const size = 16; // размер в игре
+        const img = pet.sprite ? this.assets.get(pet.sprite) : null;
+        const f = pet.sprite_frames;
+        const useArt = img && img.tagName === 'IMG' && f;
+        if (useArt) {
+          // Предмет — СЛОЕМ НИЖЕ питомца: центр по X питомца, Y на 50% ниже центра
+          if (pet.carrying) {
+            const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
+            ctx.fillStyle = cc;
+            ctx.beginPath();
+            ctx.arc(pet.x, pet.y + size / 2, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          const col = Math.floor(pet.animT * f.fps) % f.columns;
+          const row = 0;
+          ctx.save();
+          ctx.translate(pet.x, pet.y);
+          ctx.scale(pet.facing, 1);
+          ctx.drawImage(img, col * f.frame_width, row * f.frame_height, f.frame_width, f.frame_height,
+            -size / 2, -size / 2, size, size);
+          ctx.restore();
+        } else {
+          // Фолбэк: программная отрисовка (жёлтый кружок)
+          const bobY = Math.sin(pet.bob) * 4;
+          ctx.fillStyle = '#ffd34d';
           ctx.beginPath();
-          ctx.arc(this.pet.x, this.pet.y + bobY - 14, 5, 0, Math.PI * 2);
+          ctx.arc(pet.x, pet.y + bobY, 10, 0, Math.PI * 2);
           ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.stroke();
+          if (pet.carrying) {
+            const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
+            ctx.fillStyle = cc;
+            ctx.beginPath();
+            ctx.arc(pet.x, pet.y + bobY - 14, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
       for (const p of this.skills.projectiles) this._drawShot(ctx, p, '#ffd34d');

@@ -15,6 +15,7 @@ export class Pet extends Entity {
     this.bob = Math.random() * 6;
     this.wob = Math.random() * 6; // фаза синусоиды полёта
     this.anim = null;
+    this.animT = 0; // время для зацикленной спрайт-анимации
   }
 
   static isLoot(p) {
@@ -29,6 +30,7 @@ export class Pet extends Entity {
 
   update(dt, px, py, pickups, grabR, deliverR, magnetPull = 380) {
     this.bob += dt * 6;
+    this.animT += dt;
     // магнит: монеты и XP (и аптечки у особого) в радиусе притягиваются к питомцу
     for (const p of pickups) {
       if (!this.canTake(p)) continue;

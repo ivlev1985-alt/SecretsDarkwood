@@ -115,7 +115,9 @@
     { "id": "pet_fairy",       "slot": "pet", "name_key": "item_pet_fairy", "base_radius": 200 },
     // Особый питомец: в магазине НЕ продаётся (special), падает только из
     // самого редкого сундука. Умеет подбирать ещё и аптечки.
-    { "id": "pet_raven",       "slot": "pet", "name_key": "item_pet_raven", "base_radius": 240, "special": true, "fetches_potions": true }
+    { "id": "pet_raven",       "slot": "pet", "name_key": "item_pet_raven", "base_radius": 240, "special": true, "fetches_potions": true,
+      "sprite": "pets/pet_raven.png",
+      "sprite_frames": { "frame_width": 64, "frame_height": 64, "columns": 12, "frames": 12, "fps": 12 } }
   ],
 
   // ------------------------------------------------------------
