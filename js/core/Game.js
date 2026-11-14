@@ -784,8 +784,15 @@ export class Game {
     this.uiInventory = false;
     this.runStats = { time: 0, level: 1, kills: 0, coins: 0, record: false };
     if (b.waves.first_spawn_trigger_on_chest && b.chests.enabled) {
-      const wood = b.chests.types.find((t) => t.id === 'wooden') || b.chests.types[0];
-      if (wood) this.chestSys.chests.push(new Chest(wood, 150, 0));
+      // Стартовый сундук (тестовый): тип/позиция в balance_config.chests.start_chest.
+      const sc = b.chests.start_chest || {};
+      if (sc.enabled !== false) {
+        const typeId = sc.type || 'wooden';
+        const startType = b.chests.types.find((t) => t.id === typeId)
+          || b.chests.types.find((t) => t.id === 'wooden')
+          || b.chests.types[0];
+        if (startType) this.chestSys.chests.push(new Chest(startType, sc.x ?? 150, sc.y ?? 0));
+      }
     }
     // Тестовая клетка с вороном в начале забега (убрать: cages.test_cage.enabled=false)
     const cg = b.cages || {};

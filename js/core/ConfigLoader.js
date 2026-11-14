@@ -150,6 +150,19 @@ export class ConfigLoader {
     if (b.chests && b.chests.open_hold_ms !== undefined && !(b.chests.open_hold_ms >= 0)) {
       errors.push('chests.open_hold_ms bad');
     }
+    if (b.chests && b.chests.start_chest) {
+      const sc = b.chests.start_chest;
+      if (sc.enabled !== undefined && typeof sc.enabled !== 'boolean') {
+        errors.push('chests.start_chest.enabled must be boolean');
+      }
+      if (sc.enabled !== false) {
+        if (!sc.type || !(b.chests.types || []).some((t) => t.id === sc.type)) {
+          errors.push('chests.start_chest unknown type=' + sc.type);
+        }
+        if (sc.x !== undefined && !Number.isFinite(sc.x)) errors.push('chests.start_chest.x bad');
+        if (sc.y !== undefined && !Number.isFinite(sc.y)) errors.push('chests.start_chest.y bad');
+      }
+    }
 
     // health_ui: полёт иконки аптечки + профиль заполнения шкалы HP
     const hu = b.health_ui;

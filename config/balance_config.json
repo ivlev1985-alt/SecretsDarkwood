@@ -621,6 +621,12 @@
     "enabled": true,
     "spawn_interval_sec": 60,
     "max_chests_on_map": 3,
+    "start_chest": {
+      "enabled": true,
+      "type": "legendary",
+      "x": 150,
+      "y": 0
+    },
     "chest_lifetime_sec": 120,
     "open_radius": 60,
     "open_hold_ms": 150,
