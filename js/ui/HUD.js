@@ -13,6 +13,38 @@ export class HUD {
     void W;
     return this.R;
   }
+  // Прямоугольник шкалы HP на верхней панели (учитывает flip джойстика).
+  hpBarRect(game, W) {
+    const g = game.config.game_config;
+    const flip = g.controls.hud_flip_with_joystick && game.input.getJoystickSide() === 'left';
+    return { x: flip ? W - 196 : 12, y: 8, w: 184, h: 20 };
+  }
+  // Иконки аптечек, летящие из мира к шкале HP (экранные координаты).
+  drawHealthFlyers(ctx, game, W, H) {
+    const list = game.potionFlyers || [];
+    if (!list.length) return;
+    const cfg = (game.config.balance_config || {}).health_ui || {};
+    const rad = cfg.potion_icon_radius || 8;
+    const arcH = cfg.potion_fly_arc || 60;
+    for (const f of list) {
+      const k = f.dur > 0 ? Math.max(0, Math.min(1, f.t / f.dur)) : 1;
+      const e = k * k * (3 - 2 * k); // ease-in-out по пути
+      const sx = f.wx - game.camera.x + W / 2;
+      const sy = f.wy - game.camera.y + H / 2;
+      const x = sx + (f.tx - sx) * e;
+      const y = sy + (f.ty - sy) * e - Math.sin(k * Math.PI) * arcH;
+      ctx.save();
+      // красная «аптечка» с белым крестом
+      ctx.fillStyle = '#ff5a5a';
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold ' + Math.max(10, Math.round(rad * 1.4)) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('+', x, y + Math.round(rad * 0.45));
+      ctx.restore();
+    }
+  }
   drawTop(ctx, game, W) {
     const g = game.config.game_config;
     const flip = g.controls.hud_flip_with_joystick && game.input.getJoystickSide() === 'left';
@@ -20,14 +52,17 @@ export class HUD {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, 0, W, 78);
     // HP слева / уровень справа (или наоборот при flip)
-    const hpX = flip ? W - 196 : 12, lvX = flip ? 12 : W - 84;
-    // HP-бар с числом внутри
+    const bar = this.hpBarRect(game, W);
+    const lvX = flip ? 12 : W - 84;
+    // HP-бар с числом внутри. Ширина берётся из hpDisplay — она плавно
+    // догоняет реальное HP после прилёта иконки аптечки (см. Game._updateHealthUI).
+    const shownHp = (typeof game.hpDisplay === 'number') ? game.hpDisplay : p.hp;
     ctx.fillStyle = '#400';
-    ctx.fillRect(hpX, 8, 184, 20);
+    ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
     ctx.fillStyle = '#f00';
-    ctx.fillRect(hpX, 8, 184 * (p.hp / p.maxHp), 20);
+    ctx.fillRect(bar.x, bar.y, bar.w * Math.max(0, Math.min(1, shownHp / p.maxHp)), bar.h);
     ctx.fillStyle = '#fff'; ctx.font = '12px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('❤ ' + Math.ceil(p.hp) + ' / ' + p.maxHp, hpX + 92, 23);
+    ctx.fillText('❤ ' + Math.ceil(shownHp) + ' / ' + p.maxHp, bar.x + bar.w / 2, bar.y + 15);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 14px monospace';
     ctx.textAlign = 'left';
     ctx.fillText('Lv.' + game.progression.level, lvX, 23);

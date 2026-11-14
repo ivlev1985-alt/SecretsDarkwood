@@ -151,6 +151,49 @@ export class ConfigLoader {
       errors.push('chests.open_hold_ms bad');
     }
 
+    // health_ui: полёт иконки аптечки + профиль заполнения шкалы HP
+    const hu = b.health_ui;
+    if (hu) {
+      if (!(hu.potion_fly_speed > 0)) errors.push('health_ui.potion_fly_speed bad');
+      if (!(hu.potion_fly_min_ms >= 0)) errors.push('health_ui.potion_fly_min_ms bad');
+      if (!(hu.potion_fly_max_ms >= hu.potion_fly_min_ms)) errors.push('health_ui.potion_fly_max_ms bad');
+      if (!(hu.fill_ms_min > 0)) errors.push('health_ui.fill_ms_min bad');
+      if (!(hu.fill_ms_max >= hu.fill_ms_min)) errors.push('health_ui.fill_ms_max bad');
+      for (const key of ['fill_phase_amounts', 'fill_phase_times']) {
+        const arr = hu[key];
+        if (!Array.isArray(arr) || arr.length !== 3 || arr.some((v) => !(v >= 0))) {
+          errors.push('health_ui.' + key + ' must be 3 non-negative numbers');
+        } else if (Math.abs(arr.reduce((s, v) => s + v, 0) - 1) > 0.01) {
+          errors.push('health_ui.' + key + ' must sum to 1');
+        }
+      }
+    }
+
+    // cages: клетки с питомцем (спавн как у сундуков, анимация разрушения)
+    const cages = b.cages;
+    if (cages) {
+      if (cages.enabled !== undefined && typeof cages.enabled !== 'boolean') errors.push('cages.enabled must be boolean');
+      if (cages.enabled !== false) {
+        for (const k of ['wander_radius', 'open_radius', 'cage_radius', 'break_duration_ms']) {
+          if (!(cages[k] > 0)) errors.push('cages.' + k + ' bad');
+        }
+        if (!(cages.pet_speed >= 0)) errors.push('cages.pet_speed bad');
+        if (!Array.isArray(cages.types) || !cages.types.length) errors.push('cages.types missing');
+        if (cages.max_cages_on_map !== undefined && !(cages.max_cages_on_map > 0)) errors.push('cages.max_cages_on_map bad');
+        if (cages.fly_away_speed !== undefined && !(cages.fly_away_speed > 0)) errors.push('cages.fly_away_speed bad');
+        if (cages.fly_away_min_ms !== undefined && !(cages.fly_away_min_ms >= 0)) errors.push('cages.fly_away_min_ms bad');
+        if (cages.fly_away_max_ms !== undefined && !(cages.fly_away_max_ms >= (cages.fly_away_min_ms || 0))) errors.push('cages.fly_away_max_ms bad');
+        for (const t of (cages.types || [])) {
+          if (!t.id) errors.push('cage type without id');
+          if (!(t.drop_weight > 0)) errors.push('cage ' + t.id + ' bad drop_weight');
+          if (!t.pet_template) errors.push('cage ' + t.id + ' missing pet_template');
+        }
+        if (cages.test_cage && cages.test_cage.enabled && !(cages.types || []).some((t) => t.id === cages.test_cage.type)) {
+          errors.push('cages.test_cage unknown type=' + cages.test_cage.type);
+        }
+      }
+    }
+
     for (const w of (s.weapons || [])) {
       if (!w.id) errors.push('weapon without id');
       if (registries && registries.weapon && !registries.weapon[w.type]) {
@@ -231,6 +274,18 @@ export class ConfigLoader {
         for (const r of (items.rarities || [])) {
           const range = def.ranges && def.ranges[r.id];
           if (!range || !(range[0] <= range[1])) errors.push('stat ' + sid + ' bad range for ' + r.id);
+        }
+      }
+      // ссылки клеток на шаблоны питомцев и редкости
+      if (b.cages && b.cages.enabled !== false) {
+        const tplIds = new Set((items.templates || []).map((t) => t.id));
+        for (const t of (b.cages.types || [])) {
+          if (t.pet_template && !tplIds.has(t.pet_template)) {
+            errors.push('cage ' + t.id + ' unknown pet_template=' + t.pet_template);
+          }
+          if (t.rarity && !rarIds.has(t.rarity)) {
+            errors.push('cage ' + t.id + ' unknown rarity=' + t.rarity);
+          }
         }
       }
     }

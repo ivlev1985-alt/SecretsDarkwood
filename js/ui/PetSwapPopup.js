@@ -27,6 +27,15 @@ export class PetSwapPopup {
     }
     ctx.strokeStyle = rar ? rar.color : '#555';
     ctx.strokeRect(ix, iy, s, s);
+    // если у шаблона есть спрайт (например ворон) — рисуем его, иначе оставляем подложку
+    const tpl = item ? game.shop.tplById.get(item.tpl) : null;
+    const img = tpl && tpl.sprite ? game.assets.get(tpl.sprite) : null;
+    const fr = tpl && tpl.sprite_frames;
+    if (item && img && img.tagName === 'IMG' && fr) {
+      const ss = s - 6;
+      ctx.drawImage(img, 0, 0, fr.frame_width, fr.frame_height,
+        ix + (s - ss) / 2, iy + (s - ss) / 2, ss, ss);
+    }
     if (item) {
       ctx.fillStyle = rar ? rar.color : '#fff';
       ctx.font = 'bold 13px monospace';
@@ -51,7 +60,7 @@ export class PetSwapPopup {
     if (!d) return;
     ctx.fillStyle = 'rgba(0,0,0,0.75)';
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    drawPanel(ctx, { x: 30, y: 150, w: W - 60, h: 360 }, t('pet_swap_title'));
+    drawPanel(ctx, { x: 30, y: 150, w: W - 60, h: 360 }, t(d.titleKey || 'pet_swap_title'));
     this.drawCard(ctx, game, t, d.old, 50, 215, 178, 190, t('pet_swap_current'));
     this.drawCard(ctx, game, t, d.new, 232, 215, 178, 190, t('pet_swap_new'));
     drawButton(ctx, { x: 50, y: 450, w: 178, h: 44 }, t('close'));

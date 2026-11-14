@@ -163,6 +163,11 @@
     "pet_swap_new": "Новый",
     "pet_swap_swap": "Поменять",
     "pet_fetches_potions": "Собирает аптечки",
+    "cage_swap_title": "Питомец в клетке!",
+    "cage_owl": "Клетка с совой",
+    "cage_bat": "Клетка с летучей мышью",
+    "cage_fairy": "Клетка с феей",
+    "cage_raven": "Клетка с вороном",
     "monster_boss_dendroid": "Дендроид",
     "monster_boss_cyclops": "Циклоп"
   },
@@ -330,6 +335,11 @@
     "pet_swap_new": "New",
     "pet_swap_swap": "Swap",
     "pet_fetches_potions": "Fetches potions",
+    "cage_swap_title": "Pet in a cage!",
+    "cage_owl": "Owl cage",
+    "cage_bat": "Bat cage",
+    "cage_fairy": "Fairy cage",
+    "cage_raven": "Raven cage",
     "monster_boss_dendroid": "Dendroid",
     "monster_boss_cyclops": "Cyclops"
   },

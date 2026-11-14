@@ -428,6 +428,17 @@
     "magnet_chance": 0.01,
     "bomb_chance": 0.005
   },
+  "health_ui": {
+    "potion_fly_speed": 900,
+    "potion_fly_min_ms": 220,
+    "potion_fly_max_ms": 700,
+    "potion_fly_arc": 60,
+    "potion_icon_radius": 8,
+    "fill_ms_min": 5000,
+    "fill_ms_max": 6000,
+    "fill_phase_amounts": [0.15, 0.7, 0.15],
+    "fill_phase_times": [0.3, 0.4, 0.3]
+  },
   "status_effects": {
     "particle_budget": 300,
     "slow": {
@@ -755,5 +766,36 @@
         "level_up_bonus": 2
       }
     ]
+  },
+  "cages": {
+    "enabled": true,
+    "max_cages_on_map": 1,
+    "wander_radius": 96,
+    "pet_speed": 45,
+    "pet_size": 44,
+    "cage_radius": 96,
+    "bar_count": 9,
+    "bar_color": "#d9b25a",
+    "frame_color": "#8a6a2a",
+    "break_duration_ms": 500,
+    "break_spread": 34,
+    "open_radius": 60,
+    "chest_lifetime_sec": 120,
+    "fly_away_speed": 420,
+    "fly_away_min_ms": 500,
+    "fly_away_max_ms": 2500,
+    "fly_away_margin": 80,
+    "types": [
+      { "id": "cage_owl",   "name_key": "cage_owl",   "pet_template": "pet_owl",   "rarity": "common",    "drop_weight": 5 },
+      { "id": "cage_bat",   "name_key": "cage_bat",   "pet_template": "pet_bat",   "rarity": "rare",      "drop_weight": 3 },
+      { "id": "cage_fairy", "name_key": "cage_fairy", "pet_template": "pet_fairy", "rarity": "epic",      "drop_weight": 2.5 },
+      { "id": "cage_raven", "name_key": "cage_raven", "pet_template": "pet_raven", "rarity": "legendary", "drop_weight": 2.25 }
+    ],
+    "test_cage": {
+      "enabled": true,
+      "type": "cage_raven",
+      "x": -150,
+      "y": 0
+    }
   }
 }

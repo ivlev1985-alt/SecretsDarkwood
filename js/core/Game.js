@@ -15,6 +15,7 @@ import { UpgradeSystem } from '../systems/UpgradeSystem.js';
 import { ChestSystem } from '../systems/ChestSystem.js';
 import { LootSystem } from '../systems/LootSystem.js';
 import { Chest } from '../entities/Chest.js';
+import { Cage } from '../entities/Cage.js';
 import { Pickup } from '../entities/Pickup.js';
 import { Prop } from '../entities/Prop.js';
 import { Pet } from '../entities/Pet.js';
@@ -32,6 +33,7 @@ import { UpgradeMenu } from '../ui/UpgradeMenu.js';
 import { ShopMenu, DailyBonusPopup, StatsPopup, LeadersPopup } from '../ui/ShopMenu.js';
 import { PetSwapPopup } from '../ui/PetSwapPopup.js';
 import { fmtTime } from '../utils/math.js';
+import { healEase, healFillDuration } from '../utils/healAnimation.js';
 
 export const MovementRegistry = { chase: 'chase', patrol: 'patrol', ranged: 'ranged', teleport: 'teleport' };
 export const WeaponRegistry = { to_target: 'to_target', around_player: 'around_player', orbit: 'orbit', area: 'area' };
@@ -112,12 +114,16 @@ export class Game {
     // Этап 7: реклама
     this._adBusy = false;
     this._lastInter = 0;
-    // TEST (убрать позже): стартовый легендарный сундук + гарант. дроп питомца.
-    // Заклинания из него теперь выдаются через выбор из 3 карточек, а не сразу.
-    this.TEST_LEGENDARY_CHEST = true;
-    this.TEST_PET_DROP = true;
+    // Клетка с питомцем (тестовая — в начале забега, см. balance_config.cages).
     this.uiPetSwap = null;
     this.petSwapPopup = new PetSwapPopup();
+    // Аптечка: иконка летит к шкале HP, затем шкала плавно заполняется.
+    this.hpDisplay = 0;
+    this.potionFlyers = [];
+    this.healQueue = [];
+    this.healAnim = null;
+    // Питомцы, улетающие «на свободу» после клетки/замены.
+    this.fleeingPets = [];
     // Защита от «протухших» тапов на тачскринах: помним, где/когда палец лёг,
     // и когда открылась текущая модалка. Тап засчитывается только если палец
     // лёг УЖЕ на открытую модалку и почти не двигался (иначе это был джойстик
@@ -408,7 +414,7 @@ export class Game {
     // попапы поверх всего
     if (this.uiPetSwap) {
       const r = this.petSwapPopup.click(this, x, y);
-      if (r === 'close') this.uiPetSwap = null;
+      if (r === 'close') this._closePetSwap(true);
       else if (r === 'swap') this.doPetSwap();
       return;
     }
@@ -549,6 +555,10 @@ export class Game {
     this.player.hp = Math.ceil(this.player.maxHp * (this.config.game_config.monetization.revive_hp_percent || 50) / 100);
     this.player.alive = true;
     this.player.invT = 2;
+    this.hpDisplay = this.player.hp;
+    this.potionFlyers = [];
+    this.healQueue = [];
+    this.healAnim = null;
     // раздвинуть врагов чтобы не умереть мгновенно
     for (const e of this.enemies) {
       const dx = e.x - this.player.x, dy = e.y - this.player.y;
@@ -620,11 +630,17 @@ export class Game {
     return { hasPet: !!this.pet, levels: this.petLevels || {} };
   }
 
-  // Замена питомца из сундука: старый автовыкупается за 50%, новый надевается
+  // Замена питомца (клетка/сундук): лишний питомец улетает свободным за край
+  // экрана, новый надевается на место старого. Без продажи за монеты.
   doPetSwap() {
     const d = this.uiPetSwap;
-    if (!d) return;
-    if (d.old) this.save.addCoins(this.shop.sellPrice(d.old));
+    if (!d || !d.new) return;
+    // старый питомец становится лишним — улетает от игрока
+    if (d.old) {
+      const ox = this.pet ? this.pet.x : this.player.x;
+      const oy = this.pet ? this.pet.y : this.player.y - 40;
+      this._spawnFleeingPet(d.old, ox, oy);
+    }
     this.save.data.gear.pet = JSON.parse(JSON.stringify(d.new));
     this.save.save();
     // обновить боевого питомца на месте (без рестарта забега)
@@ -640,6 +656,20 @@ export class Game {
     }
     this.petLevels = {};
     this.uiPetSwap = null;
+    this._openNextPendingModal(false);
+  }
+
+  // Игрок оставил своего питомца — питомец из клетки улетает свободным.
+  _closePetSwap(keepOld = true) {
+    const d = this.uiPetSwap;
+    if (!d) return;
+    if (keepOld && d.new) {
+      const x = (typeof d.x === 'number') ? d.x : this.player.x;
+      const y = (typeof d.y === 'number') ? d.y : this.player.y;
+      this._spawnFleeingPet(d.new, x, y);
+    }
+    this.uiPetSwap = null;
+    this._openNextPendingModal(false);
   }
 
   _initRun() {
@@ -676,6 +706,13 @@ export class Game {
     this.fx = new EffectSystem(this.config.effects_config, this.assets);
     const stFx = (b.status_effects || {});
     this.particles = new ParticleSystem(stFx.particle_budget || 300);
+    // состояние UI аптечки/питомцев на новый забег
+    this.hpDisplay = this.player.hp;
+    this.potionFlyers = [];
+    this.healQueue = [];
+    this.healAnim = null;
+    this.fleeingPets = [];
+    this.uiPetSwap = null;
     // --- сброс прогресса забега: заклинания не переносятся между забегами ---
     // Оставляем только дефолтные (unlocked_by_default). Заклинания, полученные
     // в предыдущем забеге (сундуки, апгрейды), должны сбрасываться при "Заново".
@@ -733,7 +770,7 @@ export class Game {
     }
     this.progression = new ProgressionSystem(b.progression);
     this.upgrades = new UpgradeSystem(s, this.config.localization, this.settings.lang, this.config.items_config.pet_upgrades);
-    this.chestSys = new ChestSystem(b.chests);
+    this.chestSys = new ChestSystem(b.chests, b.cages);
     this.loot = new LootSystem(b.loot);
     this.enemyProjById = new Map();
     for (const p of (s.enemy_projectiles || [])) this.enemyProjById.set(p.id, p);
@@ -750,10 +787,12 @@ export class Game {
       const wood = b.chests.types.find((t) => t.id === 'wooden') || b.chests.types[0];
       if (wood) this.chestSys.chests.push(new Chest(wood, 150, 0));
     }
-    // TEST: стартовый легендарный сундук рядом (убрать позже)
-    if (this.TEST_LEGENDARY_CHEST && b.chests.enabled) {
-      const leg = b.chests.types.find((t) => t.id === 'legendary');
-      if (leg) this.chestSys.chests.push(new Chest(leg, -150, 0));
+    // Тестовая клетка с вороном в начале забега (убрать: cages.test_cage.enabled=false)
+    const cg = b.cages || {};
+    if (cg.enabled !== false && cg.test_cage && cg.test_cage.enabled) {
+      const type = (cg.types || []).find((t) => t.id === cg.test_cage.type);
+      const cage = this._makeCage(type, cg.test_cage.x ?? -150, cg.test_cage.y ?? 0);
+      if (cage) this.chestSys.cages.push(cage);
     }
     this.camera.snap(0, 0);
   }
@@ -1023,6 +1062,40 @@ export class Game {
     return { x: this.player.x + Math.cos(a) * r, y: this.player.y + Math.sin(a) * r };
   }
 
+  // Создать клетку по типу из balance_config.cages.types.
+  // Питомец-оффер роллится как предмет (шаблон + фиксированная редкость).
+  _makeCage(typeCfg, x, y) {
+    if (!typeCfg || !this.shop) return null;
+    const tpl = this.shop.tplById.get(typeCfg.pet_template);
+    if (!tpl) return null;
+    const offer = this.shop.rollOffer(tpl, Math.random, typeCfg.rarity);
+    const rarity = this.shop.rarById.get(typeCfg.rarity);
+    return new Cage(typeCfg, this.config.balance_config.cages || {}, x, y, {
+      tpl: tpl.id,
+      offer,
+      sprite: tpl.sprite || '',
+      frames: tpl.sprite_frames || null,
+      rarityColor: rarity ? rarity.color : '#ffd34d'
+    });
+  }
+
+  // Клетка сломана: окно выбора питомца (мир на паузе до решения игрока).
+  _openCage(c) {
+    if (!c || !c.petInfo || !c.petInfo.offer) return;
+    this.uiPetSwap = {
+      old: this.save.data.gear.pet || null,
+      new: c.petInfo.offer,
+      source: 'cage',
+      x: c.x,
+      y: c.y,
+      titleKey: 'cage_swap_title'
+    };
+    const cfg = this.config.balance_config.cages || {};
+    if (this.fx) this.fx.play(this.config.balance_config.chests.open_effect_id || 'chest_burst', c.x, c.y);
+    try { this.audio.playSfx(cfg.sfx_break || this.config.balance_config.chests.sfx_open); } catch (e) {}
+    this._modalTs = performance.now();
+  }
+
   _openChest(c, reward) {
     // Лут вылетает вокруг сундука (кольцом) и подбирается как обычный дроп.
     // Все цифры разлёта — из balance.chests.loot_scatter.
@@ -1048,18 +1121,6 @@ export class Game {
     }
     this.combat.pushText(c.x, c.y - 24, '+' + (reward.coins || 0), '#ffd34d');
     if (this.fx) this.fx.play(this.config.balance_config.chests.open_effect_id || 'chest_burst', c.x, c.y);
-    // особый питомец из самого редкого сундука (10%) — модалка замены с паузой
-    const sp = this.shop.cfg.special_pet;
-    if (sp && sp.enabled && c.typeCfg.id === sp.chest_id) {
-      const force = this.TEST_PET_DROP ? 1 : 0; // TEST: убрать позже
-      if (Math.random() < (force ? 1 : sp.chance)) {
-        const tpl = this.shop.tplById.get(sp.template);
-        if (tpl) {
-          const offer = this.shop.rollOffer(tpl, Math.random, sp.rarity);
-          this.uiPetSwap = { old: this.save.data.gear.pet || null, new: offer };
-        }
-      }
-    }
     try { this.audio.playSfx(this.config.balance_config.chests.sfx_open); } catch (e) {}
     if (this.config.game_config.save.save_on_important_events) this.save.save();
   }
@@ -1075,9 +1136,9 @@ export class Game {
       this.player.coins += p.value;
     } else if (p.kind === 'potion') {
       const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
-      const h = Math.round(this.player.maxHp * pct);
-      this.player.heal(h);
-      this.combat.pushText(this.player.x, this.player.y - 30, '+' + h, '#00ff88');
+      const want = Math.round(this.player.maxHp * pct);
+      const h = this._collectPotion(want, p.x, p.y);
+      if (h > 0) this.combat.pushText(this.player.x, this.player.y - 30, '+' + h, '#00ff88');
     } else if (p.kind === 'magnet') {
       for (const o of this.pickups) o.magnetized = true;
     } else if (p.kind === 'bomb') {
@@ -1091,9 +1152,139 @@ export class Game {
     }
   }
 
+  // Аптечка: HP применяется сразу (смерть из-за задержки невозможна),
+  // а шкала догоняет: иконка летит к HUD, затем 5–6 с заполнения.
+  _collectPotion(amount, wx, wy) {
+    if (!this.player || !this.player.alive) return 0;
+    const h = this.player.heal(amount);
+    if (h <= 0) return 0;
+    const hu = this.config.balance_config.health_ui || {};
+    const W = this.canvas.width, H = this.canvas.height;
+    const bar = this.hud.hpBarRect(this, W);
+    const tx = bar.x + bar.w / 2, ty = bar.y + bar.h / 2;
+    const sx = wx - this.camera.x + W / 2;
+    const sy = wy - this.camera.y + H / 2;
+    const dist = Math.hypot(tx - sx, ty - sy);
+    const speed = hu.potion_fly_speed || 900;
+    const minMs = hu.potion_fly_min_ms ?? 220;
+    const maxMs = hu.potion_fly_max_ms ?? 700;
+    const durMs = Math.max(minMs, Math.min(maxMs, (dist / speed) * 1000));
+    this.potionFlyers.push({
+      wx, wy, tx, ty, t: 0,
+      dur: Math.max(0.001, durMs / 1000),
+      amount: h
+    });
+    return h;
+  }
+
+  // Полёт иконок аптечек + плавное заполнение шкалы (профиль 15/70/15).
+  _updateHealthUI(dt) {
+    if (!this.player) return;
+    const hu = this.config.balance_config.health_ui || {};
+    for (let i = this.potionFlyers.length - 1; i >= 0; i--) {
+      const f = this.potionFlyers[i];
+      f.t += dt;
+      if (f.t >= f.dur) {
+        this.potionFlyers.splice(i, 1);
+        if (f.amount > 0) this.healQueue.push(f.amount);
+      }
+    }
+    // урон показываем сразу: шкала не должна опережать реальное HP
+    if (this.player.hp < this.hpDisplay) {
+      this.hpDisplay = this.player.hp;
+      if (this.healAnim) {
+        this.healAnim.end = Math.min(this.healAnim.end, this.player.hp);
+        if (this.healAnim.end <= this.hpDisplay) this.healAnim = null;
+      }
+    }
+    if (!this.healAnim && this.healQueue.length) {
+      const amount = this.healQueue.shift();
+      const start = this.hpDisplay;
+      // Верхняя граница — и этот прирост, и реальное HP: урон, полученный
+      // после подбора, не даёт шкале «дорисовать» уже потерянное здоровье.
+      const end = Math.min(this.player.maxHp, this.player.hp, start + amount);
+      const dur = healFillDuration(amount, this.player.maxHp, hu);
+      this.healAnim = { start, end, t: 0, dur: Math.max(0.001, dur) };
+    }
+    if (this.healAnim) {
+      const a = this.healAnim;
+      a.t += dt;
+      const k = Math.min(1, a.t / a.dur);
+      this.hpDisplay = a.start + (a.end - a.start) * healEase(k, hu);
+      if (k >= 1) {
+        this.hpDisplay = a.end;
+        this.healAnim = null;
+      }
+    } else if (!this.potionFlyers.length && !this.healQueue.length && this.player.hp > this.hpDisplay) {
+      // реген/бонусы вне аптечки: плавно догоняем (но не во время полёта иконки)
+      this.hpDisplay += (this.player.hp - this.hpDisplay) * Math.min(1, dt * 6);
+      if (this.player.hp - this.hpDisplay < 0.5) this.hpDisplay = this.player.hp;
+    }
+    // шкала никогда не показывает больше реального HP
+    this.hpDisplay = Math.max(0, Math.min(this.player.maxHp, this.player.hp, this.hpDisplay));
+  }
+
+  // Лишний питомец улетает свободным за край экрана (визуал, без логики).
+  _spawnFleeingPet(item, x, y) {
+    if (!item || !this.shop) return;
+    const tpl = this.shop.tplById.get(item.tpl);
+    const cfg = this.config.balance_config.cages || {};
+    let ax = x - this.camera.x;
+    let ay = y - this.camera.y;
+    if (Math.hypot(ax, ay) < 24) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8;
+      ax = Math.cos(a); ay = Math.sin(a);
+    }
+    const len = Math.hypot(ax, ay) || 1;
+    ax /= len; ay /= len;
+    const speed = cfg.fly_away_speed || 420;
+    // Сколько лететь до края экрана по выбранному направлению (плюс запас).
+    const W = this.canvas.width, H = this.canvas.height;
+    const margin = cfg.fly_away_margin ?? 80;
+    const sx = x - this.camera.x + W / 2;
+    const sy = y - this.camera.y + H / 2;
+    let tx = Infinity, ty = Infinity;
+    if (ax > 1e-6) tx = (W + margin - sx) / ax;
+    else if (ax < -1e-6) tx = (-margin - sx) / ax;
+    if (ay > 1e-6) ty = (H + margin - sy) / ay;
+    else if (ay < -1e-6) ty = (-margin - sy) / ay;
+    const exitDist = Math.max(40, Math.min(tx, ty));
+    const minDur = (cfg.fly_away_min_ms ?? 500) / 1000;
+    const maxDur = (cfg.fly_away_max_ms ?? 2500) / 1000;
+    const dur = Math.max(minDur, Math.min(maxDur, exitDist / speed));
+    const rar = this.shop.rarById.get(item.rarity);
+    this.fleeingPets.push({
+      x, y,
+      vx: ax * speed,
+      vy: ay * speed,
+      sprite: (tpl && tpl.sprite) || '',
+      frames: (tpl && tpl.sprite_frames) || null,
+      facing: ax >= 0 ? 1 : -1,
+      t: 0,
+      dur,
+      size: cfg.pet_size || 44,
+      rarityColor: rar ? rar.color : '#ffd34d'
+    });
+  }
+
+  _updateFleeingPets(dt) {
+    for (let i = this.fleeingPets.length - 1; i >= 0; i--) {
+      const f = this.fleeingPets[i];
+      f.t += dt;
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      if (f.t >= f.dur) this.fleeingPets.splice(i, 1);
+    }
+  }
+
   async _die() {
     if (this._dying) return; // защита от повторного входа (мир продолжает тикать до смены состояния)
     this._dying = true;
+    // не оставляем модалку клетки/аптечку поверх экрана смерти
+    this.uiPetSwap = null;
+    this.potionFlyers.length = 0;
+    this.healQueue.length = 0;
+    this.healAnim = null;
     this.deaths++;
     // коммит дельты забега в мету (revive + повторная смерть не задваивают totals)
     const { record } = this._commitRunStats();
@@ -1158,6 +1349,8 @@ export class Game {
     // Пауза мира с живой анимацией цифр: levelup, инвентарь, модалка питомца
     if (this.states.is('upgrade') || (this.uiInventory && this.states.is('playing')) || this.uiPetSwap) {
       this.combat.updateTexts(dt);
+      // аптечка/шкала HP продолжают анимацию и во время модалки
+      this._updateHealthUI(dt);
       return;
     }
     this.time += dt;
@@ -1308,7 +1501,9 @@ export class Game {
           this.player.coins += got.value;
         } else if (got.kind === 'potion') {
           const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
-          this.player.heal(this.player.maxHp * pct);
+          const wx = this.pet ? this.pet.x : this.player.x;
+          const wy = this.pet ? this.pet.y : this.player.y;
+          this._collectPotion(this.player.maxHp * pct, wx, wy);
         }
       }
       for (let i = this.pickups.length - 1; i >= 0; i--) {
@@ -1320,7 +1515,9 @@ export class Game {
       player: this.player,
       pickupRadius: pr,
       spawnPoint: () => this._chestSpawnPoint(),
-      onOpen: (c, r) => this._openChest(c, r)
+      onOpen: (c, r) => this._openChest(c, r),
+      onCageOpen: (c) => this._openCage(c),
+      makeCage: (t, x, y) => this._makeCage(t, x, y)
     });
 
     if (this.states.is('playing')) this._openNextPendingModal();
@@ -1331,6 +1528,9 @@ export class Game {
 
     if (!this.player.alive) this._die();
     if (this.skills.auraFlash > 0) this.skills.auraFlash -= dt;
+    // питомцы «на свободе» + анимация шкалы HP
+    this._updateFleeingPets(dt);
+    this._updateHealthUI(dt);
     // Этап 5: автосейв + сохранение после важных событий (levelup-окно уже ставит паузу)
     this._autosaveT -= dt;
     if (this._autosaveT <= 0) {
@@ -1398,6 +1598,11 @@ export class Game {
           ctx.strokeStyle = '#000'; ctx.strokeRect(c.x - 14, c.y - 14, 28, 28);
         }
         ctx.globalAlpha = 1;
+      }
+      // клетки с питомцами: питомец гуляет внутри, клетка рисуется поверх
+      for (const c of this.chestSys.cages) {
+        if (!c.alive) continue;
+        this._drawCage(ctx, c);
       }
       for (const e of this.enemies) {
         if (!e.alive || e.deathT > 0) continue;
@@ -1486,6 +1691,8 @@ export class Game {
           }
         }
       }
+      // улетающие «лишние» питомцы (после клетки/замены)
+      for (const f of this.fleeingPets) this._drawFleeingPet(ctx, f);
       for (const p of this.skills.projectiles) this._drawShot(ctx, p, '#ffd34d');
       for (const p of this.skills.enemyShots) this._drawShot(ctx, p, '#ff4d4d');
       this.skills.drawLightning(ctx);
@@ -1503,6 +1710,7 @@ export class Game {
       // HUD только в игре
       if (st === 'playing' || st === 'paused' || st === 'upgrade') {
         this.hud.drawTop(ctx, this, W);
+        this.hud.drawHealthFlyers(ctx, this, W, H);
         this.hud.drawBossBar(ctx, this, W, H);
         this.hud.drawBottom(ctx, this, W, H);
       }
@@ -1538,6 +1746,91 @@ export class Game {
     if (g.ui.show_fps) {
       ctx.fillStyle = '#0f0'; ctx.font = '12px monospace'; ctx.textAlign = 'left';
       ctx.fillText(this.fps + ' fps', 8, H - 8);
+    }
+    ctx.restore();
+  }
+
+  // Клетка: сначала питомец (спрайт/фолбэк), затем прутья поверх.
+  // При разрушении прутья разлетаются в стороны и гаснут (breakProgress).
+  _drawCage(ctx, c) {
+    const g = this.config.game_config;
+    const cfg = this.config.balance_config.cages || {};
+    const scale = g.visuals.global_sprite_scale || 1;
+    const k = c.breakProgress;
+    const alpha = c.opened ? Math.max(0, 1 - k) : 1;
+    const R = (cfg.cage_radius || 96) * scale;
+    const Hh = R * 1.15;
+    const cx = c.x, cy = c.y;
+    // --- питомец внутри ---
+    const pi = c.petInfo;
+    const img = pi && pi.sprite ? this.assets.get(pi.sprite) : null;
+    const f = pi && pi.frames;
+    const size = (cfg.pet_size || 44) * scale;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (img && img.tagName === 'IMG' && f) {
+      const col = Math.floor(c.animT * (f.fps || 12)) % Math.max(1, f.columns || 1);
+      ctx.save();
+      ctx.translate(c.petX, c.petY);
+      ctx.scale(c.petFacing, 1);
+      ctx.drawImage(img, col * f.frame_width, 0, f.frame_width, f.frame_height,
+        -size / 2, -size / 2, size, size);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = (pi && pi.rarityColor) || '#ffd34d';
+      ctx.beginPath(); ctx.arc(c.petX, c.petY, size * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2; ctx.stroke();
+    }
+    // --- прутья клетки ---
+    const bars = Math.max(2, cfg.bar_count || 9);
+    const spread = k * (cfg.break_spread || 34);
+    const topY = cy - Hh * 0.55;
+    const botY = cy + Hh * 0.55;
+    ctx.strokeStyle = cfg.bar_color || '#d9b25a';
+    ctx.lineWidth = Math.max(2, 3 * scale);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < bars; i++) {
+      const u = i / (bars - 1);
+      const bx = cx - R + u * 2 * R;
+      const edge = Math.abs(u - 0.5) * 2; // 0 в центре, 1 у краёв
+      const ty = topY + edge * Hh * 0.10;
+      const by = botY - edge * Hh * 0.04;
+      const dir = u < 0.5 ? -1 : 1;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(bx + dir * spread, 0);
+      ctx.rotate(dir * k * 0.35);
+      ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(0, by); ctx.stroke();
+      ctx.restore();
+    }
+    // ободья сверху/снизу + колечко
+    ctx.strokeStyle = cfg.frame_color || '#8a6a2a';
+    ctx.lineWidth = Math.max(3, 5 * scale);
+    ctx.beginPath(); ctx.ellipse(cx, topY - k * spread * 0.5, R * 1.02, R * 0.18, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx, botY + k * spread * 0.5, R * 1.02, R * 0.18, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, topY - R * 0.22 - k * spread * 0.5, Math.max(4, R * 0.08), 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Улетающий питомец: спрайт (или цветной кружок) с затуханием.
+  _drawFleeingPet(ctx, f) {
+    const k = f.dur > 0 ? Math.max(0, Math.min(1, f.t / f.dur)) : 1;
+    const alpha = k < 0.7 ? 1 : Math.max(0, 1 - (k - 0.7) / 0.3);
+    const size = f.size * (this.config.game_config.visuals.global_sprite_scale || 1);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const img = f.sprite ? this.assets.get(f.sprite) : null;
+    const frames = f.frames;
+    if (img && img.tagName === 'IMG' && frames) {
+      const col = Math.floor(f.t * (frames.fps || 12)) % Math.max(1, frames.columns || 1);
+      ctx.translate(f.x, f.y);
+      ctx.scale(f.facing, 1);
+      ctx.drawImage(img, col * frames.frame_width, 0, frames.frame_width, frames.frame_height,
+        -size / 2, -size / 2, size, size);
+    } else {
+      ctx.fillStyle = f.rarityColor || '#ffd34d';
+      ctx.beginPath(); ctx.arc(f.x, f.y, size * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2; ctx.stroke();
     }
     ctx.restore();
   }
