@@ -1567,7 +1567,7 @@ export class Game {
     const img = a.spritePath ? this.assets.get(a.spritePath) : null;
     const f = a.cfg.area_frames;
     const useArt = img && img.tagName === 'IMG' && f;
-    const size = a.cfg.flame_size || 32;
+    const size = a.cfg.flame_size || 128;
     const half = size / 2;
     for (const fl of w.flames) {
       if (!fl.alive || fl.dead) continue;

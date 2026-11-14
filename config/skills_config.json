@@ -183,8 +183,8 @@
       "area_color": "#ff4400",
       "area_sprite": "projectiles/firewall.png",
       "area_frames": {
-        "frame_width": 64,
-        "frame_height": 64,
+        "frame_width": 128,
+        "frame_height": 128,
         "columns": 6,
         "rows": 3,
         "animations": {
@@ -196,7 +196,8 @@
       "flame_count_per_side": 3,           // огоньков в каждую сторону от центра (итого 2n+1)
       "flame_spacing": 48,                  // расстояние между огоньками, px
       "flame_spawn_speed_ms": 100,          // время появления одного огонька, мс
-      "flame_size": 32,                     // размер огонька в игре, px
+      "flame_size": 128,                    // размер огонька в игре, px
+      "flame_hitbox": 96,                   // радиус хитбокса огонька, px
       "auto_aim": true,
       "auto_aim_range": 400,
       "sfx_hit": "hit.mp3",

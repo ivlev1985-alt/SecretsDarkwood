@@ -265,11 +265,11 @@ export class SkillSystem {
       const dx = e.x - a.x, dy = e.y - a.y;
       return dx * dx + dy * dy < a.radius * a.radius;
     }
-    const hr = (a.cfg.flame_spacing || 48) / 2 + (e.radius || 0);
+    const hitbox = a.cfg.flame_hitbox || 96;
     for (const f of a.wall.flames) {
       if (!f.alive || f.dead) continue;
       const dx = e.x - f.x, dy = e.y - f.y;
-      if (dx * dx + dy * dy < hr * hr) return true;
+      if (dx * dx + dy * dy < hitbox * hitbox) return true;
     }
     return false;
   }
@@ -578,7 +578,8 @@ export class SkillSystem {
       const n = c.flame_count_per_side || 3;
       const spacing = c.flame_spacing || 48;
       const spawnMs = c.flame_spawn_speed_ms || 100;
-      const size = c.flame_size || 32;
+      const size = c.flame_size || 128;
+      const hitbox = c.flame_hitbox || 96;
       const angle = Math.random() * Math.PI; // 0..180°
       const cos = Math.cos(angle), sin = Math.sin(angle);
       const totalLen = n * 2 * spacing;
@@ -603,7 +604,7 @@ export class SkillSystem {
         color: c.area_color || '#ff4400',
         spritePath: c.area_sprite, frames: c.area_frames,
         // wall data
-        wall: { flames, spawnMs, size, angle, totalLen, halfLen, age: 0, dying: false, dieAge: 0, done: false }
+        wall: { flames, spawnMs, size, hitbox, angle, totalLen, halfLen, age: 0, dying: false, dieAge: 0, done: false }
       });
     } else {
       // Обычный круг (tornado и др.)
