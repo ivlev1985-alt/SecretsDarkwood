@@ -1356,12 +1356,15 @@ export class Game {
       this._drawGround(ctx, W, H);
       this._drawProps(ctx);
       for (const a of this.skills.areas) {
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = a.color;
-        ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = a.color;
-        ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2); ctx.stroke();
+        if (a.wall) this._drawWall(ctx, a);
+        else {
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = a.color;
+          ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = a.color;
+          ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2); ctx.stroke();
+        }
       }
       if (this.skills.auraRadius) {
         ctx.globalAlpha = 0.25 + (this.skills.auraFlash > 0 ? 0.2 : 0);
@@ -1555,5 +1558,37 @@ export class Game {
     }
     ctx.fillStyle = color;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Отрисовка стены огня: огоньки из спрайтшита, появляются от центра к краям,
+  // угасают от краёв к центру.
+  _drawWall(ctx, a) {
+    const w = a.wall;
+    const img = a.spritePath ? this.assets.get(a.spritePath) : null;
+    const f = a.cfg.area_frames;
+    const useArt = img && img.tagName === 'IMG' && f;
+    const size = a.cfg.flame_size || 32;
+    const half = size / 2;
+    for (const fl of w.flames) {
+      if (!fl.alive || fl.dead) continue;
+      // Прозрачность при угасании: от 1 до 0 за spawnMs
+      let alpha = 1;
+      if (fl.dying && fl.dieT !== undefined) {
+        alpha = Math.max(0, 1 - fl.dieT / w.spawnMs);
+      }
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      if (useArt) {
+        const col = fl.frame % f.columns;
+        const row = Math.floor(fl.frame / f.columns);
+        ctx.drawImage(img, col * f.frame_width, row * f.frame_height, f.frame_width, f.frame_height,
+          fl.x - half, fl.y - half, size, size);
+      } else {
+        // Фолбэк: оранжевый кружок
+        ctx.fillStyle = a.color;
+        ctx.beginPath(); ctx.arc(fl.x, fl.y, half, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
   }
 }
