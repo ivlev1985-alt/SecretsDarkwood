@@ -7,3 +7,10 @@ export function fmtTime(sec) {
   const s = Math.max(0, Math.floor(sec));
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
 }
+// Стабильное смещение i-го предмета в «куче» (спираль Ферма + золотой угол).
+// Детерминировано по индексу — предметы не дрожат и не перескакивают между кадрами.
+export function pileOffset(i, spread = 2.6, pad = 3) {
+  const a = i * 2.399963229728653; // золотой угол, рад
+  const r = pad + spread * Math.sqrt(i);
+  return { dx: Math.cos(a) * r, dy: Math.sin(a) * r * 0.7 }; // сплюснут по Y — куча шире, чем выше
+}

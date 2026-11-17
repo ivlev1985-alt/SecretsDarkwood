@@ -32,7 +32,7 @@ import { SettingsMenu } from '../ui/SettingsMenu.js';
 import { UpgradeMenu } from '../ui/UpgradeMenu.js';
 import { ShopMenu, DailyBonusPopup, StatsPopup, LeadersPopup } from '../ui/ShopMenu.js';
 import { PetSwapPopup } from '../ui/PetSwapPopup.js';
-import { fmtTime } from '../utils/math.js';
+import { fmtTime, pileOffset } from '../utils/math.js';
 import { healEase, healFillDuration } from '../utils/healAnimation.js';
 
 export const MovementRegistry = { chase: 'chase', patrol: 'patrol', ranged: 'ranged', teleport: 'teleport' };
@@ -1681,7 +1681,7 @@ export class Game {
       // питомец (монстры его не бьют — коллизий с ним нет)
       if (this.pet) {
         const pet = this.pet;
-        const size = 32; // размер в игре
+        const size = 48; // размер в игре
         // «живое» покачивание: только визуал, коллизии/логика по pet.x/pet.y
         const vo = pet.visualOffset ? pet.visualOffset() : { ox: 0, oy: 0 };
         const px = pet.x + vo.ox, py = pet.y + vo.oy;
@@ -1689,13 +1689,13 @@ export class Game {
         const f = pet.sprite_frames;
         const useArt = img && img.tagName === 'IMG' && f;
         if (useArt) {
-          // Предметы — СЛОЕМ НИЖЕ питомца: центр по X питомца, Y на 50% ниже центра.
-          // Несёт несколько — раскладываем веером, каждый своим спрайтом.
+          // Предметы — СЛОЕМ НИЖЕ питомца: кучей под центром, каждый со своим
+          // спрайтом и стабильным (не дрожащим) смещением от центра кучи.
           if (pet.carrying && pet.carrying.length) {
-            const n = pet.carrying.length;
-            for (let ci = 0; ci < n; ci++) {
+            const cx = px, cy = py + size / 2;
+            for (let ci = 0; ci < pet.carrying.length; ci++) {
               const item = pet.carrying[ci];
-              const offX = (ci - (n - 1) / 2) * 12;
+              const off = pileOffset(ci);
               const cImg = item.sprite ? this.assets.get(item.sprite) : null;
               const cf = item.sprite_frames;
               if (cImg && cImg.tagName === 'IMG' && cf) {
@@ -1703,12 +1703,12 @@ export class Game {
                 const ccol = (item.animFrame || 0) % (cf.columns || 1);
                 const crow = Math.floor((item.animFrame || 0) / (cf.columns || 1));
                 ctx.drawImage(cImg, ccol * cf.frame_width, crow * cf.frame_height, cf.frame_width, cf.frame_height,
-                  px + offX - csize / 2, py + size / 2 - csize / 2, csize, csize);
+                  cx + off.dx - csize / 2, cy + off.dy - csize / 2, csize, csize);
               } else {
                 const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[item.kind] || '#fff';
                 ctx.fillStyle = cc;
                 ctx.beginPath();
-                ctx.arc(px + offX, py + size / 2, 5, 0, Math.PI * 2);
+                ctx.arc(cx + off.dx, cy + off.dy, 5, 0, Math.PI * 2);
                 ctx.fill();
               }
             }
@@ -1730,14 +1730,13 @@ export class Game {
           ctx.strokeStyle = '#fff';
           ctx.stroke();
           if (pet.carrying && pet.carrying.length) {
-            const n = pet.carrying.length;
-            for (let ci = 0; ci < n; ci++) {
+            for (let ci = 0; ci < pet.carrying.length; ci++) {
               const item = pet.carrying[ci];
-              const offX = (ci - (n - 1) / 2) * 12;
+              const off = pileOffset(ci);
               const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[item.kind] || '#fff';
               ctx.fillStyle = cc;
               ctx.beginPath();
-              ctx.arc(px + offX, py - 14, 5, 0, Math.PI * 2);
+              ctx.arc(px + off.dx, py - 14 + off.dy, 5, 0, Math.PI * 2);
               ctx.fill();
             }
           }
