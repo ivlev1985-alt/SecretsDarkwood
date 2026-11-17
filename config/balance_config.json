@@ -429,7 +429,7 @@
     "bomb_chance": 0.005,
     "pickup_sprites": {
       "potion": { "sprite": "items/potion.png", "frame_width": 48, "frame_height": 48, "columns": 4, "rows": 2, "frames": 8, "draw_size": 32 },
-      "coin": { "sprite": "items/coin.png", "frame_width": 16, "frame_height": 16, "columns": 1, "rows": 1, "frames": 1, "draw_size": 20 },
+      "coin": { "sprite": "items/coin.png", "frame_width": 24, "frame_height": 24, "columns": 1, "rows": 1, "frames": 1, "draw_size": 20 },
       "magnet": { "sprite": "items/magnet.png", "frame_width": 16, "frame_height": 16, "columns": 1, "rows": 1, "frames": 1, "draw_size": 20 },
       "bomb": { "sprite": "items/bomb.png", "frame_width": 16, "frame_height": 16, "columns": 1, "rows": 1, "frames": 1, "draw_size": 20 }
     }
