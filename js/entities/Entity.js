@@ -32,6 +32,9 @@ export class Entity {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(this.facing, 1);
+    // Необязательный визуальный наклон (Player.tilt): завал при вертикальном
+    // движении. У сущностей без tilt — no-op.
+    if (this.tilt) ctx.rotate(this.tilt * this.facing);
 
     if (img && this.anim) {
       try {

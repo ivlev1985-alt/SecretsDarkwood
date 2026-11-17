@@ -58,6 +58,10 @@ export class Player extends Entity {
     this.y += moveVec.y * this.speed * dt;
     if (Math.abs(moveVec.x) > 0.05) this.facing = moveVec.x > 0 ? 1 : -1;
     const moving = Math.hypot(moveVec.x, moveVec.y) > 0.15;
+    // Наклон при движении по вертикали: вниз — завал «на зрителя», вверх — «от себя».
+    // Значение маленькое (до ~0.12 рад), сглаженное — лёгкий живый крен, не карикатура.
+    const targetTilt = moving ? moveVec.y * 0.12 : 0;
+    this.tilt = (this.tilt || 0) + (targetTilt - (this.tilt || 0)) * Math.min(1, dt * 8);
     if (this.anim) {
       this.anim.setAnimation(moving ? 'run' : 'idle');
       this.anim.update(dt);
