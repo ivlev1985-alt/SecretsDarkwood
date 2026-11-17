@@ -11,7 +11,7 @@ export class Pet extends Entity {
     this.fetchPotions = !!fetchPotions; // особый питомец таскает ещё и аптечки
     this.mode = 'follow'; // follow | fetch | deliver
     this.target = null; // Pickup
-    this.carrying = null; // { kind, value }
+    this.carrying = []; // массив Pickup (с sprite/sprite_frames/animFrame)
     this.bob = Math.random() * 6;
     this.wob = Math.random() * 6; // фаза синусоиды полёта
     this.anim = null;
@@ -64,6 +64,7 @@ export class Pet extends Entity {
     if (this.mode === 'follow') {
       const best = this._nearest(pickups, px, py);
       if (best) { this.mode = 'fetch'; this.target = best; }
+      else if (this.carrying.length) { this.mode = 'deliver'; }
     } else if (this.mode === 'fetch') {
       if (!this.target || !this.target.alive) { this.mode = 'follow'; this.target = null; }
       else { tx = this.target.x; ty = this.target.y; }
@@ -84,24 +85,24 @@ export class Pet extends Entity {
       this.y += (dx / d) * w;
     }
     this.facing = dx >= 0 ? 1 : -1;
-    // захват
+    // захват: берём предмет в клюв и продолжаем искать следующий
     if (this.mode === 'fetch' && this.target && this.target.alive) {
       const gx = this.target.x - this.x, gy = this.target.y - this.y;
       if (gx * gx + gy * gy < grabR * grabR) {
-        this.carrying = { kind: this.target.kind, value: this.target.value };
-        this.target.alive = false;
+        this.carrying.push(this.target); // сам Pickup — со спрайтом и кадром
+        this.target.alive = false;       // убрать с земли
         this.target = null;
-        this.mode = 'deliver';
+        this.mode = 'follow';            // follow сам решит: ещё искать или нести
       }
     }
-    // доставка
+    // доставка: отдаём всё, что накопили
     if (this.mode === 'deliver') {
       const hx = px - this.x, hy = py - this.y;
       if (hx * hx + hy * hy < deliverR * deliverR) {
-        const c = this.carrying;
-        this.carrying = null;
+        const out = this.carrying;
+        this.carrying = [];
         this.mode = 'follow';
-        return c; // Game засчитывает как подбор
+        return out; // Game засчитывает каждый предмет
       }
     }
     return null;

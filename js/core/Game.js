@@ -1494,24 +1494,26 @@ export class Game {
       if (!p.alive) this.pickups.splice(i, 1);
     }
 
-    // питомец: несёт по одному дропу хозяину
+    // питомец: несёт дроп хозяину (может нести несколько предметов сразу)
     if (this.pet) {
       const pcfg = (this.shop.cfg.pet || {});
       const got = this.pet.update(dt, this.player.x, this.player.y, this.pickups,
         pcfg.grab_radius || 24, pcfg.deliver_radius || 28);
-      if (got) {
-        if (got.kind === 'xp') {
-          const ups = this.progression.addXP(got.value * (this.player.xpMul || 1));
-          this.player.level = this.progression.level;
-          this.pendingLevels += ups;
-          if (this.fx) this.fx.play('pickup_xp', this.player.x, this.player.y);
-        } else if (got.kind === 'coin') {
-          this.player.coins += got.value;
-        } else if (got.kind === 'potion') {
-          const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
-          const wx = this.pet ? this.pet.x : this.player.x;
-          const wy = this.pet ? this.pet.y : this.player.y;
-          this._collectPotion(this.player.maxHp * pct, wx, wy);
+      if (got && got.length) {
+        for (const g of got) {
+          if (g.kind === 'xp') {
+            const ups = this.progression.addXP(g.value * (this.player.xpMul || 1));
+            this.player.level = this.progression.level;
+            this.pendingLevels += ups;
+            if (this.fx) this.fx.play('pickup_xp', this.player.x, this.player.y);
+          } else if (g.kind === 'coin') {
+            this.player.coins += g.value;
+          } else if (g.kind === 'potion') {
+            const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
+            const wx = this.pet ? this.pet.x : this.player.x;
+            const wy = this.pet ? this.pet.y : this.player.y;
+            this._collectPotion(this.player.maxHp * pct, wx, wy);
+          }
         }
       }
       for (let i = this.pickups.length - 1; i >= 0; i--) {
@@ -1677,22 +1679,28 @@ export class Game {
         const f = pet.sprite_frames;
         const useArt = img && img.tagName === 'IMG' && f;
         if (useArt) {
-          // Предмет — СЛОЕМ НИЖЕ питомца: центр по X питомца, Y на 50% ниже центра
-          if (pet.carrying) {
-            const cImg = pet.carrying.sprite ? this.assets.get(pet.carrying.sprite) : null;
-            const cf = pet.carrying.sprite_frames;
-            if (cImg && cImg.tagName === 'IMG' && cf) {
-              const csize = cf.draw_size || cf.frame_width || 16;
-              const ccol = (pet.carrying.animFrame || 0) % (cf.columns || 1);
-              const crow = Math.floor((pet.carrying.animFrame || 0) / (cf.columns || 1));
-              ctx.drawImage(cImg, ccol * cf.frame_width, crow * cf.frame_height, cf.frame_width, cf.frame_height,
-                px - csize / 2, py + size / 2 - csize / 2, csize, csize);
-            } else {
-              const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
-              ctx.fillStyle = cc;
-              ctx.beginPath();
-              ctx.arc(px, py + size / 2, 5, 0, Math.PI * 2);
-              ctx.fill();
+          // Предметы — СЛОЕМ НИЖЕ питомца: центр по X питомца, Y на 50% ниже центра.
+          // Несёт несколько — раскладываем веером, каждый своим спрайтом.
+          if (pet.carrying && pet.carrying.length) {
+            const n = pet.carrying.length;
+            for (let ci = 0; ci < n; ci++) {
+              const item = pet.carrying[ci];
+              const offX = (ci - (n - 1) / 2) * 12;
+              const cImg = item.sprite ? this.assets.get(item.sprite) : null;
+              const cf = item.sprite_frames;
+              if (cImg && cImg.tagName === 'IMG' && cf) {
+                const csize = cf.draw_size || cf.frame_width || 16;
+                const ccol = (item.animFrame || 0) % (cf.columns || 1);
+                const crow = Math.floor((item.animFrame || 0) / (cf.columns || 1));
+                ctx.drawImage(cImg, ccol * cf.frame_width, crow * cf.frame_height, cf.frame_width, cf.frame_height,
+                  px + offX - csize / 2, py + size / 2 - csize / 2, csize, csize);
+              } else {
+                const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[item.kind] || '#fff';
+                ctx.fillStyle = cc;
+                ctx.beginPath();
+                ctx.arc(px + offX, py + size / 2, 5, 0, Math.PI * 2);
+                ctx.fill();
+              }
             }
           }
           const col = Math.floor(pet.animT * f.fps) % f.columns;
@@ -1711,12 +1719,17 @@ export class Game {
           ctx.fill();
           ctx.strokeStyle = '#fff';
           ctx.stroke();
-          if (pet.carrying) {
-            const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
-            ctx.fillStyle = cc;
-            ctx.beginPath();
-            ctx.arc(px, py - 14, 5, 0, Math.PI * 2);
-            ctx.fill();
+          if (pet.carrying && pet.carrying.length) {
+            const n = pet.carrying.length;
+            for (let ci = 0; ci < n; ci++) {
+              const item = pet.carrying[ci];
+              const offX = (ci - (n - 1) / 2) * 12;
+              const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[item.kind] || '#fff';
+              ctx.fillStyle = cc;
+              ctx.beginPath();
+              ctx.arc(px + offX, py - 14, 5, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
         }
       }
