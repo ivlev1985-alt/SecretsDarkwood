@@ -646,7 +646,12 @@ export class Game {
     // обновить боевого питомца на месте (без рестарта забега)
     const pcfg = (this.shop.cfg.pet || {});
     this.pet = new Pet(this.player.x, this.player.y - 40,
-      (d.new.stats[0] || {}).value || 200, pcfg.speed || 260, pcfg.magnet_radius || 60, !!d.new.fetch_potions);
+      (d.new.stats[0] || {}).value || 200, pcfg.speed || 260, pcfg.magnet_radius || 60, {
+        fetchPotions: !!d.new.fetch_potions,
+        fetchCoins: d.new.fetch_coins !== false,
+        fetchXp: d.new.fetch_xp !== false,
+        carryLimit: d.new.carry_limit || 3
+      });
     this.pet.tpl = d.new.tpl;
     // спрайт питомца из шаблона (как при старте забега)
     const tpl = this.shop.tplById.get(d.new.tpl);
@@ -759,7 +764,12 @@ export class Game {
     if (petItem && petItem.stats && petItem.stats[0] && petItem.stats[0].value > 0) {
       this.pet = new Pet(this.player.x, this.player.y - 40, petItem.stats[0].value,
         (this.shop.cfg.pet || {}).speed || 260, (this.shop.cfg.pet || {}).magnet_radius || 60,
-        !!petItem.fetch_potions);
+        {
+          fetchPotions: !!petItem.fetch_potions,
+          fetchCoins: petItem.fetch_coins !== false,
+          fetchXp: petItem.fetch_xp !== false,
+          carryLimit: petItem.carry_limit || 3
+        });
       this.pet.tpl = petItem.tpl;
       // спрайт питомца из шаблона
       const tpl = this.shop.tplById.get(petItem.tpl);

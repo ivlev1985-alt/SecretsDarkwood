@@ -36,6 +36,12 @@ export class ShopSystem {
     const rarity = forceRarityId ? this.rarById.get(forceRarityId) : this.pickRarity(rand);
     const offer = { tpl: tpl.id, slot: tpl.slot, rarity: rarity.id, stats: [], price: 0 };
     if (tpl.fetches_potions) offer.fetch_potions = true;
+    if (tpl.slot === 'pet') {
+      // что умеет носить и сколько (из шаблона)
+      offer.fetch_coins = tpl.fetches_coins !== false;
+      offer.fetch_xp = tpl.fetches_xp !== false;
+      offer.carry_limit = tpl.carry_limit || 3;
+    }
     if (tpl.slot === 'staff') {
       offer.spell = tpl.spell;
       offer.spell_level = rarity.spell_level || 1;

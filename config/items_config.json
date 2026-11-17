@@ -110,12 +110,16 @@
     { "id": "amulet_wisdom",   "slot": "amulet",   "name_key": "item_amulet_wisdom" },
     { "id": "amulet_luck",     "slot": "amulet",   "name_key": "item_amulet_luck" },
 
-    { "id": "pet_owl",         "slot": "pet", "name_key": "item_pet_owl",   "base_radius": 120 },
-    { "id": "pet_bat",         "slot": "pet", "name_key": "item_pet_bat",   "base_radius": 160 },
-    { "id": "pet_fairy",       "slot": "pet", "name_key": "item_pet_fairy", "base_radius": 200 },
+    { "id": "pet_owl",         "slot": "pet", "name_key": "item_pet_owl",   "base_radius": 120,
+      "fetches_potions": false, "fetches_coins": true, "fetches_xp": true, "carry_limit": 3 },
+    { "id": "pet_bat",         "slot": "pet", "name_key": "item_pet_bat",   "base_radius": 160,
+      "fetches_potions": false, "fetches_coins": true, "fetches_xp": true, "carry_limit": 3 },
+    { "id": "pet_fairy",       "slot": "pet", "name_key": "item_pet_fairy", "base_radius": 200,
+      "fetches_potions": false, "fetches_coins": true, "fetches_xp": true, "carry_limit": 3 },
     // Особый питомец: в магазине НЕ продаётся (special), падает только из
     // самого редкого сундука. Умеет подбирать ещё и аптечки.
-    { "id": "pet_raven",       "slot": "pet", "name_key": "item_pet_raven", "base_radius": 240, "special": true, "fetches_potions": true,
+    { "id": "pet_raven",       "slot": "pet", "name_key": "item_pet_raven", "base_radius": 240, "special": true,
+      "fetches_potions": true, "fetches_coins": true, "fetches_xp": true, "carry_limit": 7,
       "sprite": "pets/pet_raven.png",
       "sprite_frames": { "frame_width": 64, "frame_height": 64, "columns": 12, "frames": 12, "fps": 12 } }
   ],

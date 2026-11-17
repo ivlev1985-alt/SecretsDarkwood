@@ -3,12 +3,16 @@ import { Entity } from './Entity.js';
 // Питомец: летает, притягивает дроп (монеты/XP) в своём радиусе как персонаж,
 // подбирает ОДИН дроп и несёт хозяину. Монстры питомца не бьют.
 export class Pet extends Entity {
-  constructor(x, y, radius, speed, magnetR = 60, fetchPotions = false) {
+  // opts: { fetchPotions, fetchCoins, fetchXp, carryLimit } — из шаблона питомца.
+  constructor(x, y, radius, speed, magnetR = 60, opts = {}) {
     super(x, y, 10);
     this.radius = radius; // дальность полёта: поиск дропа вокруг хозяина
     this.speed = speed || 260;
     this.magnetR = magnetR; // радиус притяжения монет/XP к себе
-    this.fetchPotions = !!fetchPotions; // особый питомец таскает ещё и аптечки
+    this.fetchPotions = !!opts.fetchPotions; // особый питомец таскает ещё и аптечки
+    this.fetchCoins = opts.fetchCoins !== false;
+    this.fetchXp = opts.fetchXp !== false;
+    this.carryLimit = opts.carryLimit || 3; // сколько предметов может нести одновременно
     this.mode = 'follow'; // follow | fetch | deliver
     this.target = null; // Pickup
     this.carrying = []; // массив Pickup (с sprite/sprite_frames/animFrame)
@@ -42,8 +46,10 @@ export class Pet extends Entity {
 
   canTake(p) {
     if (!p || !p.alive) return false;
-    if (p.kind === 'coin' || p.kind === 'xp') return true;
-    return this.fetchPotions && p.kind === 'potion'; // только особый питомец
+    if (p.kind === 'coin') return this.fetchCoins;
+    if (p.kind === 'xp') return this.fetchXp;
+    if (p.kind === 'potion') return this.fetchPotions; // только особый питомец
+    return false;
   }
 
   update(dt, px, py, pickups, grabR, deliverR, magnetPull = 380) {
@@ -62,9 +68,13 @@ export class Pet extends Entity {
     }
     let tx = px, ty = py - 40; // точка следования над хозяином
     if (this.mode === 'follow') {
-      const best = this._nearest(pickups, px, py);
-      if (best) { this.mode = 'fetch'; this.target = best; }
-      else if (this.carrying.length) { this.mode = 'deliver'; }
+      // клюв полон — несём добычу хозяину
+      if (this.carrying.length >= this.carryLimit) { this.mode = 'deliver'; }
+      else {
+        const best = this._nearest(pickups, px, py);
+        if (best) { this.mode = 'fetch'; this.target = best; }
+        else if (this.carrying.length) { this.mode = 'deliver'; }
+      }
     } else if (this.mode === 'fetch') {
       if (!this.target || !this.target.alive) { this.mode = 'follow'; this.target = null; }
       else { tx = this.target.x; ty = this.target.y; }
