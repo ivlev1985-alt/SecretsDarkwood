@@ -16,6 +16,12 @@ export class Pet extends Entity {
     this.mode = 'follow'; // follow | fetch | deliver
     this.target = null; // Pickup
     this.carrying = []; // массив Pickup (с sprite/sprite_frames/animFrame)
+    // Пружинная физика полёта: скорость копится и гаснет — инерция, плавные дуги.
+    this.vx = 0;
+    this.vy = 0;
+    this.orbit = Math.random() * Math.PI * 2; // фаза орбиты вокруг хозяина
+    this.tilt = 0;   // визуальный наклон в вираже (rad), сглаженный
+    this.faceV = 1;  // сглаженная горизонтальная скорость для зеркалинга
     this.bob = Math.random() * 6;
     this.wob = Math.random() * 6; // фаза синусоиды полёта
     this.anim = null;
@@ -66,7 +72,7 @@ export class Pet extends Entity {
         p.y -= (mdy / md) * magnetPull * dt;
       }
     }
-    let tx = px, ty = py - 40; // точка следования над хозяином
+    let tx = px, ty = py - 40; // точка следования (в follow — орбита вокруг хозяина)
     if (this.mode === 'follow') {
       // клюв полон — несём добычу хозяину
       if (this.carrying.length >= this.carryLimit) { this.mode = 'deliver'; }
@@ -81,20 +87,41 @@ export class Pet extends Entity {
     } else if (this.mode === 'deliver') {
       tx = px; ty = py;
     }
-    const dx = tx - this.x, dy = ty - this.y;
-    const d = Math.hypot(dx, dy);
-    const sp = this.mode === 'follow' && d < 8 ? 0 : this.speed * (this.mode === 'fetch' ? 1.15 : 1);
-    if (d > 1 && sp > 0) {
-      const step = Math.min(d, sp * dt);
-      this.x += (dx / d) * step;
-      this.y += (dy / d) * step;
-      // синусоида полёта: боковое колебание перпендикулярно курсу
+    // B: в follow точка назначения медленно кружит над хозяином — питомец
+    // никогда не висит на месте, а «парит по кругу», как живая птица.
+    if (this.mode === 'follow') {
+      this.orbit += dt * 0.9;
+      tx = px + Math.cos(this.orbit) * 34;
+      ty = py - 44 + Math.sin(this.orbit) * 14;
+    }
+    // A: пружина + демпфирование вместо шага постоянной скорости.
+    // Ускорение пропорционально дистанции -> разгон вдали, торможение у цели,
+    // скруглённые дуги на разворотах и лёгкий overshoot.
+    const k = 14;              // жёсткость пружины
+    const damp = Math.pow(0.86, dt * 60); // затухание скорости за кадр
+    this.vx += (tx - this.x) * k * dt;
+    this.vy += (ty - this.y) * k * dt;
+    this.vx *= damp;
+    this.vy *= damp;
+    // ограничение скорости: в fetch чуть быстрее (пикирует за предметом)
+    const maxSp = this.speed * (this.mode === 'fetch' ? 1.15 : 1);
+    const v = Math.hypot(this.vx, this.vy);
+    if (v > maxSp) { this.vx = (this.vx / v) * maxSp; this.vy = (this.vy / v) * maxSp; }
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    // боковая волна перпендикулярно вектору скорости (визуальная «рысканье»)
+    if (v > 1) {
       this.wob += dt * this.wobSpeed;
       const w = Math.sin(this.wob) * this.wobAmp * dt;
-      this.x += (-dy / d) * w;
-      this.y += (dx / d) * w;
+      this.x += (-this.vy / v) * w;
+      this.y += (this.vx / v) * w;
     }
-    this.facing = dx >= 0 ? 1 : -1;
+    // C: плавное зеркалинге по сглаженной vx (без рывков на границе dx=0)
+    this.faceV += (this.vx - this.faceV) * Math.min(1, dt * 8);
+    if (Math.abs(this.faceV) > 12) this.facing = this.faceV >= 0 ? 1 : -1;
+    // C: наклон в вираже — боковое ускорение заваливает спрайт (только визуал)
+    const targetTilt = Math.max(-0.45, Math.min(0.45, -this.vy / this.speed * 0.5));
+    this.tilt += (targetTilt - this.tilt) * Math.min(1, dt * 6);
     // захват: берём предмет в клюв и продолжаем искать следующий
     if (this.mode === 'fetch' && this.target && this.target.alive) {
       const gx = this.target.x - this.x, gy = this.target.y - this.y;

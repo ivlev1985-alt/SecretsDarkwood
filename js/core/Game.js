@@ -1718,6 +1718,8 @@ export class Game {
           ctx.save();
           ctx.translate(px, py);
           ctx.scale(pet.facing, 1);
+          // наклон в вираже (в локальных координатах после mirror — всегда «внутрь» поворота)
+          if (pet.tilt) ctx.rotate(pet.tilt * pet.facing);
           ctx.drawImage(img, col * f.frame_width, row * f.frame_height, f.frame_width, f.frame_height,
             -size / 2, -size / 2, size, size);
           ctx.restore();
