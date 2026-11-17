@@ -14,6 +14,11 @@ export class Pickup extends Entity {
     this.vx = Math.cos(a) * sp; this.vy = Math.sin(a) * sp;
     this.magnetized = false;
     this.anim = null;
+    // спрайт дропа (пока null — рисуется заглушка); анимации нет,
+    // случайный кадр выбирается при навешивании спрайта (LootSystem.applySprite)
+    this.sprite = null;
+    this.sprite_frames = null;
+    this.animFrame = 0;
   }
 
   // Задать вылет из сундука: старт со сдвигом от центра + скорость по углу.

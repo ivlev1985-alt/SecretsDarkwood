@@ -50,6 +50,9 @@ export class AssetLoader {
     }
     // спрайты питомцев из шаблонов (pets/*.png)
     for (const t of ((items && items.templates) || [])) if (t.sprite) img.add(t.sprite);
+    // спрайты дропа (зелья и т.п.) из balance.loot.pickup_sprites
+    const ps = (((b || {}).loot || {}).pickup_sprites) || {};
+    for (const k of Object.keys(ps)) if (ps[k].sprite) img.add(ps[k].sprite);
     return { images: [...img], audio: [...audio] };
   }
 

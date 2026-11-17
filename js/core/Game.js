@@ -1115,6 +1115,7 @@ export class Game {
       const p = new Pickup(s.kind, c.x, c.y, s.value);
       const speed = sMin + Math.random() * Math.max(0, sMax - sMin);
       p.launchFrom(c.x, c.y, s.angle, speed, r0);
+      this.loot.applySprite(p);
       this.pickups.push(p);
     }
     // Заклинания из сундука — не выдаём автоматически: игрок выбирает
@@ -1580,11 +1581,22 @@ export class Game {
         ctx.globalAlpha = 1;
       }
       for (const p of this.pickups) {
-        ctx.fillStyle = p.color();
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#000'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-        const letter = { xp: 'X', coin: '$', potion: '+', magnet: 'M', bomb: 'B' }[p.kind] || '?';
-        ctx.fillText(letter, p.x, p.y + 3);
+        // Спрайт дропа (если назначен и ассет загружен), иначе — заглушка-кружок.
+        const pImg = p.sprite ? this.assets.get(p.sprite) : null;
+        const pf = p.sprite_frames;
+        if (pImg && pImg.tagName === 'IMG' && pf) {
+          const psize = pf.draw_size || pf.frame_width || 16;
+          const pcol = (p.animFrame || 0) % (pf.columns || 1);
+          const prow = Math.floor((p.animFrame || 0) / (pf.columns || 1));
+          ctx.drawImage(pImg, pcol * pf.frame_width, prow * pf.frame_height, pf.frame_width, pf.frame_height,
+            p.x - psize / 2, p.y - psize / 2, psize, psize);
+        } else {
+          ctx.fillStyle = p.color();
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#000'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+          const letter = { xp: 'X', coin: String.fromCharCode(36), potion: '+', magnet: 'M', bomb: 'B' }[p.kind] || '?';
+          ctx.fillText(letter, p.x, p.y + 3);
+        }
       }
       for (const c of this.chestSys.chests) {
         if (!c.alive) continue;

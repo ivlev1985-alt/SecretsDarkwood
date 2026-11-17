@@ -10,16 +10,36 @@ export class LootSystem {
   dropFor(enemy, rand = Math.random) {
     const out = [];
     const xp = enemy.cfg.xp_drop || 0;
-    if (xp > 0) out.push(new Pickup('xp', enemy.x, enemy.y, xp));
+    if (xp > 0) out.push(this._make('xp', enemy.x, enemy.y, xp));
     // монеты: фиксированные + шанс
     const fixed = enemy.cfg.coin_drop || 0;
-    for (let i = 0; i < fixed; i++) out.push(new Pickup('coin', enemy.x, enemy.y, 1));
+    for (let i = 0; i < fixed; i++) out.push(this._make('coin', enemy.x, enemy.y, 1));
     if ((enemy.cfg.coin_drop_chance || 0) > 0 && rand() < enemy.cfg.coin_drop_chance) {
-      out.push(new Pickup('coin', enemy.x, enemy.y, 1));
+      out.push(this._make('coin', enemy.x, enemy.y, 1));
     }
-    if (rand() < (this.cfg.health_potion_chance || 0)) out.push(new Pickup('potion', enemy.x, enemy.y, 1));
-    if (rand() < (this.cfg.magnet_chance || 0)) out.push(new Pickup('magnet', enemy.x, enemy.y, 1));
-    if (rand() < (this.cfg.bomb_chance || 0)) out.push(new Pickup('bomb', enemy.x, enemy.y, 1));
+    if (rand() < (this.cfg.health_potion_chance || 0)) out.push(this._make('potion', enemy.x, enemy.y, 1));
+    if (rand() < (this.cfg.magnet_chance || 0)) out.push(this._make('magnet', enemy.x, enemy.y, 1));
+    if (rand() < (this.cfg.bomb_chance || 0)) out.push(this._make('bomb', enemy.x, enemy.y, 1));
     return out;
+  }
+
+  // Создаёт Pickup и навешивает спрайт из loot.pickup_sprites (если задан).
+  _make(kind, x, y, value) {
+    const p = new Pickup(kind, x, y, value);
+    this.applySprite(p);
+    return p;
+  }
+
+  // Навешивает спрайт/атлас на произвольный Pickup (используется и для лута из сундуков).
+  // Анимации у дропа нет — при создании выбирается случайный кадр атласа.
+  applySprite(p) {
+    const s = (this.cfg.pickup_sprites || {})[p.kind];
+    if (s && s.sprite) {
+      p.sprite = s.sprite;
+      p.sprite_frames = s;
+      const total = s.frames || (s.columns || 1) * (s.rows || 1);
+      p.animFrame = Math.floor(Math.random() * total);
+    }
+    return p;
   }
 }
