@@ -22,10 +22,14 @@ export class Pet extends Entity {
     this.orbit = Math.random() * Math.PI * 2; // фаза орбиты вокруг хозяина
     this.tilt = 0;   // визуальный наклон в вираже (rad), сглаженный
     this.faceV = 1;  // сглаженная горизонтальная скорость для зеркалинга
+    this.animT = Math.random() * 1; // E: случайная стартовая фаза взмахов (сек)
+    this.animMul = 0.8 + Math.random() * 0.9; // E: индивидуальный темп крыльев (0.8..1.7)
+    this.impulseT = 1 + Math.random() * 2; // F: таймер случайного «толчка»
+    this.pauseT = 0;                       // G: микро-заминка перед пикированием
+    this.noiseP = Math.random() * 100;     // D: индивидуальная фаза шума
     this.bob = Math.random() * 6;
     this.wob = Math.random() * 6; // фаза синусоиды полёта
     this.anim = null;
-    this.animT = 0; // время для зацикленной спрайт-анимации
     // «Живой» полёт: уникальные амплитуды/периоды/фазы у каждого питомца,
     // чтобы два одинаковых питомца двигались по-разному (без механики).
     this.bobAmp = 3 + Math.random() * 3;                        // вертикальное покачивание, 3..6 px
@@ -37,12 +41,20 @@ export class Pet extends Entity {
     this.wobSpeed = 5 + Math.random() * 3;                      // частота боковой синусоиды
   }
 
-  // Визуальное смещение для отрисовки (на логику/коллизии не влияет):
-  // сумма двух несинхронных синусоид по вертикали + лёгкий дрейф по горизонтали.
+  // Визуальное смещение для отрисовки (на логику/коллизии не влияет).
+  // D: три октавы с иррациональными соотношениями частот (1 : 1.618 : 2.718) —
+  //    сумма никогда не повторяется, «идеальный цикл» не считывается глазом.
+  // E: амплитуды гасятся на скорости — в быстром полёте птица собрана,
+  //    «парит» только в спокойном следовании.
   visualOffset() {
+    const sf = Math.min(1, Math.hypot(this.vx, this.vy) / this.speed);
+    const calm = 1 - 0.65 * sf;
+    const n = this.noiseP;
     return {
-      ox: Math.sin(this.float * 0.7) * 2,
-      oy: Math.sin(this.bob) * this.bobAmp + Math.sin(this.float) * this.floatAmp
+      ox: (Math.sin(this.float * 0.7) * 2 + Math.sin(this.float * 1.32 + n) * 1.5) * calm,
+      oy: (Math.sin(this.bob) * this.bobAmp
+        + Math.sin(this.bob * 1.618 + n) * this.bobAmp * 0.6
+        + Math.sin(this.bob * 2.718 + n * 1.7) * this.bobAmp * 0.35) * calm
     };
   }
 
@@ -61,7 +73,10 @@ export class Pet extends Entity {
   update(dt, px, py, pickups, grabR, deliverR, magnetPull = 380) {
     this.bob += dt * this.bobSpeed;
     this.float += dt * this.floatSpeed;
-    this.animT += dt;
+    // E: темп взмахов зависит от скорости — в парении крылья медленнее,
+    // в быстром полёте чаще (индивидуальный множитель animMul — все птицы разные).
+    const spd0 = Math.min(1, Math.hypot(this.vx, this.vy) / this.speed);
+    this.animT += dt * this.animMul * (0.7 + 0.8 * spd0);
     // магнит: монеты и XP (и аптечки у особого) в радиусе притягиваются к питомцу
     for (const p of pickups) {
       if (!this.canTake(p)) continue;
@@ -78,12 +93,21 @@ export class Pet extends Entity {
       if (this.carrying.length >= this.carryLimit) { this.mode = 'deliver'; }
       else {
         const best = this._nearest(pickups, px, py);
-        if (best) { this.mode = 'fetch'; this.target = best; }
+        if (best) {
+          this.mode = 'fetch'; this.target = best;
+          this.pauseT = 0.08 + Math.random() * 0.14; // G: «заметила» — и лишь затем пикирует
+        }
         else if (this.carrying.length) { this.mode = 'deliver'; }
       }
     } else if (this.mode === 'fetch') {
       if (!this.target || !this.target.alive) { this.mode = 'follow'; this.target = null; }
-      else { tx = this.target.x; ty = this.target.y; }
+      else {
+        // G: микро-заминка — птица «замечает» предмет и лишь затем пикирует
+        if (this.pauseT > 0) {
+          this.pauseT -= dt;
+          tx = this.x; ty = this.y;
+        } else { tx = this.target.x; ty = this.target.y; }
+      }
     } else if (this.mode === 'deliver') {
       tx = px; ty = py;
     }
@@ -97,7 +121,12 @@ export class Pet extends Entity {
     // A: пружина + демпфирование вместо шага постоянной скорости.
     // Ускорение пропорционально дистанции -> разгон вдали, торможение у цели,
     // скруглённые дуги на разворотах и лёгкий overshoot.
-    const k = 14;              // жёсткость пружины
+    // G: в финальной трети пикирования пружина жёстче — заметный «бросок» к предмету.
+    let k = 14; // жёсткость пружины
+    if (this.mode === 'fetch' && this.pauseT <= 0) {
+      const dd = Math.hypot(tx - this.x, ty - this.y);
+      if (dd < 80) k = 24;
+    }
     const damp = Math.pow(0.86, dt * 60); // затухание скорости за кадр
     this.vx += (tx - this.x) * k * dt;
     this.vy += (ty - this.y) * k * dt;
@@ -107,6 +136,15 @@ export class Pet extends Entity {
     const maxSp = this.speed * (this.mode === 'fetch' ? 1.15 : 1);
     const v = Math.hypot(this.vx, this.vy);
     if (v > maxSp) { this.vx = (this.vx / v) * maxSp; this.vy = (this.vy / v) * maxSp; }
+    // F: птичья нервозность — редкие слабые боковые импульсы с затуханием пружины
+    this.impulseT -= dt;
+    if (this.impulseT <= 0) {
+      this.impulseT = 1 + Math.random() * 2.5;
+      const a = Math.random() * Math.PI * 2;
+      const imp = 20 + Math.random() * 35;
+      this.vx += Math.cos(a) * imp;
+      this.vy += Math.sin(a) * imp * 0.6;
+    }
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     // боковая волна перпендикулярно вектору скорости (визуальная «рысканье»)
