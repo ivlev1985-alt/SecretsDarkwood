@@ -1692,7 +1692,7 @@ export class Game {
           // Предметы — СЛОЕМ НИЖЕ питомца: кучей под центром, каждый со своим
           // спрайтом и стабильным (не дрожащим) смещением от центра кучи.
           if (pet.carrying && pet.carrying.length) {
-            const cx = px, cy = py + size / 2;
+            const cx = px, cy = py + size / 4;
             for (let ci = 0; ci < pet.carrying.length; ci++) {
               const item = pet.carrying[ci];
               const off = pileOffset(ci);
@@ -1736,7 +1736,7 @@ export class Game {
               const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[item.kind] || '#fff';
               ctx.fillStyle = cc;
               ctx.beginPath();
-              ctx.arc(px + off.dx, py - 14 + off.dy, 5, 0, Math.PI * 2);
+              ctx.arc(px + off.dx, py - 7 + off.dy, 5, 0, Math.PI * 2);
               ctx.fill();
             }
           }
