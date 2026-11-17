@@ -1679,11 +1679,21 @@ export class Game {
         if (useArt) {
           // Предмет — СЛОЕМ НИЖЕ питомца: центр по X питомца, Y на 50% ниже центра
           if (pet.carrying) {
-            const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
-            ctx.fillStyle = cc;
-            ctx.beginPath();
-            ctx.arc(px, py + size / 2, 5, 0, Math.PI * 2);
-            ctx.fill();
+            const cImg = pet.carrying.sprite ? this.assets.get(pet.carrying.sprite) : null;
+            const cf = pet.carrying.sprite_frames;
+            if (cImg && cImg.tagName === 'IMG' && cf) {
+              const csize = cf.draw_size || cf.frame_width || 16;
+              const ccol = (pet.carrying.animFrame || 0) % (cf.columns || 1);
+              const crow = Math.floor((pet.carrying.animFrame || 0) / (cf.columns || 1));
+              ctx.drawImage(cImg, ccol * cf.frame_width, crow * cf.frame_height, cf.frame_width, cf.frame_height,
+                px - csize / 2, py + size / 2 - csize / 2, csize, csize);
+            } else {
+              const cc = { coin: '#ffd34d', xp: '#4da6ff', potion: '#ff5a5a' }[pet.carrying.kind] || '#fff';
+              ctx.fillStyle = cc;
+              ctx.beginPath();
+              ctx.arc(px, py + size / 2, 5, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
           const col = Math.floor(pet.animT * f.fps) % f.columns;
           const row = 0;
