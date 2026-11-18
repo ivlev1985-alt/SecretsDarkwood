@@ -866,7 +866,7 @@ export class Game {
         if (proj) {
           const n = v.count || 7;
           const spread = ((v.spread_deg ?? 50) * Math.PI) / 180;
-          const dmg = e.damage * (v.damage_mul || 1.5);
+          const dmg = Math.max(0, Math.round(e.damage * (v.damage_mul || 1.5)));
           const baseA = Math.atan2(this.player.y - e.y, this.player.x - e.x);
           for (let i = 0; i < n; i++) {
             const off = n === 1 ? 0 : -spread / 2 + (spread * i) / (n - 1);
@@ -921,7 +921,7 @@ export class Game {
     const mul = dash.contact_mul || 1.5;
     const dx = this.player.x - e.x, dy = this.player.y - e.y;
     if (dx * dx + dy * dy < (R + this.player.radius) * (R + this.player.radius)) {
-      this.player.takeContactDamage(e.damage * mul);
+      this.player.takeContactDamage(Math.max(0, Math.round(e.damage * mul)));
     }
     // Эффект + отброс мелочи рядом (визуальный акцент удара)
     if (this.fx) this.fx.play('explosion_burst', e.x, e.y);
@@ -1159,8 +1159,7 @@ export class Game {
     } else if (p.kind === 'coin') {
       this.player.coins += p.value;
     } else if (p.kind === 'potion') {
-      const h = this._collectPotion(this._potionHealAmount(), p.x, p.y);
-      if (h > 0) this.combat.pushText(this.player.x, this.player.y - 30, '+' + h, '#00ff88');
+      this._collectPotion(this._potionHealAmount(), p.x, p.y);
     } else if (p.kind === 'magnet') {
       for (const o of this.pickups) o.magnetized = true;
     } else if (p.kind === 'bomb') {
@@ -1179,6 +1178,13 @@ export class Game {
   _collectPotion(amount, wx, wy) {
     if (!this.player || !this.player.alive) return 0;
     const h = this.player.heal(amount);
+    // В цифре всегда показываем номинальное значение аптечки из конфига,
+    // а не фактический остаток до полного HP (иначе выходило «+17.999999996»).
+    // Цифра появляется даже при полном HP; шкала заполняется только на h.
+    const shown = Math.max(0, Math.round(Number(amount) || 0));
+    if (this.combat) {
+      this.combat.pushText(this.player.x, this.player.y - 30, '+' + shown, '#00ff88');
+    }
     if (h <= 0) return 0;
     const hu = this.config.balance_config.health_ui || {};
     const W = this.canvas.width, H = this.canvas.height;

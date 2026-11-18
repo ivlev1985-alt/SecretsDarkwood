@@ -71,14 +71,18 @@ export class Player extends Entity {
     if (this.regen > 0 && this.hp > 0) this.hp = Math.min(this.maxHp, this.hp + this.regen * dt);
   }
 
-  // Возвращает фактически нанесённый урон (0 если неуязвим/ мёртв)
+  // Возвращает фактически нанесённый урон (0 если неуязвим/мёртв/округлился до 0).
+  // Урон монстров всегда целочисленный: contact_mul, volley.damage_mul и
+  // скейлинг волн могут дать дробь — округляем в одной точке для всех путей.
   takeContactDamage(amount) {
     if (this.invT > 0 || this.hp <= 0) return 0;
-    this.hp -= amount;
+    const dmg = Math.max(0, Math.round(Number(amount) || 0));
+    if (dmg <= 0) return 0;
+    this.hp -= dmg;
     this.invT = (this.cfg.invincibility_ms || 500) / 1000;
     this.hitFlash = this.hurtDur || 0.25;
     if (this.hp <= 0) { this.hp = 0; this.alive = false; }
-    return amount;
+    return dmg;
   }
 
   heal(amount) {

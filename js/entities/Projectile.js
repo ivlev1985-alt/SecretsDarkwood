@@ -202,23 +202,17 @@ export class Projectile extends Entity {
       const sp = a.baseSpeed * (1.5 + 1.5 * k); // до 3x скорости — туннелирование терпимо
       this.vx = Math.cos(want) * sp;
       this.vy = Math.sin(want) * sp;
-      // На 1500 px/s снаряд проходит за кадр ~24px — больше хитбокса цели.
-      // Без «захвата» он перелетает цель, разворачивается и снова перелетает:
-      // осциляция, где спраइट «зависает» на месте и вращается. Лечим так:
-      // если следующий шаг долетает до цели — встаём точно в неё.
-      const step = sp * dt + Math.max(8, this.radius);
-      const dx = tx - this.x, dy = ty - this.y;
-      if (dx * dx + dy * dy <= step * step) {
-        // встаём точно в цель — без дальнейшего шага (иначе перелёт вернётся)
-        this.x = tx; this.y = ty;
-        if (a.target && a.target.alive) {
-          // цель жива — штатная коллизия (CombatSystem) в этом же кадре
-          // нанесёт урон и включит impact
+      // цель добил другой скилл: самонаведение на мёртвую точку на огромной
+      // скорости даёт осцилляцию вокруг неё (спрайт «дрожит» на месте, меняя
+      // угол). Долетели в последнюю точку цели — играем impact-анимацию.
+      if (!(a.target && a.target.alive)) {
+        const dx = tx - this.x, dy = ty - this.y;
+        const step = Math.hypot(this.vx, this.vy) * dt + 8;
+        if (dx * dx + dy * dy <= step * step) {
+          this.x = tx; this.y = ty;
+          this.explode();
           return;
         }
-        // цель добил другой скилл — взрыв на пустом месте
-        this.explode();
-        return;
       }
     }
     this.x += this.vx * dt;

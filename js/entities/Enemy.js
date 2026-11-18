@@ -8,7 +8,8 @@ export class Enemy extends Entity {
     this.id = cfg.id;
     this.maxHp = cfg.hp; this.hp = cfg.hp;
     this.speed = cfg.speed;
-    this.damage = cfg.damage;
+    // Урон монстров — только целые числа (дробные множители округляются ниже).
+    this.damage = Math.max(0, Math.round(cfg.damage || 0));
     this.scale = cfg.scale || 1;
     this.knockResist = cfg.knockback_resist ?? 0;
     this.isBoss = !!cfg.is_boss;

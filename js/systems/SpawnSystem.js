@@ -40,7 +40,7 @@ export class SpawnSystem {
   applyScale(enemy, scale) {
     enemy.maxHp = Math.round(enemy.maxHp * scale);
     enemy.hp = enemy.maxHp;
-    enemy.damage = Math.round(enemy.damage * scale * 10) / 10;
+    enemy.damage = Math.max(0, Math.round(enemy.damage * scale));
     enemy.powerScale = scale;
     return enemy;
   }
@@ -106,7 +106,7 @@ export class SpawnSystem {
         if (!e.alive || e.deathT > 0) continue;
         e.maxHp = Math.round(e.maxHp * (1 + this.BOSS_GROWTH));
         e.hp = Math.min(e.maxHp, Math.round(e.hp * (1 + this.BOSS_GROWTH)));
-        e.damage = Math.round(e.damage * (1 + this.BOSS_GROWTH) * 10) / 10;
+        e.damage = Math.max(0, Math.round(e.damage * (1 + this.BOSS_GROWTH)));
       }
       const bossN = this.bossesSpawned; // 1,2,3… после инкремента выше — номер волны
       // Обычные мобы из генерации исключены (bosses отдельно). Если вдруг

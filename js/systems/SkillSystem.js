@@ -772,11 +772,12 @@ export class SkillSystem {
   // dx, dy — уже нормализованное направление.
   enemyFireDir(x, y, dx, dy, projCfg, damage) {
     const p = this.pool.acquire();
+    const dmg = Math.max(0, Math.round(Number(damage) || 0));
     p.fire({
       x, y,
       vx: dx * (projCfg.speed || 250),
       vy: dy * (projCfg.speed || 250),
-      damage, crit: false, pierce: 0,
+      damage: dmg, crit: false, pierce: 0,
       radius: projCfg.radius || 6,
       life: (projCfg.lifetime_ms || 2000) / 1000,
       weaponId: projCfg.id, friendly: false,

@@ -89,7 +89,7 @@ export class CombatSystem {
           const d = (e.cfg && e.cfg.dash) || {};
           mul = d.contact_mul || 1.5;
         }
-        player.takeContactDamage(e.damage * mul);
+        player.takeContactDamage(Math.max(0, Math.round(e.damage * mul)));
         if (this.collidePlayerMonster) {
           // физический блок (выкл по GDD, ветка на будущее)
           const d = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -181,7 +181,7 @@ export class CombatSystem {
       const dx = player.x - p.x, dy = player.y - p.y;
       const rr = player.radius + p.radius;
       if (dx * dx + dy * dy < rr * rr) {
-        player.takeContactDamage(p.damage);
+        player.takeContactDamage(Math.max(0, Math.round(p.damage)));
         p.active = false; p.alive = false;
       }
     }
