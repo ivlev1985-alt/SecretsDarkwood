@@ -51,6 +51,23 @@
       "projectile_lifetime_ms": 600,
       "projectile_radius": 5,
       "projectile_sprite": "projectiles/arcane_nova.png",
+      "projectile_color": "#c46bff",
+      "nova": {
+        "enabled": true,
+        "spawn_radius_min": 22,
+        "spawn_radius_max": 52,
+        "spiral_ms": 180,
+        "spiral_turns": 0.55,
+        "spiral_direction": 1,
+        "release_growth": 14,
+        "hyperbola_weight": 1.8,
+        "hyperbola_bend": 56,
+        "hyperbola_bend_ratio": 0.3,
+        "flight_curve_factor": 1.18,
+        "flight_min_ms": 260,
+        "flight_max_ms": 1000,
+        "trail_length": 12
+      },
       "projectile_frames": {
         "frame_width": 32,
         "frame_height": 32,

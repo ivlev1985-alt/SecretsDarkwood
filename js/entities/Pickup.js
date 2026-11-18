@@ -8,6 +8,9 @@ export class Pickup extends Entity {
     this.value = value;
     this.age = 0;
     this.life = kind === 'xp' || kind === 'coin' ? 30 : 20;
+    // Сколько миллисекунд длится плавное исчезновение перед end of life.
+    // Реальное значение приходит из balance.loot.fade_out_ms через LootSystem.
+    this.fadeMs = 7000;
     // разброс при выпадении
     const a = Math.random() * Math.PI * 2;
     const sp = 60 + Math.random() * 120;
@@ -47,6 +50,15 @@ export class Pickup extends Entity {
   }
 
   get collected() { return !this.alive; }
+
+  // 1 — предмет полностью виден; плавно уходит к 0 за fadeMs до исчезновения.
+  get fadeAlpha() {
+    if (!(this.fadeMs > 0)) return 1;
+    const fadeSec = this.fadeMs / 1000;
+    const remain = this.life - this.age;
+    if (remain >= fadeSec) return 1;
+    return Math.max(0, Math.min(1, remain / fadeSec));
+  }
 
   color() {
     switch (this.kind) {

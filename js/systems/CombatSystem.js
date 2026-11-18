@@ -133,6 +133,8 @@ export class CombatSystem {
     for (const p of projectiles) {
       if (!p.active) continue;
       if (p.exploding) continue; // уже взрывается — дожидаемся анимации impact
+      // Тайная нова в фазе спирали только «заряжается» вокруг игрока и не бьёт.
+      if (p.nova && p.nova.phase === 'spiral') continue;
       for (const e of enemies) {
         if (!e.alive || e.deathT > 0) continue;
         // цепная молния бьёт только цель-замок (случайную), пролетая сквозь

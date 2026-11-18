@@ -150,6 +150,9 @@ export class ConfigLoader {
     if (b.chests && b.chests.open_hold_ms !== undefined && !(b.chests.open_hold_ms >= 0)) {
       errors.push('chests.open_hold_ms bad');
     }
+    if (b.loot && b.loot.fade_out_ms !== undefined && !(b.loot.fade_out_ms >= 0)) {
+      errors.push('loot.fade_out_ms bad');
+    }
     if (b.chests && b.chests.start_chest) {
       const sc = b.chests.start_chest;
       if (sc.enabled !== undefined && typeof sc.enabled !== 'boolean') {
@@ -218,6 +221,29 @@ export class ConfigLoader {
       if (w.slow_duration_ms !== undefined && !(w.slow_duration_ms > 0)) errors.push('weapon ' + w.id + ' bad slow_duration_ms');
       if (w.burn_dps !== undefined && !(w.burn_dps > 0)) errors.push('weapon ' + w.id + ' bad burn_dps');
       if (w.burn_duration_ms !== undefined && !(w.burn_duration_ms > 0)) errors.push('weapon ' + w.id + ' bad burn_duration_ms');
+      if (w.nova && w.nova.enabled !== false) {
+        const nv = w.nova;
+        if (nv.enabled !== undefined && typeof nv.enabled !== 'boolean') {
+          errors.push('weapon ' + w.id + '.nova.enabled must be boolean');
+        }
+        for (const k of ['spawn_radius_min', 'spawn_radius_max', 'spiral_ms', 'spiral_turns',
+          'release_growth', 'hyperbola_weight', 'hyperbola_bend', 'hyperbola_bend_ratio',
+          'flight_curve_factor', 'flight_min_ms', 'flight_max_ms', 'trail_length']) {
+          if (nv[k] !== undefined && !(nv[k] >= 0)) errors.push('weapon ' + w.id + '.nova.' + k + ' bad');
+        }
+        if (nv.spawn_radius_min !== undefined && nv.spawn_radius_max !== undefined && !(nv.spawn_radius_max >= nv.spawn_radius_min)) {
+          errors.push('weapon ' + w.id + '.nova bad radius range');
+        }
+        if (nv.hyperbola_weight !== undefined && !(nv.hyperbola_weight >= 1)) {
+          errors.push('weapon ' + w.id + '.nova.hyperbola_weight must be >= 1');
+        }
+        if (nv.flight_min_ms !== undefined && nv.flight_max_ms !== undefined && !(nv.flight_max_ms >= nv.flight_min_ms)) {
+          errors.push('weapon ' + w.id + '.nova bad flight range');
+        }
+        if (nv.spiral_direction !== undefined && nv.spiral_direction !== 1 && nv.spiral_direction !== -1) {
+          errors.push('weapon ' + w.id + '.nova.spiral_direction must be 1 or -1');
+        }
+      }
       if (typeof w.unlocked !== 'boolean') errors.push('weapon ' + w.id + ' missing unlocked:boolean');
       const fr = w.projectile_frames || w.area_frames;
       if (fr) errors.push(...ConfigLoader.validateFrames(fr, 'weapon ' + w.id));

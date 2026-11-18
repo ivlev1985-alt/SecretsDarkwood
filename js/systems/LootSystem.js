@@ -33,6 +33,9 @@ export class LootSystem {
   // Навешивает спрайт/атлас на произвольный Pickup (используется и для лута из сундуков).
   // Анимации у дропа нет — при создании выбирается случайный кадр атласа.
   applySprite(p) {
+    // Единый параметр плавного исчезновения для всех источников лута.
+    const fade = this.cfg.fade_out_ms;
+    if (Number.isFinite(fade) && fade >= 0) p.fadeMs = fade;
     const s = (this.cfg.pickup_sprites || {})[p.kind];
     if (s && s.sprite) {
       p.sprite = s.sprite;

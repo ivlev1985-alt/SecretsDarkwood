@@ -27,8 +27,13 @@ export class Projectile extends Entity {
     this.chainTarget = null;
     this.weaponId = '';
     this.spritePath = '';
+    this.color = ''; // цвет фолбэка, если спрайт не загружен
     // арочная траектория (magic_bolt): фаза up -> turn -> dive
     this.arc = null; // { phase, upH, t, turnMs, accelMs, tx, ty }
+    // Тайная нова: спиральный вылет вокруг игрока + гиперболический полёт.
+    // phase: spiral -> fly. Все параметры приходят из skills_config.nova.
+    this.nova = null;
+    this.trail = [];
   }
 
   fire(o) {
@@ -55,8 +60,15 @@ export class Projectile extends Entity {
     this.weaponId = o.weaponId || '';
     this.friendly = o.friendly !== false;
     this.spritePath = o.spritePath || '';
+    this.color = o.color || '';
     this.arc = o.arc || null;
     if (this.arc) this.arc.t = 0;
+    this.nova = o.nova || null;
+    if (this.nova) {
+      this.nova.t = 0;
+      this.nova.phase = 'spiral';
+    }
+    this.trail = [];
     this.hitFlash = 0;
     this.exploding = false;
     if (o.frames && o.animName) this.makeAnim(o.frames, o.animName);
@@ -84,11 +96,80 @@ export class Projectile extends Entity {
       if (this.life >= this.maxLife) { this.active = false; this.alive = false; }
       return;
     }
-    if (this.arc) this._updateArc(dt);
+    if (this.nova) this._updateNova(dt);
+    else if (this.arc) this._updateArc(dt);
     else this.x += this.vx * dt, this.y += this.vy * dt;
     this.life += dt;
     if (this.anim) this.anim.update(dt);
     if (this.life >= this.maxLife) { this.active = false; this.alive = false; }
+  }
+
+  // Тайная нова. Сначала снаряды раскручиваются вокруг игрока по спирали
+  // (короткая фаза spiral), затем летят к своим целям по гиперболической
+  // кривой (рациональная квадратичная кривая с весом > 1). Кривая
+  // подправляется, пока цель жива, поэтому снаряды не промахиваются по
+  // движущимся монстрам.
+  _updateNova(dt) {
+    const n = this.nova;
+    n.t += dt;
+    if (n.phase === 'spiral') {
+      const k = Math.min(1, n.t / Math.max(0.001, n.spiralMs));
+      const s = k * k * (3 - 2 * k); // плавный вход/выход
+      const ang = n.a0 + n.dir * n.turns * Math.PI * 2 * s;
+      const rad = n.r0 + (n.r1 - n.r0) * s;
+      const px = this.x, py = this.y;
+      this.x = n.ox + Math.cos(ang) * rad;
+      this.y = n.oy + Math.sin(ang) * rad;
+      if (dt > 0) { this.vx = (this.x - px) / dt; this.vy = (this.y - py) / dt; }
+      this._pushNovaTrail();
+      if (k >= 1) {
+        n.phase = 'fly';
+        n.t = 0;
+        n.sx = this.x; n.sy = this.y;
+        n.p1x = this.x; n.p1y = this.y;
+        if (n.target && n.target.alive) { n.tx = n.target.x; n.ty = n.target.y; }
+        this._novaControl(1);
+      }
+      return;
+    }
+
+    const k = Math.min(1, n.t / Math.max(0.001, n.flightMs));
+    if (n.target && n.target.alive) { n.tx = n.target.x; n.ty = n.target.y; }
+    this._novaControl(dt);
+    const iu = 1 - k;
+    const w = n.weight;
+    const den = iu * iu + 2 * k * iu * w + k * k;
+    const px = this.x, py = this.y;
+    this.x = (iu * iu * n.sx + 2 * k * iu * w * n.p1x + k * k * n.tx) / den;
+    this.y = (iu * iu * n.sy + 2 * k * iu * w * n.p1y + k * k * n.ty) / den;
+    if (dt > 0) { this.vx = (this.x - px) / dt; this.vy = (this.y - py) / dt; }
+    this._pushNovaTrail();
+    if (k >= 1) {
+      this.x = n.tx; this.y = n.ty;
+      this.explode();
+    }
+  }
+
+  // Контрольная точка гиперболы: середина отрезка start->target плюс
+  // перпендикулярный выгиб. При движении цели точка плавно догоняет новую.
+  _novaControl(dt) {
+    const n = this.nova;
+    const dx = n.tx - n.sx, dy = n.ty - n.sy;
+    const d = Math.hypot(dx, dy) || 1;
+    const mx = (n.sx + n.tx) / 2, my = (n.sy + n.ty) / 2;
+    const bend = Math.min(n.bend, d * 0.45);
+    const tx = mx - (dy / d) * bend * n.side;
+    const ty = my + (dx / d) * bend * n.side;
+    const s = dt >= 1 ? 1 : Math.min(1, Math.max(0, dt) * 14);
+    n.p1x += (tx - n.p1x) * s;
+    n.p1y += (ty - n.p1y) * s;
+  }
+
+  _pushNovaTrail() {
+    const n = this.nova;
+    if (!n || !(n.trailLength > 0)) return;
+    this.trail.push({ x: this.x, y: this.y });
+    while (this.trail.length > n.trailLength) this.trail.shift();
   }
 
   // Арочная траектория: up (вертикальный вылет над головой) ->

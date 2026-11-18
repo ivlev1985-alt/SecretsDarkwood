@@ -1599,6 +1599,10 @@ export class Game {
         ctx.globalAlpha = 1;
       }
       for (const p of this.pickups) {
+        // Плавное исчезновение: последние fade_out_ms жизнь дропа
+        // становится всё прозрачнее и в конце полностью пропадает.
+        ctx.save();
+        ctx.globalAlpha = p.fadeAlpha;
         // Спрайт дропа (если назначен и ассет загружен), иначе — заглушка-кружок.
         const pImg = p.sprite ? this.assets.get(p.sprite) : null;
         const pf = p.sprite_frames;
@@ -1615,6 +1619,7 @@ export class Game {
           const letter = { xp: 'X', coin: String.fromCharCode(36), potion: '+', magnet: 'M', bomb: 'B' }[p.kind] || '?';
           ctx.fillText(letter, p.x, p.y + 3);
         }
+        ctx.restore();
       }
       for (const c of this.chestSys.chests) {
         if (!c.alive) continue;
@@ -1896,6 +1901,24 @@ export class Game {
   }
 
   _drawShot(ctx, p, color) {
+    // Тайная нова: за снарядом тянется слабый шлейф, подчёркивающий спираль
+    // и гиперболическую дугу. Рисуется и при наличии спрайта, и без него.
+    if (p.nova && !p.exploding && p.trail && p.trail.length > 1) {
+      const tr = p.trail;
+      ctx.save();
+      ctx.strokeStyle = p.color || color;
+      ctx.lineWidth = Math.max(2, p.radius * 0.8);
+      ctx.lineCap = 'round';
+      // Шлейф гаснет к хвосту: голова ярче, хвост почти прозрачный.
+      for (let i = 1; i < tr.length; i++) {
+        ctx.globalAlpha = 0.08 + 0.32 * (i / tr.length);
+        ctx.beginPath();
+        ctx.moveTo(tr[i - 1].x, tr[i - 1].y);
+        ctx.lineTo(tr[i].x, tr[i].y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     const img = this.assets.get(p.spritePath);
     if (img && p.anim && img.tagName !== 'CANVAS') {
       try {
@@ -1909,7 +1932,16 @@ export class Game {
         return;
       } catch (e) {}
     }
-    ctx.fillStyle = color;
+    const col = p.color || color;
+    if (p.nova) {
+      // мягкое свечение вокруг ядра (спрайт arcane_nova может отсутствовать)
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.radius * 2.3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
   }
 

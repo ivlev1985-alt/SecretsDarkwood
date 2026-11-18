@@ -105,6 +105,25 @@ export class SkillSystem {
     return best;
   }
 
+  // Цели для Тайной новы: все живые враги в радиусе наводки, отсортированные
+  // по дистанции. Возвращает ровно count ссылок: если врагов меньше, снаряды
+  // распределяются по кругу (несколько летят в одного); если один — все в него.
+  novaTargets(px, py, enemies, range, count) {
+    const r2 = range * range;
+    const inRange = [];
+    for (const e of enemies) {
+      if (!e.alive || e.deathT > 0) continue;
+      const dx = e.x - px, dy = e.y - py;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= r2) inRange.push({ e, d2 });
+    }
+    if (!inRange.length) return [];
+    inRange.sort((a, b) => a.d2 - b.d2);
+    const out = [];
+    for (let i = 0; i < count; i++) out.push(inRange[i % inRange.length].e);
+    return out;
+  }
+
   // Случайный живой враг в радиусе (для targeting:"random" и прыжков цепи).
   // exclude — Set уже поражённых (цепь не бьёт дважды). Чистая логика + rand.
   randomInRange(px, py, enemies, range, exclude, rand = Math.random) {
@@ -342,6 +361,9 @@ export class SkillSystem {
 
   _fireToTarget(st, ctx, rand = Math.random) {
     const c = st.cfg, { player, enemies } = ctx;
+    // Тайная нова — особый паттерн: спиральный вылет вокруг игрока и
+    // гиперболические траектории к разным целям.
+    if (c.nova && c.nova.enabled !== false) return this._fireNova(st, ctx, rand);
     // targeting:"random" (цепная молния) — первая цель случайная в радиусе
     // наводки, а не ближайшая; остальные типы — как раньше по ближайшей.
     const target = c.auto_aim === false ? null
@@ -419,6 +441,88 @@ export class SkillSystem {
           frames: c.projectile_frames, animName: 'fly'
         });
       }
+      this.projectiles.push(p);
+    }
+    if (c.sfx_shoot && this.audio) this.audio.playSfx(c.sfx_shoot);
+    return true;
+  }
+
+  // Спиральный залп: снаряды появляются кольцом вокруг игрока (радиус и угол
+  // задают спираль), коротко раскручиваются, затем летят к разным монстрам по
+  // гиперболическим кривым. Все параметры — из skills_config.nova.
+  _fireNova(st, ctx, rand = Math.random) {
+    const c = st.cfg, { player, enemies } = ctx;
+    const nv = c.nova;
+    const n = c.projectiles_per_shot || 1;
+    const range = c.auto_aim_range || 400;
+    const targets = this.novaTargets(player.x, player.y, enemies, range, n);
+    if (!targets.length) return false;
+
+    const speed = c.projectile_speed || 400;
+    const spiralMs = Math.max(0, nv.spiral_ms ?? 180);
+    const turns = nv.spiral_turns ?? 0.55;
+    const dir = (nv.spiral_direction ?? 1) < 0 ? -1 : 1;
+    const rMin = Math.max(0, nv.spawn_radius_min ?? 22);
+    const rMax = Math.max(rMin, nv.spawn_radius_max ?? 52);
+    const growth = Math.max(0, nv.release_growth ?? 14);
+    const weight = Math.max(1.01, nv.hyperbola_weight ?? 1.8);
+    const bendMax = Math.max(0, nv.hyperbola_bend ?? 56);
+    const bendRatio = Math.max(0, nv.hyperbola_bend_ratio ?? 0.3);
+    const curveFactor = Math.max(0.1, nv.flight_curve_factor ?? 1.18);
+    const flightMin = Math.max(1, nv.flight_min_ms ?? 260);
+    const flightMax = Math.max(flightMin, nv.flight_max_ms ?? 1000);
+    const trailLength = Math.max(0, nv.trail_length ?? 12);
+
+    const { damage, crit } = this.combat.rollDamage(this.weaponDamage(st, player));
+    const slow = this.weaponSlow(st);
+    const burn = this.weaponBurn(st, player);
+    const baseA = Math.atan2(targets[0].y - player.y, targets[0].x - player.x);
+
+    for (let i = 0; i < n; i++) {
+      const target = targets[i % targets.length];
+      const a0 = baseA + (i / n) * Math.PI * 2;
+      const t = n > 1 ? i / (n - 1) : 0.5;
+      const r0 = rMin + (rMax - rMin) * t;
+      const r1 = r0 + growth;
+      const dist = Math.hypot(target.x - player.x, target.y - player.y);
+      const flightMs = Math.max(flightMin, Math.min(flightMax,
+        ((dist + r1) / speed) * 1000 * curveFactor));
+      const bend = Math.min(bendMax, dist * bendRatio);
+      const p = this.pool.acquire();
+      p.fire({
+        x: player.x + Math.cos(a0) * r0,
+        y: player.y + Math.sin(a0) * r0,
+        vx: 0, vy: 0,
+        damage, crit,
+        pierce: (c.pierce_count || 0) + (c.pierce_per_level || 0) * (st.level - 1),
+        radius: c.projectile_radius || 6,
+        life: (spiralMs + flightMs + 80) / 1000,
+        explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),
+        explosionDmg: c.explosion_damage || 0,
+        destX: target.x, destY: target.y,
+        slowFactor: slow ? slow.factor : 1,
+        slowDuration: slow ? slow.duration : 0,
+        burnDps: burn ? burn.dps : 0,
+        burnDuration: burn ? burn.duration : 0,
+        chainRange: c.chain_range || 0,
+        chainTarget: null,
+        weaponId: c.id, friendly: true,
+        spritePath: c.projectile_sprite,
+        color: c.projectile_color || '',
+        frames: c.projectile_frames, animName: 'fly',
+        nova: {
+          phase: 'spiral',
+          t: 0,
+          ox: player.x, oy: player.y,
+          a0, r0, r1, dir, turns,
+          spiralMs: spiralMs / 1000,
+          target,
+          tx: target.x, ty: target.y,
+          flightMs: flightMs / 1000,
+          weight, bend, side: dir,
+          trailLength
+        }
+      });
       this.projectiles.push(p);
     }
     if (c.sfx_shoot && this.audio) this.audio.playSfx(c.sfx_shoot);

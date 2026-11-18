@@ -423,6 +423,7 @@
   },
   "loot": {
     "pickup_radius_override": null,
+    "fade_out_ms": 7000,
     "health_potion_chance": 0.02,
     "health_potion_heal_hp": 20,
     "magnet_chance": 0.01,
