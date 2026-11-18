@@ -32,9 +32,10 @@ export class Entity {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(this.facing, 1);
-    // Необязательный визуальный наклон (Player.tilt): завал при вертикальном
-    // движении. У сущностей без tilt — no-op.
-    if (this.tilt) ctx.rotate(this.tilt * this.facing);
+    // Необязательный визуальный наклон (Player.tilt). Поворот применяется ВНУТРИ
+    // отражения (после scale), поэтому зеркалится вместе со спрайтом: завал всегда
+    // «в сторону движения», симметрично для лево/право.
+    if (this.tilt) ctx.rotate(this.tilt);
 
     if (img && this.anim) {
       try {
