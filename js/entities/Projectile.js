@@ -121,6 +121,18 @@ export class Projectile extends Entity {
       const sp = a.baseSpeed * (1.5 + 1.5 * k); // до 3x скорости — туннелирование терпимо
       this.vx = Math.cos(want) * sp;
       this.vy = Math.sin(want) * sp;
+      // цель добил другой скилл: самонаведение на мёртвую точку на огромной
+      // скорости даёт осцилляцию вокруг неё (спрайт «дрожит» на месте, меняя
+      // угол). Долетели в последнюю точку цели — играем impact-анимацию.
+      if (!(a.target && a.target.alive)) {
+        const dx = tx - this.x, dy = ty - this.y;
+        const step = Math.hypot(this.vx, this.vy) * dt + 8;
+        if (dx * dx + dy * dy <= step * step) {
+          this.x = tx; this.y = ty;
+          this.explode();
+          return;
+        }
+      }
     }
     this.x += this.vx * dt;
     this.y += this.vy * dt;
