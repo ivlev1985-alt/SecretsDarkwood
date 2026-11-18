@@ -75,11 +75,11 @@ export class Pet extends Entity {
   update(dt, px, py, pickups, grabR, deliverR, magnetPull = 380) {
     // Страховка от «вечного догоняющего»: пружина асимптотически тормозит у цели,
     // и при рывках игрока питомец может не попасть в радиус доставки.
-    // Если с лутом >3с — панический режим: прямой полёт к хозяину с гарантированной
+    // Если с лутом >7с — панический режим: прямой полёт к хозяину с гарантированной
     // скоростью (заметно выше скорости игрока). Держится ДО самой отдачи лута.
     if (this.carrying.length) {
       this.deliverT += dt;
-      if (this.deliverT > 3) this.chaseBoost = true;
+      if (this.deliverT > 7) this.chaseBoost = true;
     } else {
       this.deliverT = 0;
       this.chaseBoost = false; // лута нет — буст не нужен
