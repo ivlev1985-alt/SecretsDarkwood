@@ -1420,6 +1420,7 @@ export class Game {
             e.x += mx * bo.spdOverride * dt;
             e.y += my * bo.spdOverride * dt;
             e.applyKnock(dt);
+            if (e.updateTilt) e.updateTilt(dt, mx * bo.spdOverride + e.knockX, my * bo.spdOverride + e.knockY);
             this._pushOut(e, false);
             e.updateAnim(dt);
             continue;
@@ -1445,6 +1446,8 @@ export class Game {
       e.x += mx * spd * dt;
       e.y += my * spd * dt;
       e.applyKnock(dt);
+      // наклон: фактическая скорость движения + отбрасывание
+      if (e.updateTilt) e.updateTilt(dt, mx * spd + e.knockX, my * spd + e.knockY);
       this._pushOut(e, false);
       e.updateAnim(dt);
     }

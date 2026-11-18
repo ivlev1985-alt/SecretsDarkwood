@@ -168,4 +168,16 @@ export class Enemy extends Entity {
     if (Math.abs(this.knockX) < 1) this.knockX = 0;
     if (Math.abs(this.knockY) < 1) this.knockY = 0;
   }
+
+  // Визуальный наклон (Entity.draw применяет его внутри зеркалирования):
+  // bank — завал в сторону горизонтального движения (в локальных координатах
+  // спрайта), vert — как у героя: вниз «на зрителя», вверх «от себя».
+  // Амплитуда меньше геройской (по 0.08 рад) — монстры тяжёлые.
+  updateTilt(dt, vx, vy) {
+    const sp = Math.max(1, this.speed);
+    const bank = Math.max(-0.08, Math.min(0.08, (vx * this.facing) / sp * 0.08));
+    const vert = Math.max(-0.08, Math.min(0.08, vy / sp * 0.08));
+    const target = bank + vert;
+    this.tilt = (this.tilt || 0) + (target - (this.tilt || 0)) * Math.min(1, dt * 8);
+  }
 }
