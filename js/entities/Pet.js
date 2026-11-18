@@ -27,6 +27,8 @@ export class Pet extends Entity {
     this.impulseT = 1 + Math.random() * 2; // F: таймер случайного «толчка»
     this.pauseT = 0;                       // G: микро-заминка перед пикированием
     this.noiseP = Math.random() * 100;     // D: индивидуальная фаза шума
+    this.deliverT = 0;                     // сколько времени не может отдать лут
+    this.chaseBoost = false;               // >3с без доставки — режим «догоню любой ценой»
     this.bob = Math.random() * 6;
     this.wob = Math.random() * 6; // фаза синусоиды полёта
     this.anim = null;
@@ -71,6 +73,16 @@ export class Pet extends Entity {
   }
 
   update(dt, px, py, pickups, grabR, deliverR, magnetPull = 380) {
+    // Страховка от «вечного догоняющего»: пружина асимптотически тормозит у цели,
+    // и при рывках игрока питомец может не попасть в радиус доставки.
+    // Если с лутом >3с — панический режим: прямой полёт к хозяину с гарантированной
+    // скоростью (заметно выше скорости игрока) до самой отдачи.
+    if (this.carrying.length) {
+      this.deliverT += dt;
+      if (this.deliverT > 3) this.chaseBoost = true;
+    } else {
+      this.deliverT = 0;
+    }
     this.bob += dt * this.bobSpeed;
     this.float += dt * this.floatSpeed;
     // E: темп взмахов зависит от скорости — в парении крылья медленнее,
@@ -89,8 +101,10 @@ export class Pet extends Entity {
     }
     let tx = px, ty = py - 40; // точка следования (в follow — орбита вокруг хозяина)
     if (this.mode === 'follow') {
+      // панический режим — бросок к хозяину, не отвлекаясь на лут
+      if (this.chaseBoost) { this.mode = 'deliver'; }
       // клюв полон — несём добычу хозяину
-      if (this.carrying.length >= this.carryLimit) { this.mode = 'deliver'; }
+      else if (this.carrying.length >= this.carryLimit) { this.mode = 'deliver'; }
       else {
         const best = this._nearest(pickups, px, py);
         if (best) {
@@ -100,7 +114,8 @@ export class Pet extends Entity {
         else if (this.carrying.length) { this.mode = 'deliver'; }
       }
     } else if (this.mode === 'fetch') {
-      if (!this.target || !this.target.alive) { this.mode = 'follow'; this.target = null; }
+      if (this.chaseBoost) { this.mode = 'deliver'; this.target = null; }
+      else if (!this.target || !this.target.alive) { this.mode = 'follow'; this.target = null; }
       else {
         // G: микро-заминка — птица «замечает» предмет и лишь затем пикирует
         if (this.pauseT > 0) {
@@ -127,13 +142,17 @@ export class Pet extends Entity {
       const dd = Math.hypot(tx - this.x, ty - this.y);
       if (dd < 80) k = 24;
     }
+    // панический режим: жёсткая пружина прямо к хозяину (до применения пружины!)
+    if (this.chaseBoost) k = 40;
     const damp = Math.pow(0.86, dt * 60); // затухание скорости за кадр
     this.vx += (tx - this.x) * k * dt;
     this.vy += (ty - this.y) * k * dt;
     this.vx *= damp;
     this.vy *= damp;
     // ограничение скорости: в fetch чуть быстрее (пикирует за предметом)
-    const maxSp = this.speed * (this.mode === 'fetch' ? 1.15 : 1);
+    let maxSp = this.speed * (this.mode === 'fetch' ? 1.15 : 1);
+    // панический режим: скорость с запасом над максимальной скоростью игрока
+    if (this.chaseBoost) maxSp = this.speed * 1.6;
     const v = Math.hypot(this.vx, this.vy);
     if (v > maxSp) { this.vx = (this.vx / v) * maxSp; this.vy = (this.vy / v) * maxSp; }
     // F: птичья нервозность — редкие слабые боковые импульсы с затуханием пружины
@@ -177,6 +196,8 @@ export class Pet extends Entity {
         const out = this.carrying;
         this.carrying = [];
         this.mode = 'follow';
+        this.deliverT = 0;      // лут отдан — страховка больше не нужна
+        this.chaseBoost = false;
         return out; // Game засчитывает каждый предмет
       }
     }
