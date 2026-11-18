@@ -1143,6 +1143,12 @@ export class Game {
     if (this.config.game_config.save.save_on_important_events) this.save.save();
   }
 
+  // Сколько HP восстанавливает одна аптечка (значение из balance.loot).
+  _potionHealAmount() {
+    const v = this.config.balance_config.loot.health_potion_heal_hp;
+    return Number.isFinite(v) && v > 0 ? v : 20;
+  }
+
   _collect(p) {
     p.alive = false;
     if (p.kind === 'xp') {
@@ -1153,9 +1159,7 @@ export class Game {
     } else if (p.kind === 'coin') {
       this.player.coins += p.value;
     } else if (p.kind === 'potion') {
-      const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
-      const want = Math.round(this.player.maxHp * pct);
-      const h = this._collectPotion(want, p.x, p.y);
+      const h = this._collectPotion(this._potionHealAmount(), p.x, p.y);
       if (h > 0) this.combat.pushText(this.player.x, this.player.y - 30, '+' + h, '#00ff88');
     } else if (p.kind === 'magnet') {
       for (const o of this.pickups) o.magnetized = true;
@@ -1522,10 +1526,9 @@ export class Game {
           } else if (g.kind === 'coin') {
             this.player.coins += g.value;
           } else if (g.kind === 'potion') {
-            const pct = (this.config.balance_config.loot.health_potion_heal_percent || 25) / 100;
             const wx = this.pet ? this.pet.x : this.player.x;
             const wy = this.pet ? this.pet.y : this.player.y;
-            this._collectPotion(this.player.maxHp * pct, wx, wy);
+            this._collectPotion(this._potionHealAmount(), wx, wy);
           }
         }
       }

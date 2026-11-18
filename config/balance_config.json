@@ -424,7 +424,7 @@
   "loot": {
     "pickup_radius_override": null,
     "health_potion_chance": 0.02,
-    "health_potion_heal_percent": 25,
+    "health_potion_heal_hp": 20,
     "magnet_chance": 0.01,
     "bomb_chance": 0.005,
     "pickup_sprites": {
