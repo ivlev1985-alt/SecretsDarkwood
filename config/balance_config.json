@@ -128,20 +128,20 @@
         "animations": {
           "walk": {
             "row": 0,
-            "frames": 5,
-            "fps": 5,
+            "frames": 6,
+            "fps": 6,
             "loop": true
           },
           "attack": {
             "row": 1,
-            "frames": 4,
-            "fps": 6,
+            "frames": 6,
+            "fps": 4,
             "loop": false
           },
           "death": {
-            "row": 2,
+            "row": 3,
             "frames": 6,
-            "fps": 6,
+            "fps": 5,
             "loop": false
           }
         }
