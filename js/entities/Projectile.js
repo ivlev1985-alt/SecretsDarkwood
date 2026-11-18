@@ -27,6 +27,8 @@ export class Projectile extends Entity {
     this.chainTarget = null;
     this.weaponId = '';
     this.spritePath = '';
+    // арочная траектория (magic_bolt): фаза up -> turn -> dive
+    this.arc = null; // { phase, upH, t, turnMs, accelMs, tx, ty }
   }
 
   fire(o) {
@@ -53,6 +55,8 @@ export class Projectile extends Entity {
     this.weaponId = o.weaponId || '';
     this.friendly = o.friendly !== false;
     this.spritePath = o.spritePath || '';
+    this.arc = o.arc || null;
+    if (this.arc) this.arc.t = 0;
     this.hitFlash = 0;
     this.exploding = false;
     if (o.frames && o.animName) this.makeAnim(o.frames, o.animName);
@@ -80,10 +84,46 @@ export class Projectile extends Entity {
       if (this.life >= this.maxLife) { this.active = false; this.alive = false; }
       return;
     }
-    this.x += this.vx * dt; this.y += this.vy * dt;
+    if (this.arc) this._updateArc(dt);
+    else this.x += this.vx * dt, this.y += this.vy * dt;
     this.life += dt;
     if (this.anim) this.anim.update(dt);
     if (this.life >= this.maxLife) { this.active = false; this.alive = false; }
+  }
+
+  // Арочная траектория: up (вертикальный вылет над головой) ->
+  // turn (плавный разворот к цели с ростом скорости) -> dive (самонаведение
+  // с резким ускорением до попадания/истечения жизни).
+  _updateArc(dt) {
+    const a = this.arc;
+    a.t += dt;
+    // живая цель (если ещё жива), иначе — точка на момент вылета
+    const tx = (a.target && a.target.alive) ? a.target.x : a.tx;
+    const ty = (a.target && a.target.alive) ? a.target.y : a.ty;
+    if (a.phase === 'up') {
+      this.vx = 0; this.vy = -a.upH / a.upMs;
+      if (a.t >= a.upMs) { a.phase = 'turn'; a.t = 0; }
+    } else if (a.phase === 'turn') {
+      const k = Math.min(1, a.t / a.turnMs);
+      const s = k * k * (3 - 2 * k); // smoothstep — мягкий вход/выход из радиуса
+      const want = Math.atan2(ty - this.y, tx - this.x);
+      let delta = want - (-Math.PI / 2); // от «вверх» к направлению на цель
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      const ang = -Math.PI / 2 + delta * s;
+      const sp = a.baseSpeed * (0.5 + 1.0 * s); // в развороте даже медленнее — видна «дуга»
+      this.vx = Math.cos(ang) * sp;
+      this.vy = Math.sin(ang) * sp;
+      if (k >= 1) { a.phase = 'dive'; a.t = 0; }
+    } else { // dive: самонаведение + резкое ускорение
+      const k = Math.min(1, a.t / a.accelMs);
+      const want = Math.atan2(ty - this.y, tx - this.x);
+      const sp = a.baseSpeed * (1.5 + 1.5 * k); // до 3x скорости — туннелирование терпимо
+      this.vx = Math.cos(want) * sp;
+      this.vy = Math.sin(want) * sp;
+    }
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
   }
 
   get expired() { return !this.active; }

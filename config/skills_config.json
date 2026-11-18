@@ -22,6 +22,7 @@
         }
       },
       "pierce_count": 0,
+      "projectile_arc": { "up_min": 64, "up_max": 192, "turn_ms": 300, "accel_ms": 200 },
       "explosion_radius": 0,
       "explosion_damage": 0,
       "projectiles_per_shot": 1,

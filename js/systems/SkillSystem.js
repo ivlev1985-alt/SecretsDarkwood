@@ -359,30 +359,66 @@ export class SkillSystem {
       const off = n === 1 ? 0 : -spread / 2 + (spread * i) / (n - 1);
       const a = baseA + off;
       const p = this.pool.acquire();
-      p.fire({
-        x: player.x, y: player.y,
-        vx: Math.cos(a) * (c.projectile_speed || 400),
-        vy: Math.sin(a) * (c.projectile_speed || 400),
-        damage, crit,
-        pierce: (c.pierce_count || 0) + (c.pierce_per_level || 0) * (st.level - 1),
-        radius: c.projectile_radius || 6,
-        life: (c.projectile_lifetime_ms || 1000) / 1000,
-        explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),
-        explosionDmg: c.explosion_damage || 0,
-        // цель на момент вылета — снаряд летит в эту точку земли и взрывается там,
-        // даже если цель к тому времени уже мертва
-        destX: target.x,
-        destY: target.y,
-        slowFactor: slow ? slow.factor : 1,
-        slowDuration: slow ? slow.duration : 0,
-        burnDps: burn ? burn.dps : 0,
-        burnDuration: burn ? burn.duration : 0,
-        chainRange: c.chain_range || 0,
-        chainTarget: (c.chain_range > 0) ? target : null,
-        weaponId: c.id, friendly: true,
-        spritePath: c.projectile_sprite,
-        frames: c.projectile_frames, animName: 'fly'
-      });
+      // magic_bolt: арочная траектория (up -> turn -> dive)
+      const arcCfg = c.projectile_arc;
+      if (arcCfg) {
+        const upH = arcCfg.up_min + Math.random() * (arcCfg.up_max - arcCfg.up_min);
+        p.fire({
+          x: player.x, y: player.y,
+          vx: 0, vy: -(c.projectile_speed || 400),
+          damage, crit,
+          pierce: (c.pierce_count || 0) + (c.pierce_per_level || 0) * (st.level - 1),
+          radius: c.projectile_radius || 6,
+          life: (c.projectile_lifetime_ms || 1000) / 1000,
+          explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),
+          explosionDmg: c.explosion_damage || 0,
+          destX: target.x, destY: target.y,
+          slowFactor: slow ? slow.factor : 1,
+          slowDuration: slow ? slow.duration : 0,
+          burnDps: burn ? burn.dps : 0,
+          burnDuration: burn ? burn.duration : 0,
+          chainRange: c.chain_range || 0,
+          chainTarget: (c.chain_range > 0) ? target : null,
+          weaponId: c.id, friendly: true,
+          spritePath: c.projectile_sprite,
+          frames: c.projectile_frames, animName: 'fly',
+          arc: {
+            phase: 'up',
+            upH,
+            upMs: upH / (c.projectile_speed || 400),
+            turnMs: (arcCfg.turn_ms || 300) / 1000,
+            accelMs: (arcCfg.accel_ms || 200) / 1000,
+            baseSpeed: c.projectile_speed || 400,
+            tx: target.x, ty: target.y,
+            target: target
+          }
+        });
+      } else {
+        p.fire({
+          x: player.x, y: player.y,
+          vx: Math.cos(a) * (c.projectile_speed || 400),
+          vy: Math.sin(a) * (c.projectile_speed || 400),
+          damage, crit,
+          pierce: (c.pierce_count || 0) + (c.pierce_per_level || 0) * (st.level - 1),
+          radius: c.projectile_radius || 6,
+          life: (c.projectile_lifetime_ms || 1000) / 1000,
+          explosionR: (c.explosion_radius || 0) + (c.explosion_radius_per_level || 0) * (st.level - 1),
+          explosionDmg: c.explosion_damage || 0,
+          // цель на момент вылета — снаряд летит в эту точку земли и взрывается там,
+          // даже если цель к тому времени уже мертва
+          destX: target.x,
+          destY: target.y,
+          slowFactor: slow ? slow.factor : 1,
+          slowDuration: slow ? slow.duration : 0,
+          burnDps: burn ? burn.dps : 0,
+          burnDuration: burn ? burn.duration : 0,
+          chainRange: c.chain_range || 0,
+          chainTarget: (c.chain_range > 0) ? target : null,
+          weaponId: c.id, friendly: true,
+          spritePath: c.projectile_sprite,
+          frames: c.projectile_frames, animName: 'fly'
+        });
+      }
       this.projectiles.push(p);
     }
     if (c.sfx_shoot && this.audio) this.audio.playSfx(c.sfx_shoot);
