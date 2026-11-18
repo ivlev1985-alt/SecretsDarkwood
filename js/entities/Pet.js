@@ -76,12 +76,13 @@ export class Pet extends Entity {
     // Страховка от «вечного догоняющего»: пружина асимптотически тормозит у цели,
     // и при рывках игрока питомец может не попасть в радиус доставки.
     // Если с лутом >3с — панический режим: прямой полёт к хозяину с гарантированной
-    // скоростью (заметно выше скорости игрока) до самой отдачи.
+    // скоростью (заметно выше скорости игрока). Держится ДО самой отдачи лута.
     if (this.carrying.length) {
       this.deliverT += dt;
       if (this.deliverT > 3) this.chaseBoost = true;
     } else {
       this.deliverT = 0;
+      this.chaseBoost = false; // лута нет — буст не нужен
     }
     this.bob += dt * this.bobSpeed;
     this.float += dt * this.floatSpeed;
@@ -137,24 +138,33 @@ export class Pet extends Entity {
     // Ускорение пропорционально дистанции -> разгон вдали, торможение у цели,
     // скруглённые дуги на разворотах и лёгкий overshoot.
     // G: в финальной трети пикирования пружина жёстче — заметный «бросок» к предмету.
-    let k = 14; // жёсткость пружины
-    if (this.mode === 'fetch' && this.pauseT <= 0) {
-      const dd = Math.hypot(tx - this.x, ty - this.y);
-      if (dd < 80) k = 24;
+    if (this.chaseBoost) {
+      // Панический режим: ПРЯМОЙ полёт к хозяину на полной скорости, минуя пружину —
+      // она тормозит вблизи цели и позволяет «играть в догонялки» на 30-50px.
+      // Буст держится до фактической отдачи лута (без ограничения по времени).
+      const hx = px - this.x, hy = py - this.y;
+      const hd = Math.hypot(hx, hy) || 1;
+      const boost = this.speed * 1.6;
+      const s = Math.min(1, dt * 10); // лёгкое сглаживание — без рывка при включении
+      this.vx += ((hx / hd) * boost - this.vx) * s;
+      this.vy += ((hy / hd) * boost - this.vy) * s;
+    } else {
+      let k = 14; // жёсткость пружины
+      if (this.mode === 'fetch' && this.pauseT <= 0) {
+        const dd = Math.hypot(tx - this.x, ty - this.y);
+        if (dd < 80) k = 24;
+      }
+      const damp = Math.pow(0.86, dt * 60); // затухание скорости за кадр
+      this.vx += (tx - this.x) * k * dt;
+      this.vy += (ty - this.y) * k * dt;
+      this.vx *= damp;
+      this.vy *= damp;
+      // ограничение скорости: в fetch чуть быстрее (пикирует за предметом)
+      const maxSp = this.speed * (this.mode === 'fetch' ? 1.15 : 1);
+      const v = Math.hypot(this.vx, this.vy);
+      if (v > maxSp) { this.vx = (this.vx / v) * maxSp; this.vy = (this.vy / v) * maxSp; }
     }
-    // панический режим: жёсткая пружина прямо к хозяину (до применения пружины!)
-    if (this.chaseBoost) k = 40;
-    const damp = Math.pow(0.86, dt * 60); // затухание скорости за кадр
-    this.vx += (tx - this.x) * k * dt;
-    this.vy += (ty - this.y) * k * dt;
-    this.vx *= damp;
-    this.vy *= damp;
-    // ограничение скорости: в fetch чуть быстрее (пикирует за предметом)
-    let maxSp = this.speed * (this.mode === 'fetch' ? 1.15 : 1);
-    // панический режим: скорость с запасом над максимальной скоростью игрока
-    if (this.chaseBoost) maxSp = this.speed * 1.6;
     const v = Math.hypot(this.vx, this.vy);
-    if (v > maxSp) { this.vx = (this.vx / v) * maxSp; this.vy = (this.vy / v) * maxSp; }
     // F: птичья нервозность — редкие слабые боковые импульсы с затуханием пружины
     this.impulseT -= dt;
     if (this.impulseT <= 0) {
