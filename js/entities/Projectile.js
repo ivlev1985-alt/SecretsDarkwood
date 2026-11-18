@@ -178,9 +178,14 @@ export class Projectile extends Entity {
   _updateArc(dt) {
     const a = this.arc;
     a.t += dt;
-    // живая цель (если ещё жива), иначе — точка на момент вылета
-    const tx = (a.target && a.target.alive) ? a.target.x : a.tx;
-    const ty = (a.target && a.target.alive) ? a.target.y : a.ty;
+    // Цель «жива» по-настоящему только до старта death-анимации: Enemy при
+    // смерти ставит deathT>0, а alive гаснет только после трупа. CombatSystem
+    // таких врагов пропускает — если арка наводится на «смертельно раненую»
+    // цель, снаряд зависает над трупом до конца жизни (как fireball: считаем
+    // мёртвой и взрываемся в последней точке).
+    const aliveT = a.target && a.target.alive && !(a.target.deathT > 0);
+    if (aliveT) { a.tx = a.target.x; a.ty = a.target.y; } // помним последнюю позицию
+    const tx = a.tx, ty = a.ty;
     if (a.phase === 'up') {
       this.vx = 0; this.vy = -a.upH / a.upMs;
       if (a.t >= a.upMs) { a.phase = 'turn'; a.t = 0; }
@@ -202,17 +207,15 @@ export class Projectile extends Entity {
       const sp = a.baseSpeed * (1.5 + 1.5 * k); // до 3x скорости — туннелирование терпимо
       this.vx = Math.cos(want) * sp;
       this.vy = Math.sin(want) * sp;
-      // цель добил другой скилл: самонаведение на мёртвую точку на огромной
-      // скорости даёт осцилляцию вокруг неё (спрайт «дрожит» на месте, меняя
-      // угол). Долетели в последнюю точку цели — играем impact-анимацию.
-      if (!(a.target && a.target.alive)) {
-        const dx = tx - this.x, dy = ty - this.y;
-        const step = Math.hypot(this.vx, this.vy) * dt + 8;
-        if (dx * dx + dy * dy <= step * step) {
-          this.x = tx; this.y = ty;
-          this.explode();
-          return;
-        }
+      // «Захват» цели: на 1500 px/s снаряд проскакивает хитбокс между кадрами
+      // и осциллирует вокруг неё (спрайт «зависает» и вращается). Если шаг
+      // долетает — встаём точно в точку, как fireball взрывается в dest.
+      const dx = tx - this.x, dy = ty - this.y;
+      const step = sp * dt + Math.max(8, this.radius);
+      if (dx * dx + dy * dy <= step * step) {
+        this.x = tx; this.y = ty;
+        if (!aliveT) this.explode(); // цель уже добита — взрыв на пустом месте
+        return; // живая — CombatSystem в этом же кадре нанесёт урон и взорвёт
       }
     }
     this.x += this.vx * dt;
