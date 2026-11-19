@@ -94,5 +94,6 @@ export class AssetLoader {
   }
 
   get(path) { return this.images.get(path) || null; }
+  isMissing(path) { return this.missing.has(path); }
   missingList() { return [...this.missing]; }
 }

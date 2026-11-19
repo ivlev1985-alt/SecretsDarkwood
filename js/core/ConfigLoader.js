@@ -46,6 +46,40 @@ export class ConfigLoader {
     else errors.push(...ConfigLoader.validateFrames(g.hero.frames, 'hero'));
 
     if (!g.hero.sprite) errors.push('game_config.hero.sprite missing');
+    const hp = g.hero.procedural;
+    if (hp !== undefined && hp !== null) {
+      if (typeof hp !== 'object' || Array.isArray(hp)) {
+        errors.push('game_config.hero.procedural must be an object');
+      } else {
+        if (hp.enabled !== undefined && typeof hp.enabled !== 'boolean') {
+          errors.push('game_config.hero.procedural.enabled must be boolean');
+        }
+        if (hp.mode !== undefined && !['missing', 'always', 'never'].includes(hp.mode)) {
+          errors.push('game_config.hero.procedural.mode must be missing|always|never');
+        }
+        for (const k of ['cast_duration_ms', 'death_duration_ms']) {
+          if (hp[k] !== undefined && !(hp[k] >= 0)) errors.push('game_config.hero.procedural.' + k + ' must be >= 0');
+        }
+        for (const k of ['walk_cycles_per_sec', 'idle_cycles_per_sec']) {
+          if (hp[k] !== undefined && !(hp[k] > 0)) errors.push('game_config.hero.procedural.' + k + ' must be > 0');
+        }
+        const nonNegative = ['frame_padding_px', 'shadow_rx', 'shadow_ry',
+          'walk_bob_px', 'walk_sway_px', 'walk_boot_lift_px', 'walk_boot_stride_px',
+          'walk_arm_swing_px', 'idle_bob_px', 'idle_sway_px', 'side_trail_px',
+          'cast_staff_lift_px', 'cast_glow_radius', 'death_slide_px', 'death_sink_px',
+          'soul_rise_px', 'soul_size'];
+        for (const k of nonNegative) {
+          if (hp[k] !== undefined && !(hp[k] >= 0)) {
+            errors.push('game_config.hero.procedural.' + k + ' must be >= 0');
+          }
+        }
+        for (const k of ['death_fade', 'cast_glow_alpha', 'cast_ring_alpha']) {
+          if (hp[k] !== undefined && !(hp[k] >= 0 && hp[k] <= 1)) {
+            errors.push('game_config.hero.procedural.' + k + ' must be 0..1');
+          }
+        }
+      }
+    }
     if (!g.camera || typeof g.camera.follow_speed !== 'number') errors.push('game_config.camera.follow_speed missing');
 
     for (const m of (b.monsters || [])) {

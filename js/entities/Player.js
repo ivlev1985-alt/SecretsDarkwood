@@ -23,6 +23,13 @@ export class Player extends Entity {
     this.coins = 0;
     this.flashColor = '#ff0000'; // переопределяется из visuals.hurt_flash_color
     this.hurtDur = 0.25; // переопределяется из visuals.hurt_flash_duration_ms
+    // Визуальное состояние процедурного мага (спрайт может отсутствовать).
+    this.heroDir = 'down'; // down/up/left/right — последнее направление движения
+    this.moving = false;
+    this.castT = 0; // остаток анимации каста, сек
+    this.castDuration = 0.43; // переопределяется из game_config.hero.procedural
+    this.deathT = 0; // остаток анимации смерти, сек
+    this.deathDuration = 1.1; // переопределяется из game_config.hero.procedural
   }
 
   getPickupRadius() { return this.pickupRadius * (this.pickupMul || 1); }
@@ -53,11 +60,59 @@ export class Player extends Entity {
 
   get invincible() { return this.invT > 0; }
 
+  // Каст: поднимаем посох. Не перезапускаем анимацию, если она уже идёт —
+  // иначе несколько заклинаний подряд дёргали бы её в начало каждый кадр.
+  playCast() {
+    if (!this.alive || this.deathT > 0) return;
+    if (this.castT <= 0) this.castT = this.castDuration ?? 0.43;
+  }
+
+  // Смерть: отдельный таймер для процедурного мага и death-анимации спрайта.
+  startDeath() {
+    if (this.deathT > 0) return;
+    this.alive = false;
+    this.moving = false;
+    this.castT = 0;
+    this.deathT = this.deathDuration ?? 1.1;
+    if (this.anim) { try { this.anim.setAnimation('death'); } catch (e) {} }
+  }
+
+  updateDeath(dt) {
+    if (this.deathT > 0) this.deathT = Math.max(0, this.deathT - dt);
+    if (this.hitFlash > 0) this.hitFlash -= dt;
+    if (this.anim) {
+      try { this.anim.setAnimation('death'); this.anim.update(dt); } catch (e) {}
+    }
+  }
+
+  // Воскрешение: возвращаем визуал в живое состояние (deathT не должен
+  // оставлять мага в позе падения после rewarded-revive).
+  reviveReset() {
+    this.alive = true;
+    this.deathT = 0;
+    this.castT = 0;
+    this.moving = false;
+    this.heroDir = 'down';
+    this.tilt = 0;
+    if (this.anim) { try { this.anim.setAnimation('idle'); } catch (e) {} }
+  }
+
   update(dt, moveVec) {
+    if (!this.alive) { this.updateDeath(dt); return; }
     this.x += moveVec.x * this.speed * dt;
     this.y += moveVec.y * this.speed * dt;
     if (Math.abs(moveVec.x) > 0.05) this.facing = moveVec.x > 0 ? 1 : -1;
     const moving = Math.hypot(moveVec.x, moveVec.y) > 0.15;
+    this.moving = moving;
+    // Направление для процедурного мага: доминирующая ось движения.
+    // При остановке сохраняем последнее направление — нет резкого разворота.
+    if (moving) {
+      if (Math.abs(moveVec.x) >= Math.abs(moveVec.y)) {
+        this.heroDir = moveVec.x >= 0 ? 'right' : 'left';
+      } else {
+        this.heroDir = moveVec.y < 0 ? 'up' : 'down';
+      }
+    }
     // Наклон при движении по вертикали: вниз — завал «на зрителя», вверх — «от себя».
     // Значение маленькое (до ~0.12 рад), сглаженное — лёгкий живый крен, не карикатура.
     const targetTilt = moving ? moveVec.y * 0.12 : 0;
@@ -66,6 +121,7 @@ export class Player extends Entity {
       this.anim.setAnimation(moving ? 'run' : 'idle');
       this.anim.update(dt);
     }
+    if (this.castT > 0) this.castT = Math.max(0, this.castT - dt);
     if (this.invT > 0) this.invT -= dt;
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.regen > 0 && this.hp > 0) this.hp = Math.min(this.maxHp, this.hp + this.regen * dt);

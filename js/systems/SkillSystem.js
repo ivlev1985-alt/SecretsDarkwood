@@ -208,6 +208,8 @@ export class SkillSystem {
       // чтобы индикатор перезарядки не крутился впустую без цели.
       st.waiting = !fired; // HUD: ждём цель — иконка не "перезаряжается"
       st.cd = fired ? this.weaponCooldown(st, player) : 0.25;
+      // Визуальный каст героя (поднимает посох). Орбитальная пассивка не кастуется.
+      if (fired && c.type !== 'orbit' && typeof ctx.onCast === 'function') ctx.onCast(st);
     }
 
     // орбитальная пассивная магия (Кольцо холода): позиции шаров + урон касанием

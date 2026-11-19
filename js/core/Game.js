@@ -19,6 +19,7 @@ import { Cage } from '../entities/Cage.js';
 import { Pickup } from '../entities/Pickup.js';
 import { Prop } from '../entities/Prop.js';
 import { Pet } from '../entities/Pet.js';
+import { HeroMageRenderer } from '../render/HeroMageRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
@@ -59,6 +60,9 @@ export class Game {
     this.fps = 0;
     this._fpsAcc = 0; this._fpsN = 0; this._fpsT = 0;
     this.player = null;
+    this.heroMage = null; // процедурный визуал героя (если спрайт отсутствует)
+    this._deathPending = false; // короткая death-анимация перед gameover
+    this._deathTimer = 0;
     this.enemies = [];
     this.pickups = [];
     this.props = [];
@@ -553,8 +557,10 @@ export class Game {
     if (!ok) return;
     this.reviveUsed = true;
     this._dying = false; // разрешить повторную смерть после revive (иначе _die заблокирован)
+    this._deathPending = false;
+    this._deathTimer = 0;
     this.player.hp = Math.ceil(this.player.maxHp * (this.config.game_config.monetization.revive_hp_percent || 50) / 100);
-    this.player.alive = true;
+    this.player.reviveReset();
     this.player.invT = 2;
     this.hpDisplay = this.player.hp;
     this.potionFlyers = [];
@@ -759,6 +765,12 @@ export class Game {
     this.player.attachHeroAnim(new Animator(g.hero.frames, 'idle'));
     this.player.flashColor = g.visuals.hurt_flash_color || '#ff0000';
     this.player.hurtDur = (g.visuals.hurt_flash_duration_ms || 250) / 1000;
+    const heroVisual = g.hero.procedural || {};
+    this.player.castDuration = (heroVisual.cast_duration_ms ?? 430) / 1000;
+    this.player.deathDuration = (heroVisual.death_duration_ms ?? 1100) / 1000;
+    this.heroMage = new HeroMageRenderer(heroVisual);
+    this._deathPending = false;
+    this._deathTimer = 0;
     this.enemies = [];
     this.pickups = [];
     this.props = [];
@@ -1360,6 +1372,17 @@ export class Game {
     }
   }
 
+  // Не переключаем экран смерти мгновенно: сначала даём магу упасть.
+  // Вызывается и в начале кадра (если смерть уже случилась), и в конце
+  // (если игрок погиб именно в этом кадре от контактного урона).
+  _beginDeathAnimation() {
+    if (!this.player || this.player.alive || this._deathPending || this._dying) return false;
+    this.player.startDeath();
+    this._deathPending = true;
+    this._deathTimer = this.player.deathDuration ?? 1.1;
+    return true;
+  }
+
   async _die() {
     if (this._dying) return; // защита от повторного входа (мир продолжает тикать до смены состояния)
     this._dying = true;
@@ -1441,6 +1464,22 @@ export class Game {
       return;
     }
     this.time += dt;
+    // Смерть: короткая кинематическая пауза (падение мага + душа), затем gameover.
+    if (!this.player.alive) {
+      this._beginDeathAnimation();
+      this.player.updateDeath(dt);
+      this.camera.update(dt, this.player.x, this.player.y, this.canvas.width, this.canvas.height);
+      this.combat.updateTexts(dt);
+      if (this.fx) this.fx.update(dt);
+      if (this.particles) this.particles.update(dt);
+      this._updateHealthUI(dt);
+      this._deathTimer -= dt;
+      if (this._deathTimer <= 0 && !this._dying) {
+        this._deathPending = false;
+        this._die();
+      }
+      return;
+    }
     const v = this.input.getVector();
     const slow = this._propSlow(this.player.x, this.player.y);
     this.player.update(dt, { x: v.x * slow, y: v.y * slow });
@@ -1523,7 +1562,10 @@ export class Game {
 
     const onKill = (e, wid) => this._onKill(e, wid);
     const onHit = (p, e) => this._onHit(p, e);
-    this.skills.update(dt, { player: this.player, enemies: this.enemies, onKill });
+    this.skills.update(dt, {
+      player: this.player, enemies: this.enemies, onKill,
+      onCast: () => this.player.playCast()
+    });
     this.skills.updateProjectiles(dt);
     this.skills.updateChains(this.enemies, Math.random);
     this.skills.updateFx(dt);
@@ -1564,6 +1606,13 @@ export class Game {
       return 1;
     });
     this.combat.updateTexts(dt);
+    // Смертельный контакт: не даём в этом же кадре открыть level-up/клетку
+    // поверх падения мага — сначала проигрываем death-анимацию.
+    if (!this.player.alive) {
+      this._beginDeathAnimation();
+      this._updateHealthUI(dt);
+      return;
+    }
 
     const pr = this.player.getPickupRadius();
     for (let i = this.pickups.length - 1; i >= 0; i--) {
@@ -1617,7 +1666,9 @@ export class Game {
       if (!this.enemies[i].alive) this.enemies.splice(i, 1);
     }
 
-    if (!this.player.alive) this._die();
+    // Если игрок погиб в этом кадре — запускаем падение; сам gameover
+    // наступит на следующем кадре после death-анимации.
+    this._beginDeathAnimation();
     if (this.skills.auraFlash > 0) this.skills.auraFlash -= dt;
     // питомцы «на свободе» + анимация шкалы HP
     this._updateFleeingPets(dt);
@@ -1749,8 +1800,21 @@ export class Game {
       }
       if (this.player) {
         const hasAnim = !!(this.player.anim && this.player.anim.getRect);
-        const r = hasAnim ? this.player.anim.getRect() : { sw: 32, sh: 32 };
-        this.player.draw(ctx, this.assets, g.hero.sprite, r.sw, r.sh, g.visuals.global_sprite_scale || 1, '#888');
+        const fw = (g.hero.frames && g.hero.frames.frame_width) || 64;
+        const fh = (g.hero.frames && g.hero.frames.frame_height) || 64;
+        const r = hasAnim ? this.player.anim.getRect() : { sw: fw, sh: fh };
+        const heroArt = g.hero.procedural || {};
+        const spriteMissing = !!(this.assets && this.assets.isMissing && this.assets.isMissing(g.hero.sprite));
+        const useMage = heroArt.enabled !== false && this.heroMage
+          && (heroArt.mode === 'always' || (heroArt.mode !== 'never' && spriteMissing));
+        if (useMage) {
+          this.heroMage.draw(ctx, this.player, this.time, {
+            scale: g.visuals.global_sprite_scale || 1,
+            w: r.sw, h: r.sh
+          });
+        } else {
+          this.player.draw(ctx, this.assets, g.hero.sprite, r.sw, r.sh, g.visuals.global_sprite_scale || 1, '#888');
+        }
       }
       // орбитальная пассивная магия: ледяные шары вокруг игрока
       this.skills.drawOrbits(ctx);
