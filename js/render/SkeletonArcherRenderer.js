@@ -596,9 +596,13 @@ export class SkeletonArcherRenderer {
     o.restore();
   }
 
-  // Череп + капюшон
+  // Череп + капюшон. Вид зависит от направления:
+  // up (back) — затылок капюшона, лица не видно;
+  // left/right (side) — профиль: один глаз;
+  // down (front) — полный череп с двумя глазами.
   _drawHead(o, pose, C) {
     const side = pose.side;
+    const back = pose.back;
     const hx = (side ? 1.5 : 0) + pose.sway * 0.15;
     const hy = -8 + pose.bob * 0.2;
 
@@ -613,6 +617,23 @@ export class SkeletonArcherRenderer {
     o.stroke();
     o.restore();
 
+    // Вид сзади: капюшон полностью закрывает череп — только затылок и шов
+    if (back) {
+      o.save();
+      o.fillStyle = C.cloak_mid || '#2d1f2e';
+      o.beginPath();
+      o.ellipse(hx, hy - 0.5, 7.5, 7, 0, 0, TAU);
+      o.fill();
+      o.strokeStyle = C.cloak_trim || '#0f0a10';
+      o.lineWidth = 1;
+      o.beginPath();
+      o.moveTo(hx, hy - 6.5);
+      o.lineTo(hx, hy + 5.5);
+      o.stroke();
+      o.restore();
+      return;
+    }
+
     // Череп
     o.fillStyle = C.bone || '#e8dcc8';
     o.beginPath();
@@ -624,6 +645,42 @@ export class SkeletonArcherRenderer {
 
     // Глазницы
     const eyeY = hy - 1.5;
+    const eyePulse = 0.5 + 0.5 * Math.sin((pose.phase || 0) * 0.7);
+    const eyeGlowAlpha = (C.eye_glow_alpha ?? 0.6) * eyePulse;
+
+    if (side) {
+      // Профиль: один глаз (справа — «лицом вперёд», left даёт зеркало)
+      const ex = hx + 2.5;
+      o.fillStyle = '#1a0a0a';
+      o.beginPath();
+      o.ellipse(ex, eyeY, 1.8, 2, 0, 0, TAU);
+      o.fill();
+      o.save();
+      o.globalCompositeOperation = 'lighter';
+      const gr = o.createRadialGradient(ex, eyeY, 0, ex, eyeY, 3.5);
+      gr.addColorStop(0, `rgba(255,224,64,${eyeGlowAlpha})`);
+      gr.addColorStop(1, 'rgba(255,224,64,0)');
+      o.fillStyle = gr;
+      o.beginPath();
+      o.arc(ex, eyeY, 3.5, 0, TAU);
+      o.fill();
+      o.restore();
+      o.fillStyle = C.eye_glow || '#ffe040';
+      o.beginPath();
+      o.arc(ex, eyeY, 0.8, 0, TAU);
+      o.fill();
+
+      // Челюсть в профиль
+      o.fillStyle = C.bone || '#e8dcc8';
+      o.strokeStyle = C.bone_shadow || '#b0a088';
+      o.lineWidth = 0.5;
+      o.beginPath();
+      o.rect(hx + 0.5, hy + 3.5, 3.4, 2.2);
+      o.fill();
+      o.stroke();
+      return;
+    }
+
     o.fillStyle = '#1a0a0a';
     o.beginPath();
     o.ellipse(hx - 2.5, eyeY, 1.8, 2, 0, 0, TAU);
@@ -633,8 +690,6 @@ export class SkeletonArcherRenderer {
     o.fill();
 
     // Светящиеся глаза (пульсация)
-    const eyePulse = 0.5 + 0.5 * Math.sin((pose.phase || 0) * 0.7);
-    const eyeGlowAlpha = (C.eye_glow_alpha ?? 0.6) * eyePulse;
     o.save();
     o.globalCompositeOperation = 'lighter';
     const gr = o.createRadialGradient(hx, eyeY, 0, hx, eyeY, 4);
