@@ -92,10 +92,10 @@ export class HUD {
     if (type === 'area') return '#ff4400';
     return '#ffd34d';
   }
-  drawBottom(ctx, game, W, H) {
+  // Раскладка иконок умений внизу: активные — верхний ряд, пассивные — нижний.
+  // Возвращает и позиции, и общий размер — этим же пользуется полёт апгрейда.
+  skillSlots(game, W, H) {
     const R = this.layout(W, H);
-    drawButton(ctx, R.menu, game._t('menu_btn'));
-    // Активные заклинания — верхний ряд, пассивные умения — нижний.
     const actives = game.skills.ownedList();
     const passives = [];
     const pl = game.player.passiveLevels || {};
@@ -127,25 +127,43 @@ export class HUD {
     const yBot = H - 8 - r;
     const yTop = yBot - stepY;
     const rowShift = rowShiftFor(stepX);
-    const drawRow = (items, y, isPassive, shiftX = 0) => {
-      items.forEach((it, i) => {
-        const x = cx + (i - (items.length - 1) / 2) * stepX + shiftX;
-        const cfg = isPassive ? it : it.cfg;
-        drawSkillIcon(ctx, game, iconKey(cfg), x, y, s, {
-          borderColor: isPassive ? '#8f8' : HUD.skillColor(cfg.type),
-          label: false
-        });
-        if (!isPassive) {
-          // Перезарядка: затемнение + светлое заполнение снизу вверх.
-          // waiting — оружие ждёт цель (короткий ретрай), показываем как "готово".
-          const cdMax = game.skills.weaponCooldown(it, game.player);
-          const prog = (cdMax > 0 && !it.waiting) ? 1 - Math.max(0, it.cd) / cdMax : 1;
-          drawCooldown(ctx, x, y, s, prog);
-        }
-      });
+    const mkSlots = (items, y, isPassive, shiftX) => items.map((it, i) => ({
+      item: it,
+      isPassive,
+      x: cx + (i - (items.length - 1) / 2) * stepX + shiftX,
+      y
+    }));
+    return {
+      menu: R.menu,
+      actives: mkSlots(actives, yTop, false, 0),
+      passives: mkSlots(passives, yBot, true, rowShift),
+      size: s
     };
-    drawRow(actives, yTop, false, 0);
-    drawRow(passives, yBot, true, rowShift);
+  }
+  drawBottom(ctx, game, W, H) {
+    const L = this.skillSlots(game, W, H);
+    drawButton(ctx, L.menu, game._t('menu_btn'));
+    // Во время полёта выбранного апгрейда его будущая иконка временно скрыта,
+    // чтобы не было дубля под летящей иконкой.
+    const hide = game._hiddenHudUpgrade;
+    const drawSlot = (slot) => {
+      const cfg = slot.isPassive ? slot.item : slot.item.cfg;
+      const id = slot.isPassive ? slot.item.id : slot.item.cfg.id;
+      if (hide && hide.kind === (slot.isPassive ? 'passive' : 'weapon') && hide.id === id) return;
+      drawSkillIcon(ctx, game, iconKey(cfg), slot.x, slot.y, L.size, {
+        borderColor: slot.isPassive ? '#8f8' : HUD.skillColor(cfg.type),
+        label: false
+      });
+      if (!slot.isPassive) {
+        // Перезарядка: затемнение + светлое заполнение снизу вверх.
+        // waiting — оружие ждёт цель (короткий ретрай), показываем как "готово".
+        const cdMax = game.skills.weaponCooldown(slot.item, game.player);
+        const prog = (cdMax > 0 && !slot.item.waiting) ? 1 - Math.max(0, slot.item.cd) / cdMax : 1;
+        drawCooldown(ctx, slot.x, slot.y, L.size, prog);
+      }
+    };
+    L.actives.forEach(drawSlot);
+    L.passives.forEach(drawSlot);
     ctx.textAlign = 'center';
   }
   drawBossBar(ctx, game, W, H) {

@@ -78,6 +78,7 @@ export class Game {
     this.pendingSpellRewards = 0; // заклинания из сундуков, ждущие выбора карточки
     this.choiceMode = 'levelup'; // 'levelup' | 'spell'
     this.choices = [];
+    this._hiddenHudUpgrade = null; // иконка, спрятанная под летящей иконкой апгрейда
     this.bossWarn = null;
     this.lang = 'ru';
     // Этап 4: UI
@@ -567,9 +568,11 @@ export class Game {
     }
     this.states.set('playing');
   }
-  applyUpgrade(i) {
+  // opts.deferClose=true — применить выбор сразу, но не закрывать окно:
+  // так иконка успевает улететь в HUD, а окно закроется после её приземления.
+  applyUpgrade(i, opts = {}) {
     const c = this.choices[i];
-    if (!c) return;
+    if (!c) return null;
     const mode = this.choiceMode || 'levelup';
     if (c.kind === 'pet' && this.pet) {
       // апгрейд питомца: дальность полёта / радиус притяжения
@@ -586,16 +589,52 @@ export class Game {
     else this.pendingLevels = Math.max(0, this.pendingLevels - 1);
     this.player.level = this.progression.level;
     if (this.config.game_config.save.save_on_important_events) this.save.save();
+    if (opts.deferClose) return c;
     // Закрыть текущее окно и, если остались награды, открыть следующее.
+    this._finishUpgradeChoice();
+    return c;
+  }
+
+  _finishUpgradeChoice() {
+    this._hiddenHudUpgrade = null;
     this.choices = [];
     this.choiceMode = 'levelup';
     this.states.set('playing');
     this._openNextPendingModal(false);
   }
 
+  // Куда должна прилететь иконка выбранного апгрейда: в свой слот HUD
+  // (существующий или только что добавленный) либо к питомцу.
+  _hudSlotForChoice(choice, W, H) {
+    if (!choice) return null;
+    if (choice.kind === 'pet') {
+      if (this.pet) {
+        const x = this.pet.x - this.camera.x + W / 2;
+        const y = this.pet.y - this.camera.y + H / 2;
+        return {
+          kind: 'pet',
+          x: Math.max(24, Math.min(W - 24, x)),
+          y: Math.max(90, Math.min(H - 90, y)),
+          size: 44
+        };
+      }
+      return { kind: 'pet', x: W / 2, y: H - 100, size: 44 };
+    }
+    const slots = this.hud.skillSlots(this, W, H);
+    if (choice.kind === 'passive') {
+      const s = slots.passives.find((slot) => slot.item.id === choice.id);
+      return s ? { kind: 'passive', x: s.x, y: s.y, size: slots.size } : null;
+    }
+    if (choice.kind === 'weapon' || choice.kind === 'newWeapon') {
+      const s = slots.actives.find((slot) => slot.item.cfg.id === choice.id);
+      return s ? { kind: 'weapon', x: s.x, y: s.y, size: slots.size } : null;
+    }
+    return null;
+  }
+
   // Открывает следующее окно выбора: сначала повышения уровня, затем
   // заклинания из сундуков. Каждая награда — отдельный выбор из 3 карточек.
-  // announce=false — не повторять звук/вспышку при переходе к следующей карточке.
+  // announce=false — следующий выбор из пачки: без полного вихря и звука.
   _openNextPendingModal(announce = true) {
     if (this.states.is('upgrade')) return;
     // Попап замены питомца показываем первым; выбор наград откроется после него.
@@ -605,10 +644,10 @@ export class Game {
       if (this.choices.length) {
         this.choiceMode = 'levelup';
         if (announce) {
-          if (this.fx) this.fx.play('levelup_burst', this.player.x, this.player.y);
           try { this.audio.playSfx('levelup.mp3'); } catch (e) {}
         }
         this.states.set('upgrade');
+        this._startUpgradeModal(announce);
         this._modalTs = performance.now();
         return;
       }
@@ -619,10 +658,25 @@ export class Game {
       if (this.choices.length) {
         this.choiceMode = 'spell';
         this.states.set('upgrade');
+        this._startUpgradeModal(false);
         this._modalTs = performance.now();
         return;
       }
       this.pendingSpellRewards = 0;
+    }
+  }
+
+  // Запуск визуальной части окна выбора. Полный кинематографичный вход —
+  // только для первого уровня из пачки; следующие показываем сразу с карточками.
+  _startUpgradeModal(announce) {
+    this._hiddenHudUpgrade = null;
+    const W = this.canvas ? this.canvas.width : 480;
+    const H = this.canvas ? this.canvas.height : 800;
+    if (this.choiceMode === 'levelup') {
+      const shownLevel = Math.max(1, (this.progression.level || 1) - this.pendingLevels + 1);
+      this.upgradeMenu.startLevelUp(shownLevel, announce, W, H);
+    } else {
+      this.upgradeMenu.startSpell(W, H);
     }
   }
 
@@ -789,6 +843,7 @@ export class Game {
     this.pendingSpellRewards = 0;
     this.choiceMode = 'levelup';
     this.choices = [];
+    this._hiddenHudUpgrade = null;
     this.bossWarn = null;
     this.reviveUsed = false;
     this.uiInventory = false;
@@ -1379,6 +1434,10 @@ export class Game {
       this.combat.updateTexts(dt);
       // аптечка/шкала HP продолжают анимацию и во время модалки
       this._updateHealthUI(dt);
+      // levelup-кинематик и полёт иконки живут, пока мир на паузе
+      if (this.states.is('upgrade') && this.upgradeMenu) {
+        this.upgradeMenu.update(dt, this, this.canvas.width, this.canvas.height);
+      }
       return;
     }
     this.time += dt;
