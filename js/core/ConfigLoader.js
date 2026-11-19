@@ -278,6 +278,76 @@ export class ConfigLoader {
           errors.push('weapon ' + w.id + '.nova.spiral_direction must be 1 or -1');
         }
       }
+      if (w.area_shape !== undefined && !['circle', 'wall', 'tornado'].includes(w.area_shape)) {
+        errors.push('weapon ' + w.id + ' bad area_shape (circle|wall|tornado)');
+      }
+      if (w.tornado_move) {
+        const tm = w.tornado_move;
+        for (const k of ['speed_px_per_sec', 'turn_rad_per_sec']) {
+          if (tm[k] !== undefined && !Number.isFinite(tm[k])) errors.push('weapon ' + w.id + '.tornado_move.' + k + ' bad');
+        }
+        if (tm.speed_px_per_sec !== undefined && tm.speed_px_per_sec < 0) {
+          errors.push('weapon ' + w.id + '.tornado_move.speed_px_per_sec must be >= 0');
+        }
+      }
+      if (w.area_visual) {
+        const av = w.area_visual;
+        if (av.mode !== undefined && !['auto', 'procedural', 'sprite'].includes(av.mode)) {
+          errors.push('weapon ' + w.id + '.area_visual.mode bad (auto|procedural|sprite)');
+        }
+        if (av.sprite_anchor !== undefined && !['center', 'bottom'].includes(av.sprite_anchor)) {
+          errors.push('weapon ' + w.id + '.area_visual.sprite_anchor bad (center|bottom)');
+        }
+        for (const k of ['height_px', 'base_width_px', 'top_width_px', 'ground_offset_px',
+          'silhouette_segments', 'bands', 'ribbons', 'ribbon_width_px', 'spin_speed',
+          'sway_px', 'sway_speed', 'turbulence_px', 'spawn_ms', 'fade_out_ms',
+          'spawn_scale', 'fade_out_scale', 'ground_ring_radius_scale', 'ground_ring_aspect',
+          'sprite_size_px', 'sprite_width_px', 'sprite_height_px']) {
+          if (av[k] !== undefined && !(Number.isFinite(av[k]) && av[k] >= 0)) {
+            errors.push('weapon ' + w.id + '.area_visual.' + k + ' bad (>= 0)');
+          }
+        }
+        for (const k of ['sprite_offset_y_px', 'sprite_rotation_speed']) {
+          if (av[k] !== undefined && !Number.isFinite(av[k])) {
+            errors.push('weapon ' + w.id + '.area_visual.' + k + ' bad');
+          }
+        }
+        for (const k of ['alpha', 'glow_alpha', 'funnel_alpha', 'inner_alpha', 'band_alpha',
+          'core_alpha', 'top_cloud_alpha', 'ribbon_alpha', 'ground_ring_alpha',
+          'sprite_alpha', 'sprite_glow_alpha']) {
+          if (av[k] !== undefined && !(Number.isFinite(av[k]) && av[k] >= 0 && av[k] <= 1)) {
+            errors.push('weapon ' + w.id + '.area_visual.' + k + ' bad (0..1)');
+          }
+        }
+        if (av.ground_ring !== undefined && typeof av.ground_ring !== 'boolean') {
+          errors.push('weapon ' + w.id + '.area_visual.ground_ring must be boolean');
+        }
+        const groups = {
+          lightning: ['bolts', 'chance', 'interval_ms', 'segments', 'amp_px', 'width_px',
+            'glow_width_px', 'flash_alpha', 'flash_radius_px'],
+          particles: ['count', 'rise_speed', 'spin_speed', 'size_px', 'alpha']
+        };
+        for (const [name, keys] of Object.entries(groups)) {
+          const sub = av[name];
+          if (!sub) continue;
+          if (sub.enabled !== undefined && typeof sub.enabled !== 'boolean') {
+            errors.push('weapon ' + w.id + '.area_visual.' + name + '.enabled must be boolean');
+          }
+          if (sub.with_sprite !== undefined && typeof sub.with_sprite !== 'boolean') {
+            errors.push('weapon ' + w.id + '.area_visual.' + name + '.with_sprite must be boolean');
+          }
+          for (const k of keys) {
+            if (sub[k] !== undefined && !(Number.isFinite(sub[k]) && sub[k] >= 0)) {
+              errors.push('weapon ' + w.id + '.area_visual.' + name + '.' + k + ' bad (>= 0)');
+            }
+          }
+          for (const k of ['chance', 'alpha', 'flash_alpha']) {
+            if (sub[k] !== undefined && !(sub[k] >= 0 && sub[k] <= 1)) {
+              errors.push('weapon ' + w.id + '.area_visual.' + name + '.' + k + ' bad (0..1)');
+            }
+          }
+        }
+      }
       if (typeof w.unlocked !== 'boolean') errors.push('weapon ' + w.id + ' missing unlocked:boolean');
       const fr = w.projectile_frames || w.area_frames;
       if (fr) errors.push(...ConfigLoader.validateFrames(fr, 'weapon ' + w.id));

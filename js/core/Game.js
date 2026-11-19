@@ -20,6 +20,7 @@ import { Pickup } from '../entities/Pickup.js';
 import { Prop } from '../entities/Prop.js';
 import { Pet } from '../entities/Pet.js';
 import { HeroMageRenderer } from '../render/HeroMageRenderer.js';
+import { TornadoRenderer } from '../render/TornadoRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
@@ -61,6 +62,7 @@ export class Game {
     this._fpsAcc = 0; this._fpsN = 0; this._fpsT = 0;
     this.player = null;
     this.heroMage = null; // процедурный визуал героя (если спрайт отсутствует)
+    this.tornadoRenderer = new TornadoRenderer(); // визуал смерча / будущий спрайт
     this._deathPending = false; // короткая death-анимация перед gameover
     this._deathTimer = 0;
     this.enemies = [];
@@ -1699,7 +1701,9 @@ export class Game {
       this._drawProps(ctx);
       for (const a of this.skills.areas) {
         if (a.wall) this._drawWall(ctx, a);
-        else {
+        else if (a.shape === 'tornado' && this.tornadoRenderer) {
+          this.tornadoRenderer.draw(ctx, a, this.time, this.assets);
+        } else {
           ctx.globalAlpha = 0.35;
           ctx.fillStyle = a.color;
           ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2); ctx.fill();

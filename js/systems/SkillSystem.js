@@ -221,7 +221,9 @@ export class SkillSystem {
     // зоны: тик-урон + статусы (burn/slow из конфига оружия) + время жизни
     for (let i = this.areas.length - 1; i >= 0; i--) {
       const a = this.areas[i];
+      a.age = (a.age || 0) + dt;
       a.ttl -= dt * 1000; a.tickT -= dt * 1000;
+      if (a.shape === 'tornado') this._updateAreaMotion(a, dt);
       if (a.wall) this._updateWall(a, dt);
       if (a.tickT <= 0) {
         a.tickT = a.cfg.area_tick_ms || 500;
@@ -240,6 +242,17 @@ export class SkillSystem {
       // стена удаляется когда все огоньки погасли, круг — по ttl
       if (a.wall ? a.wall.done : a.ttl <= 0) this.areas.splice(i, 1);
     }
+  }
+
+  // Смерч: движется по случайной дуге. Хитбокс — текущий круг a.x/a.y,
+  // поэтому урон автоматически следует за воронкой.
+  _updateAreaMotion(a, dt) {
+    const m = a.move;
+    if (!m) return;
+    m.angle += (m.turn || 0) * dt;
+    const speed = m.speed || 0;
+    a.x += Math.cos(m.angle) * speed * dt;
+    a.y += Math.sin(m.angle) * speed * dt;
   }
 
   // Стена огня: появление от центра к краям, затем жизнь ttl,
@@ -748,15 +761,40 @@ export class SkillSystem {
         // wall data
         wall: { flames, spawnMs, size, hitbox, angle, totalLen, halfLen, age: 0, dying: false, dieAge: 0, done: false }
       });
+    } else if (c.area_shape === 'tornado') {
+      // Смерч: случайное направление + медленный поворот (дуга).
+      // Визуал рисует TornadoRenderer; когда появится tornado.png,
+      // area_visual.mode = "auto" сам переключится на спрайт.
+      const mv = c.tornado_move || {};
+      const turnSign = Math.random() < 0.5 ? -1 : 1;
+      this.areas.push({
+        cfg: c, weaponId: c.id, x: cx, y: cy, radius,
+        damage: this.weaponDamage(st, player),
+        slow: slow || null, burn: burn || null,
+        ttl: c.area_duration_ms || 5000, tickT: 0,
+        color: c.area_color || '#88ccff',
+        spritePath: c.area_sprite, frames: c.area_frames,
+        shape: 'tornado',
+        age: 0,
+        seed: Math.random() * 1e9,
+        visual: c.area_visual || null,
+        move: {
+          angle: Math.random() * Math.PI * 2,
+          speed: mv.speed_px_per_sec ?? 44,
+          turn: (mv.turn_rad_per_sec ?? 0.2) * turnSign
+        }
+      });
     } else {
-      // Обычный круг (tornado и др.)
+      // Обычный круг (другие area-заклинания)
       this.areas.push({
         cfg: c, weaponId: c.id, x: cx, y: cy, radius,
         damage: this.weaponDamage(st, player),
         slow: slow || null, burn: burn || null,
         ttl: c.area_duration_ms || 4000, tickT: 0,
         color: c.area_color || '#ff4400',
-        spritePath: c.area_sprite, frames: c.area_frames
+        spritePath: c.area_sprite, frames: c.area_frames,
+        shape: 'circle',
+        age: 0
       });
     }
     if (c.sfx_hit && this.audio) this.audio.playSfx(c.sfx_hit);
