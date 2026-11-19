@@ -28,6 +28,9 @@ export class Enemy extends Entity {
     this.makeAnim(cfg.frames, 'walk');
     this.deathT = 0; // время проигрывания death перед удалением
     this.attackT = 0; // идёт attack-анимация (сек), walk не перебивает
+    // Процедурный скелет-лучник: таймер выстрела
+    this.shootT = 0; // остаток анимации выстрела, сек
+    this.shootDuration = 0.6; // переопределяется из game_config.visuals.skeleton_archer
   }
 
   get rw() { return this.cfg.frames.frame_width; }
@@ -52,6 +55,7 @@ export class Enemy extends Entity {
     if (this.hp <= 0) {
       this.hp = 0;
       this.deathT = 0.0001; // начать death-анимацию
+      this.shootT = 0;
       try { this.setAnim('death'); } catch (e) {}
     }
     return amount;
@@ -159,6 +163,7 @@ export class Enemy extends Entity {
       // дальний — рывок-телепорт handled в системе (флаг), здесь chase
     }
     if (this.attackCd > 0) this.attackCd -= dt;
+    if (this.shootT > 0) this.shootT = Math.max(0, this.shootT - dt);
     if (this.hitFlash > 0) this.hitFlash -= dt;
     return { mx, my, dist: d };
   }

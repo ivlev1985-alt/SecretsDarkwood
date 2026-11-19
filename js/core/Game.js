@@ -20,6 +20,7 @@ import { Pickup } from '../entities/Pickup.js';
 import { Prop } from '../entities/Prop.js';
 import { Pet } from '../entities/Pet.js';
 import { HeroMageRenderer } from '../render/HeroMageRenderer.js';
+import { SkeletonArcherRenderer } from '../render/SkeletonArcherRenderer.js';
 import { TornadoRenderer } from '../render/TornadoRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
@@ -62,6 +63,7 @@ export class Game {
     this._fpsAcc = 0; this._fpsN = 0; this._fpsT = 0;
     this.player = null;
     this.heroMage = null; // процедурный визуал героя (если спрайт отсутствует)
+    this.skeletonArcherRenderer = null; // процедурный визуал скелета-лучника
     this.tornadoRenderer = new TornadoRenderer(); // визуал смерча / будущий спрайт
     this._deathPending = false; // короткая death-анимация перед gameover
     this._deathTimer = 0;
@@ -771,6 +773,9 @@ export class Game {
     this.player.castDuration = (heroVisual.cast_duration_ms ?? 430) / 1000;
     this.player.deathDuration = (heroVisual.death_duration_ms ?? 1100) / 1000;
     this.heroMage = new HeroMageRenderer(heroVisual);
+    // Процедурный скелет-лучник: конфиг в visuals.skeleton_archer
+    const skelVisual = (g.visuals && g.visuals.skeleton_archer) || {};
+    this.skeletonArcherRenderer = new SkeletonArcherRenderer(skelVisual);
     this._deathPending = false;
     this._deathTimer = 0;
     this.enemies = [];
@@ -1518,6 +1523,13 @@ export class Game {
       if (e.deathT > 0) { e.updateDeath(dt); continue; }
       let { mx, my, dist } = e.steer(dt, this.player.x, this.player.y);
       e.facing = (this.player.x >= e.x) ? 1 : -1;
+      // процедурный скелет-лучник: 4-сторонняя ориентация по вектору к игроку
+      if (e.cfg.movement_type === 'ranged' && !e.isBoss) {
+        const ddx = this.player.x - e.x, ddy = this.player.y - e.y;
+        e.heroDir = Math.abs(ddx) >= Math.abs(ddy)
+          ? (ddx >= 0 ? 'right' : 'left')
+          : (ddy < 0 ? 'up' : 'down');
+      }
       if (e.isBoss) {
         // Вся логика боссов (стрельба / рывок / залп) — в _updateBoss.
         // Возвращает override движения: { hold } — стоять (телеграф/замах),
@@ -1542,6 +1554,10 @@ export class Game {
           this.skills.enemyFire(e.x, e.y, this.player.x, this.player.y, proj, e.damage);
           e.attackCd = (e.cfg.attack_cooldown_ms || 2000) / 1000;
           e.playAttack();
+          // процедурный скелет-лучник: анимация подъёма лука
+          const skelCfg = (g.visuals && g.visuals.skeleton_archer) || {};
+          e.shootDuration = (skelCfg.shoot_duration_ms ?? 600) / 1000;
+          e.shootT = e.shootDuration;
         }
       } else if (e.attackT <= 0) {
         // walk не перебиваем, пока проигрывается attack
@@ -1768,7 +1784,14 @@ export class Game {
       }
       for (const e of this.enemies) {
         if (!e.alive || e.deathT > 0) continue;
-        e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), e.isBoss ? '#c0c' : '#a33');
+        if (this._useSkeleton(e)) {
+          this.skeletonArcherRenderer.draw(ctx, e, this.time, {
+            scale: g.visuals.global_sprite_scale || 1,
+            w: e.rw, h: e.rh
+          });
+        } else {
+          e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), e.isBoss ? '#c0c' : '#a33');
+        }
         // статусы: цвета ТОЛЬКО из balance.status_effects (без хардкода в коде по смыслу)
         const stCfg = (this.config.balance_config && this.config.balance_config.status_effects) || {};
         if (e.slowT > 0) {
@@ -1799,7 +1822,15 @@ export class Game {
         if (e.deathT <= 0) continue;
         const { dur, fade } = e.deathTiming();
         ctx.globalAlpha = Math.max(0, Math.min(1, (dur + fade - e.deathT) / fade));
-        e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), '#555');
+        if (this._useSkeleton(e)) {
+          // смерть скелета рисует сам renderer (падение + рассыпание костей)
+          this.skeletonArcherRenderer.draw(ctx, e, this.time, {
+            scale: g.visuals.global_sprite_scale || 1,
+            w: e.rw, h: e.rh
+          });
+        } else {
+          e.draw(ctx, this.assets, e.cfg.sprite, e.rw, e.rh, e.scale * (g.visuals.global_sprite_scale || 1), '#555');
+        }
         ctx.globalAlpha = 1;
       }
       if (this.player) {
@@ -2033,6 +2064,18 @@ export class Game {
     ctx.restore();
   }
 
+  // Процедурный скелет-лучник: включён + враг ranged + спрайт отсутствует
+  // (или mode === 'always'). Аналог проверки useMage для героя.
+  _useSkeleton(e) {
+    const skel = this.skeletonArcherRenderer;
+    if (!skel || !e.cfg) return false;
+    const cfg = skel.cfg || {};
+    if (cfg.enabled === false || cfg.mode === 'never') return false;
+    if (e.cfg.movement_type !== 'ranged' || e.isBoss) return false;
+    if (cfg.mode === 'always') return true;
+    return !!(e.cfg.sprite && this.assets && this.assets.isMissing && this.assets.isMissing(e.cfg.sprite));
+  }
+
   _drawShot(ctx, p, color) {
     // Тайная нова: за снарядом тянется слабый шлейф, подчёркивающий спираль
     // и гиперболическую дугу. Рисуется и при наличии спрайта, и без него.
@@ -2075,6 +2118,33 @@ export class Game {
       ctx.restore();
     }
     ctx.fillStyle = col;
+    // Стрела скелета-лучника: спрайт arrow_basic.png отсутствует — рисуем
+    // процедурную стрелу (древко + наконечник + оперение) по направлению полёта.
+    if (!p.friendly && p.weaponId === 'arrow_basic' && this.assets && this.assets.isMissing && this.assets.isMissing(p.spritePath)) {
+      const skel = (this.config.game_config.visuals && this.config.game_config.visuals.skeleton_archer) || {};
+      const ang = Math.atan2(p.vy, p.vx);
+      const len = (p.radius || 6) * 3.2;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(ang);
+      ctx.strokeStyle = skel.arrow_wood || '#8b5a2b';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(len * 0.6, 0); ctx.stroke();
+      ctx.fillStyle = skel.arrow_head || '#9a9a9a';
+      ctx.beginPath();
+      ctx.moveTo(len, 0); ctx.lineTo(len * 0.55, -2.6); ctx.lineTo(len * 0.55, 2.6);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = skel.arrow_fletching || '#c8a832';
+      ctx.beginPath();
+      ctx.moveTo(-len, 0); ctx.lineTo(-len - 3, -2.6); ctx.lineTo(-len + 2.5, 0);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-len, 0); ctx.lineTo(-len - 3, 2.6); ctx.lineTo(-len + 2.5, 0);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+      return;
+    }
     ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
   }
 
