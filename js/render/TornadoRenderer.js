@@ -1,10 +1,11 @@
 // Визуал заклинания «Смерч».
 //
-// Пока спрайта нет — рисуется процедурный магический торнадо: воронка,
-// спиральные ленты, пыль/частицы, произвольные молнии внутри и рунное кольцо
-// на земле. Когда появится assets/projectiles/tornado.png, режим "auto"
-// автоматически начнёт рисовать спрайт (area_sprite + area_frames), а молнии
-// можно оставить поверх него.
+// Пока спрайта нет — рисуется процедурный магический торнадо: светящийся
+// синий вихрь из множества тонких колец, спиральные ленты, пыль/частицы,
+// редкие молнии внутри и кольцо на земле. Силуэт плавно «дышит» и меняет
+// форму во время движения. Когда появится assets/projectiles/tornado.png,
+// режим "auto" автоматически начнёт рисовать спрайт (area_sprite +
+// area_frames), а молнии можно оставить поверх него.
 //
 // Все параметры — в skills_config.weapons[].area_visual и .tornado_move.
 // Режимы area_visual.mode:
@@ -24,6 +25,28 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 function hash(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
+}
+
+// Цвета в конфиге задаются hex-строками. Для колец нужен плавный переход
+// снизу вверх, поэтому небольшой собственный mix без зависимостей.
+function parseHexColor(hex) {
+  if (typeof hex !== 'string') return [255, 255, 255];
+  let h = hex.trim().replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  if (h.length !== 6) return [255, 255, 255];
+  const n = parseInt(h, 16);
+  if (!Number.isFinite(n)) return [255, 255, 255];
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function mixColor(a, b, t) {
+  const ca = parseHexColor(a);
+  const cb = parseHexColor(b);
+  const k = clamp01(t);
+  const r = Math.round(lerp(ca[0], cb[0], k));
+  const g = Math.round(lerp(ca[1], cb[1], k));
+  const bl = Math.round(lerp(ca[2], cb[2], k));
+  return `rgb(${r},${g},${bl})`;
 }
 
 export class TornadoRenderer {
@@ -88,26 +111,65 @@ export class TornadoRenderer {
 
   _geometry(area, visual, age) {
     const radius = area.radius || 100;
-    const height = Math.max(1, visual.height_px ?? radius * 1.8);
-    const baseHalf = Math.max(1, (visual.base_width_px ?? radius * 0.58) / 2);
-    const topHalf = Math.max(1, (visual.top_width_px ?? radius * 1.32) / 2);
-    const sway = visual.sway_px ?? radius * 0.1;
-    const swaySpeed = visual.sway_speed ?? 1.7;
-    const spin = visual.spin_speed ?? 2.8;
-    const turbulence = visual.turbulence_px ?? 1.5;
+    const morphSpeed = visual.morph_speed ?? 0.85;
+    const heightWobble = visual.height_wobble ?? 0.06;
+    const widthWobble = visual.width_wobble ?? 0.08;
+    const seedPhase = ((area.seed ?? 0) % 997) * 0.013;
+
+    // Силуэт «дышит»: высота и ширина меняются не синхронно, поэтому
+    // воронка плавно перетекает из одной формы в другую.
+    const heightBase = Math.max(1, visual.height_px ?? radius * 1.8);
+    const heightK = 1
+      + Math.sin(age * morphSpeed + seedPhase) * heightWobble
+      + Math.sin(age * morphSpeed * 1.73 + 2.1 + seedPhase) * heightWobble * 0.45;
+    const height = Math.max(1, heightBase * heightK);
+
+    const baseBase = Math.max(1, (visual.base_width_px ?? radius * 0.58) / 2);
+    const topBase = Math.max(1, (visual.top_width_px ?? radius * 1.32) / 2);
+    const baseHalf = Math.max(1, baseBase * (
+      1 + Math.sin(age * morphSpeed * 1.17 + 1.9 + seedPhase) * widthWobble
+    ));
+    const topHalf = Math.max(1, topBase * (
+      1 + Math.sin(age * morphSpeed * 0.91 + 0.4 + seedPhase) * widthWobble
+      + Math.sin(age * morphSpeed * 1.53 + 2.7 + seedPhase) * widthWobble * 0.42
+    ));
+
+    const sway = visual.sway_px ?? radius * 0.12;
+    const swaySpeed = visual.sway_speed ?? 1.4;
+    const lean = visual.lean_px ?? 0;
+    const leanSpeed = visual.lean_speed ?? 0.55;
+    const moveLean = visual.move_lean_px ?? 0;
+    const moveAngle = area.move ? (area.move.angle || 0) : 0;
+    const spin = visual.spin_speed ?? 2.6;
+    const turbulence = visual.turbulence_px ?? 2.0;
+    const profilePower = visual.profile_power ?? 0.74;
 
     const centerAt = (t) => {
       const tt = clamp01(t);
-      return Math.sin(age * swaySpeed + tt * 2.4) * sway * Math.pow(tt, 1.35);
+      const swayA = Math.sin(age * swaySpeed + tt * 2.35) * sway * Math.pow(tt, 1.28);
+      const swayB = Math.sin(age * swaySpeed * 0.57 + tt * 4.6 + 1.7)
+        * sway * 0.34 * Math.sin(Math.PI * tt);
+      const leanA = (Math.sin(age * leanSpeed) + Math.sin(age * leanSpeed * 0.63 + 1.1) * 0.35)
+        * lean * Math.pow(tt, 1.45);
+      // Лёгкий наклон по направлению движения: при повороте смерча
+      // его верхушка плавно перетекает в сторону.
+      const moveA = Math.cos(moveAngle) * moveLean * Math.pow(tt, 1.55);
+      return swayA + swayB + leanA + moveA;
     };
     const halfAt = (t) => {
       const tt = clamp01(t);
-      const base = lerp(baseHalf, topHalf, tt);
-      const ripple = Math.sin(age * 4.2 + tt * 9.3) * turbulence * (0.25 + 0.75 * tt);
+      const base = lerp(baseHalf, topHalf, Math.pow(tt, profilePower));
+      const ripple = (
+        Math.sin(age * 3.7 + tt * 8.4) * 0.62
+        + Math.sin(age * 6.3 + tt * 15.1 + 1.3) * 0.38
+      ) * turbulence * (0.18 + 0.82 * tt);
       return Math.max(1, base + ripple);
     };
 
-    return { radius, height, baseHalf, topHalf, sway, spin, age, centerAt, halfAt };
+    return {
+      radius, height, baseHalf, topHalf, sway, spin, age,
+      morphSpeed, profilePower, centerAt, halfAt
+    };
   }
 
   _spriteImage(area, visual, assets) {
@@ -117,6 +179,56 @@ export class TornadoRenderer {
     const img = assets.get(area.spritePath);
     if (!img || img.tagName !== 'IMG') return null;
     return img;
+  }
+
+  // Точка кольца с мягкой волной радиуса. Небольшая неоднородность не даёт
+  // кольцам выглядеть как идеальные геометрические эллипсы.
+  _ringPoint(a, cx, cy, rx, ry, rot, phase, wobble) {
+    const radial = 1
+      + wobble * Math.sin(a * 3 + phase)
+      + wobble * 0.55 * Math.sin(a * 5 - phase * 1.37);
+    const px = Math.cos(a) * rx * radial;
+    // Лёгкая вертикальная волна «заламывает» кольцо в плоскости экрана:
+    // так верхние витки выглядят живыми, а не нарисованными циркулем.
+    const py = Math.sin(a) * ry * (1 + wobble * 0.45 * Math.sin(a * 2 + phase * 1.7))
+      + ry * wobble * 0.72 * Math.sin(a * 3 - phase * 0.83);
+    const c = Math.cos(rot);
+    const s = Math.sin(rot);
+    return { x: cx + px * c - py * s, y: cy + px * s + py * c };
+  }
+
+  _ringPath(ctx, cx, cy, rx, ry, rot, phase, wobble, segments) {
+    const n = Math.max(12, Math.floor(segments));
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * TAU;
+      const p = this._ringPoint(a, cx, cy, rx, ry, rot, phase, wobble);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+  }
+
+  _ringArc(ctx, cx, cy, rx, ry, rot, phase, wobble, segments, a0, a1) {
+    const span = Math.max(0.001, a1 - a0);
+    const steps = Math.max(8, Math.ceil(segments * (span / TAU) * 1.5));
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const a = a0 + (span * i) / steps;
+      const p = this._ringPoint(a, cx, cy, rx, ry, rot, phase, wobble);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+  }
+
+  _ringColor(visual, t) {
+    const bottom = visual.ring_color_bottom || visual.funnel_bottom || '#0a4bff';
+    const mid = visual.ring_color_mid || visual.funnel_mid || '#18b8ff';
+    const top = visual.ring_color_top || visual.funnel_top || '#c8fbff';
+    const k = clamp01(t);
+    return k < 0.5
+      ? mixColor(bottom, mid, k * 2)
+      : mixColor(mid, top, (k - 0.5) * 2);
   }
 
   _lightningEnabled(visual, sprite) {
@@ -203,20 +315,20 @@ export class TornadoRenderer {
 
   _drawFunnel(ctx, area, visual, geom, life, age) {
     const { height, baseHalf, topHalf, spin, centerAt, halfAt } = geom;
-    const steps = Math.max(4, Math.floor(visual.silhouette_segments ?? 14));
+    const steps = Math.max(6, Math.floor(visual.silhouette_segments ?? 18));
 
-    // Магическое свечение за воронкой — помогает читаться на тёмном фоне.
+    // Мягкое синее свечение за вихрем.
     const glowAlpha = visual.glow_alpha ?? 0;
     if (glowAlpha > 0) {
-      const gx = centerAt(0.55);
+      const gx = centerAt(0.56);
       const gy = -height * 0.55;
-      const gr = Math.max(topHalf * 1.4, height * 0.55);
+      const gr = Math.max(topHalf * 1.45, height * 0.55);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = life.alpha * glowAlpha;
       const gg = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
-      gg.addColorStop(0, visual.glow_color || '#8f7bff');
-      gg.addColorStop(0.55, visual.glow_color || '#8f7bff');
+      gg.addColorStop(0, visual.glow_color || '#1a8cff');
+      gg.addColorStop(0.42, visual.glow_mid_color || '#0a3dff');
       gg.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = gg;
       ctx.beginPath();
@@ -225,35 +337,15 @@ export class TornadoRenderer {
       ctx.restore();
     }
 
-    // «Облачная» шапка.
-    const topX = centerAt(1);
-    const topY = -height;
+    // Полупрозрачный объём воронки: не забивает кольца, но даёт глубину.
     ctx.save();
-    ctx.globalAlpha *= (visual.top_cloud_alpha ?? 0.18);
-    ctx.fillStyle = visual.funnel_top || '#a8e8ff';
-    for (let i = 0; i < 4; i++) {
-      const a = i * 1.7 + age * 0.3;
-      const dx = Math.cos(a) * topHalf * 0.45;
-      const dy = Math.sin(a) * topHalf * 0.08;
-      ctx.beginPath();
-      ctx.ellipse(
-        topX + dx, topY + dy,
-        topHalf * (0.58 + 0.15 * Math.sin(a)),
-        Math.max(2, topHalf * 0.18),
-        0, 0, TAU
-      );
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Внешний силуэт воронки.
-    ctx.save();
-    ctx.globalAlpha *= (visual.funnel_alpha ?? 0.22);
-    const grad = ctx.createLinearGradient(0, 0, 0, -height);
-    grad.addColorStop(0, visual.funnel_bottom || '#2a1a6a');
-    grad.addColorStop(0.55, visual.funnel_mid || '#6b4ad6');
-    grad.addColorStop(1, visual.funnel_top || '#a8e8ff');
-    ctx.fillStyle = grad;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha *= (visual.funnel_alpha ?? 0.10);
+    const body = ctx.createLinearGradient(0, 0, 0, -height);
+    body.addColorStop(0, visual.funnel_bottom || '#031a6b');
+    body.addColorStop(0.55, visual.funnel_mid || '#0066ff');
+    body.addColorStop(1, visual.funnel_top || '#8ff4ff');
+    ctx.fillStyle = body;
     ctx.beginPath();
     ctx.moveTo(centerAt(0) - baseHalf, 0);
     for (let i = 1; i <= steps; i++) {
@@ -267,104 +359,194 @@ export class TornadoRenderer {
     ctx.closePath();
     ctx.fill();
 
-    // Мягкая кромка.
-    ctx.globalAlpha *= 0.75;
-    ctx.strokeStyle = visual.funnel_top || '#a8e8ff';
-    ctx.lineWidth = 1.2;
+    // Едва заметная кромка, чтобы силуэт не был «пластиковым».
+    ctx.globalAlpha *= 0.62;
+    ctx.strokeStyle = visual.ring_color_top || visual.funnel_top || '#c8fbff';
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
 
-    // Внутренняя, более светлая воронка.
+    // Светящаяся внутренняя дымка.
     ctx.save();
-    ctx.globalAlpha *= (visual.inner_alpha ?? 0.12);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha *= (visual.inner_alpha ?? 0.10);
     const inner = ctx.createLinearGradient(0, 0, 0, -height);
-    inner.addColorStop(0, visual.funnel_mid || '#6b4ad6');
-    inner.addColorStop(1, visual.core_color || '#eaffff');
+    inner.addColorStop(0, 'rgba(0,0,0,0)');
+    inner.addColorStop(0.35, visual.funnel_mid || '#0066ff');
+    inner.addColorStop(0.75, visual.core_color || '#eaffff');
+    inner.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = inner;
     ctx.beginPath();
-    ctx.moveTo(centerAt(0) - baseHalf * 0.55, 0);
+    ctx.moveTo(centerAt(0) - baseHalf * 0.36, 0);
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
-      ctx.lineTo(centerAt(t) - halfAt(t) * 0.62, -t * height);
+      ctx.lineTo(centerAt(t) - halfAt(t) * 0.55, -t * height);
     }
     for (let i = steps; i >= 0; i--) {
       const t = i / steps;
-      ctx.lineTo(centerAt(t) + halfAt(t) * 0.62, -t * height);
+      ctx.lineTo(centerAt(t) + halfAt(t) * 0.55, -t * height);
     }
     ctx.closePath();
     ctx.fill();
     ctx.restore();
 
-    // Кольца-вихри: создают ощущение вращения.
-    const bands = Math.max(2, Math.floor(visual.bands ?? 12));
+    // Главная часть — множество тонких светящихся колец. Чем ближе к
+    // основанию, тем плотнее: так вихрь читается как закрученная спираль.
+    const ringCount = Math.max(4, Math.floor(visual.ring_count ?? visual.bands ?? 44));
+    const segments = Math.max(12, Math.floor(visual.ring_segments ?? 36));
+    const spacingPower = visual.ring_spacing_power ?? 1.32;
+    const ringWidth = Math.max(0.4, visual.ring_width_px ?? 1.15);
+    const ringGlowWidth = Math.max(0, visual.ring_glow_width_px ?? 6);
+    const ringAlpha = visual.ring_alpha ?? visual.band_alpha ?? 0.5;
+    const ringGlowAlpha = visual.ring_glow_alpha ?? 0.10;
+    const highlightAlpha = visual.ring_highlight_alpha ?? 0.8;
+    const highlightWidth = Math.max(0.4, visual.ring_highlight_width_px ?? 1.6);
+    const wobble = Math.max(0.001, visual.ring_wobble ?? 0.035);
+    const tiltBase = visual.ring_tilt ?? 0.14;
+    const tiltSpeed = visual.ring_tilt_speed ?? 0.65;
+    const squash = visual.ring_vertical_squash ?? 0.24;
+    const offsetPx = visual.ring_offset_px ?? 2;
+    const topBoost = visual.top_ring_boost ?? 1.07;
+    const glowColor = visual.ring_glow_color || visual.glow_color || '#1a8cff';
+    const highlightColor = visual.ring_highlight_color || '#f2ffff';
+    const seed = area.seed ?? 1;
+
     ctx.save();
-    for (let i = 0; i < bands; i++) {
-      const t = (i + 0.5) / bands;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < ringCount; i++) {
+      const u = (i + 0.5) / ringCount;
+      const t = Math.pow(u, spacingPower);
       const y = -t * height;
-      const half = halfAt(t);
-      const ry = Math.max(1, half * 0.18);
-      const cx = centerAt(t);
-      const fade = 0.35 + 0.65 * (1 - t);
-      ctx.globalAlpha = life.alpha * (visual.band_alpha ?? 0.16) * fade;
-      ctx.strokeStyle = i % 2 === 0
-        ? (visual.band_color || '#c9b6ff')
-        : (visual.band_color_alt || visual.funnel_top || '#a8e8ff');
-      ctx.lineWidth = 1.1 + 1.6 * (1 - t);
-      ctx.beginPath();
-      ctx.ellipse(cx, y, half, ry, 0, 0, TAU);
+      const topK = t > 0.92 ? lerp(1, topBoost, (t - 0.92) / 0.08) : 1;
+      const half = Math.max(1, halfAt(t) * topK);
+      const ry = Math.max(
+        1,
+        half * squash * (0.86 + 0.22 * Math.sin(age * 0.63 + t * 5.7 + seed * 0.001))
+      );
+      const cx = centerAt(t)
+        + Math.sin(age * 0.9 + t * 3.1 + i * 0.23) * offsetPx * (0.2 + 0.8 * t);
+      const rot = tiltBase * Math.sin(age * tiltSpeed + t * 4.2 + i * 0.07)
+        * (0.35 + 0.65 * t);
+      const phase = seed * 0.0007 + age * spin * 0.55 + t * 6.4 + i * 0.41;
+      const alphaK = life.alpha
+        * (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, t)))
+        * (0.82 + 0.18 * hash(seed + i * 1.7));
+
+      if (ringGlowWidth > 0 && ringGlowAlpha > 0) {
+        ctx.globalAlpha = Math.min(1, alphaK * ringGlowAlpha * (0.55 + 0.45 * t));
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = ringGlowWidth * (0.72 + 0.42 * t);
+        this._ringPath(ctx, cx, y, half, ry, rot, phase, wobble, segments);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = Math.min(1, alphaK * ringAlpha * (0.38 + 0.62 * t));
+      ctx.strokeStyle = this._ringColor(visual, t);
+      ctx.lineWidth = ringWidth * (0.82 + 0.35 * t);
+      this._ringPath(ctx, cx, y, half, ry, rot, phase, wobble, segments);
       ctx.stroke();
 
-      // Яркая дуга на кольце.
-      ctx.globalAlpha *= 0.9;
-      ctx.strokeStyle = visual.core_color || '#eaffff';
-      ctx.lineWidth = 0.8 + 0.8 * (1 - t);
-      const a0 = age * spin + i * 0.9;
-      ctx.beginPath();
-      ctx.ellipse(cx, y, half, ry, 0, a0, a0 + 1.1);
-      ctx.stroke();
+      // Яркая дуга с одной стороны кольца — ощущение вращения и блика.
+      if (highlightAlpha > 0 && (i % 2 === 0 || t > 0.82)) {
+        const a0 = age * spin * 1.1 + i * 0.9 + t * 2.4;
+        const span = 0.75 + 0.45 * hash(seed + i * 2.3);
+        ctx.globalAlpha = Math.min(1, alphaK * highlightAlpha * (0.35 + 0.65 * t));
+        ctx.strokeStyle = highlightColor;
+        ctx.lineWidth = highlightWidth * (0.8 + 0.4 * t);
+        this._ringArc(ctx, cx, y, half, ry, rot, phase, wobble, segments, a0, a0 + span);
+        ctx.stroke();
+      }
     }
     ctx.restore();
 
-    // Спиральные ленты, обвивающие воронку.
-    const ribbons = Math.max(0, Math.floor(visual.ribbons ?? 3));
+    // Спиральные ленты, обвивающие вихрь.
+    const ribbons = Math.max(0, Math.floor(visual.ribbons ?? 2));
     if (ribbons > 0) {
-      const segs = 32;
+      const segs = Math.max(16, Math.floor(visual.ribbon_segments ?? 44));
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
       for (let k = 0; k < ribbons; k++) {
-        ctx.globalAlpha = life.alpha * (visual.ribbon_alpha ?? 0.35);
-        ctx.strokeStyle = visual.ribbon_color || '#d8f1ff';
-        ctx.lineWidth = visual.ribbon_width_px ?? 1.6;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        for (let i = 0; i <= segs; i++) {
-          const t = i / segs;
-          const ang = age * spin * 1.25 + (k * TAU) / ribbons + t * TAU * 1.7;
-          const half = halfAt(t);
-          const x = centerAt(t) + Math.cos(ang) * half * 0.9;
-          const y = -t * height + Math.sin(ang) * half * 0.18;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+        const phase0 = age * spin * 1.15 + (k * TAU) / ribbons;
+        for (let pass = 0; pass < 2; pass++) {
+          ctx.globalAlpha = Math.min(
+            1,
+            life.alpha * (visual.ribbon_alpha ?? 0.18) * (pass === 0 ? 0.45 : 1)
+          );
+          ctx.strokeStyle = pass === 0
+            ? glowColor
+            : (visual.ribbon_color || '#bff6ff');
+          ctx.lineWidth = pass === 0
+            ? Math.max(1, visual.ribbon_glow_width_px ?? 4)
+            : Math.max(0.5, visual.ribbon_width_px ?? 1.2);
+          ctx.beginPath();
+          for (let i = 0; i <= segs; i++) {
+            const t = i / segs;
+            const half = halfAt(t);
+            const ry = Math.max(1, half * squash);
+            const ang = phase0 + t * TAU * 1.35;
+            const x = centerAt(t) + Math.cos(ang) * half * 0.96;
+            const y = -t * height + Math.sin(ang) * ry * 0.95;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
         }
-        ctx.stroke();
       }
       ctx.restore();
     }
 
-    // Светящееся ядро.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha *= (visual.core_alpha ?? 0.35);
-    const core = ctx.createLinearGradient(0, 0, 0, -height);
-    core.addColorStop(0, 'rgba(255,255,255,0)');
-    core.addColorStop(0.45, visual.core_color || '#eaffff');
-    core.addColorStop(1, visual.funnel_top || '#a8e8ff');
-    ctx.fillStyle = core;
-    const coreCx = centerAt(0.55);
-    ctx.beginPath();
-    ctx.ellipse(coreCx, -height * 0.55, Math.max(2, baseHalf * 0.55), height * 0.45, 0, 0, TAU);
-    ctx.fill();
-    ctx.restore();
+    // Светящееся ядро внутри воронки.
+    const coreAlpha = visual.core_alpha ?? 0.22;
+    if (coreAlpha > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha *= coreAlpha;
+      const coreCx = centerAt(0.58);
+      const coreCy = -height * 0.58;
+      const coreR = Math.max(baseHalf * 1.4, topHalf * 0.55);
+      const core = ctx.createRadialGradient(coreCx, coreCy, 0, coreCx, coreCy, coreR);
+      core.addColorStop(0, 'rgba(255,255,255,0.85)');
+      core.addColorStop(0.22, visual.core_color || '#eaffff');
+      core.addColorStop(0.62, visual.glow_color || '#1a8cff');
+      core.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.ellipse(coreCx, coreCy, coreR, height * 0.42, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Крупные верхние кольца вместо «облачной» шапки.
+    const crownAlpha = visual.top_cloud_alpha ?? 0.24;
+    if (crownAlpha > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < 3; k++) {
+        const t = 1 - k * 0.018;
+        const half = halfAt(1) * (1.02 + k * 0.045);
+        const cy = -height + k * 1.5;
+        const cx = centerAt(1) + Math.sin(age * 0.52 + k * 2.0) * topHalf * 0.045;
+        const ry = Math.max(1, half * squash * (1.15 + k * 0.12));
+        const rot = tiltBase * 1.35 * Math.sin(age * 0.45 + k * 1.6);
+        const phase = seed * 0.0007 + age * spin * 0.4 + t * 5.1 + k * 1.2;
+        ctx.globalAlpha = Math.min(1, life.alpha * crownAlpha * (0.55 - k * 0.12));
+        ctx.strokeStyle = k === 0
+          ? highlightColor
+          : (visual.ring_color_top || visual.funnel_top || '#c8fbff');
+        ctx.lineWidth = 2.2 - k * 0.45;
+        this._ringPath(ctx, cx, cy, half, ry, rot, phase, wobble, segments);
+        ctx.stroke();
+        if (k === 0) {
+          ctx.globalAlpha = Math.min(1, life.alpha * crownAlpha * 0.08);
+          ctx.fillStyle = visual.ring_color_top || visual.funnel_top || '#c8fbff';
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
   }
 
   _drawSprite(ctx, area, img, visual, life, age) {
@@ -440,6 +622,7 @@ export class TornadoRenderer {
     const bolts = Math.max(1, Math.floor(l.bolts ?? 2));
     const interval = Math.max(20, l.interval_ms ?? 160);
     const chance = l.chance ?? 0.75;
+    const boltAlpha = life.alpha * (l.alpha ?? 1);
     const seedBase = (area.seed ?? 1) + Math.floor((age * 1000) / interval) * 31.7;
 
     for (let j = 0; j < bolts; j++) {
@@ -461,9 +644,9 @@ export class TornadoRenderer {
       const flashR = Math.max(6, l.flash_radius_px ?? 34);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = life.alpha * (l.flash_alpha ?? 0.12);
+      ctx.globalAlpha = boltAlpha * (l.flash_alpha ?? 0.12);
       const fg = ctx.createRadialGradient(mx, my, 0, mx, my, flashR);
-      fg.addColorStop(0, l.glow_color || '#8f7bff');
+      fg.addColorStop(0, l.glow_color || '#2f9fff');
       fg.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = fg;
       ctx.beginPath();
@@ -479,8 +662,8 @@ export class TornadoRenderer {
         l.color || '#f2fbff',
         l.width_px ?? 1.7,
         l.glow_width_px ?? 5.5,
-        l.glow_color || '#8f7bff',
-        life.alpha
+        l.glow_color || '#2f9fff',
+        boltAlpha
       );
     }
   }
@@ -541,6 +724,7 @@ export class TornadoRenderer {
     const alphaMul = p.alpha ?? 0.6;
 
     ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < count; i++) {
       const s = seed + i * 37.1;
       const t = (hash(s) + age * rise * (0.7 + hash(s + 1) * 0.6)) % 1;
@@ -549,13 +733,23 @@ export class TornadoRenderer {
       const x = centerAt(t) + Math.cos(ang) * half * (0.72 + hash(s + 2) * 0.22);
       const y = -t * height + Math.sin(ang) * half * 0.17;
       const twinkle = 0.55 + 0.45 * Math.sin(age * 9 + i * 1.7);
-      const a = life.alpha * alphaMul * (1 - t) * twinkle;
+      const a = life.alpha * alphaMul * (0.25 + 0.75 * (1 - t)) * twinkle;
       ctx.globalAlpha = Math.max(0, Math.min(1, a));
-      ctx.fillStyle = (i % 4 === 0)
-        ? (p.debris_color || '#b08a6a')
-        : (p.color || '#d8f1ff');
+      ctx.fillStyle = (i % 5 === 0)
+        ? (p.debris_color || '#4fd6ff')
+        : (p.color || '#bff8ff');
+      const size = baseSize * (0.6 + (1 - t) * 0.8);
       ctx.beginPath();
-      ctx.arc(x, y, baseSize * (0.6 + (1 - t) * 0.7), 0, TAU);
+      ctx.arc(x, y, size * 1.9, 0, TAU);
+      ctx.fillStyle = p.glow_color || '#1a8cff';
+      ctx.globalAlpha *= 0.22;
+      ctx.fill();
+      ctx.globalAlpha = Math.max(0, Math.min(1, a));
+      ctx.fillStyle = (i % 5 === 0)
+        ? (p.debris_color || '#4fd6ff')
+        : (p.color || '#bff8ff');
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, TAU);
       ctx.fill();
     }
     ctx.restore();

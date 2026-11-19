@@ -298,9 +298,15 @@ export class ConfigLoader {
         if (av.sprite_anchor !== undefined && !['center', 'bottom'].includes(av.sprite_anchor)) {
           errors.push('weapon ' + w.id + '.area_visual.sprite_anchor bad (center|bottom)');
         }
-        for (const k of ['height_px', 'base_width_px', 'top_width_px', 'ground_offset_px',
-          'silhouette_segments', 'bands', 'ribbons', 'ribbon_width_px', 'spin_speed',
-          'sway_px', 'sway_speed', 'turbulence_px', 'spawn_ms', 'fade_out_ms',
+        for (const k of ['height_px', 'height_wobble', 'base_width_px', 'top_width_px',
+          'width_wobble', 'profile_power', 'morph_speed', 'ground_offset_px',
+          'silhouette_segments', 'bands', 'ring_count', 'ring_segments',
+          'ring_spacing_power', 'ring_width_px', 'ring_glow_width_px',
+          'ring_highlight_width_px', 'ring_wobble', 'ring_tilt', 'ring_tilt_speed',
+          'ring_vertical_squash', 'ring_offset_px', 'top_ring_boost',
+          'ribbons', 'ribbon_segments', 'ribbon_width_px', 'ribbon_glow_width_px',
+          'spin_speed', 'sway_px', 'sway_speed', 'lean_px', 'lean_speed',
+          'move_lean_px', 'turbulence_px', 'spawn_ms', 'fade_out_ms',
           'spawn_scale', 'fade_out_scale', 'ground_ring_radius_scale', 'ground_ring_aspect',
           'sprite_size_px', 'sprite_width_px', 'sprite_height_px']) {
           if (av[k] !== undefined && !(Number.isFinite(av[k]) && av[k] >= 0)) {
@@ -313,7 +319,8 @@ export class ConfigLoader {
           }
         }
         for (const k of ['alpha', 'glow_alpha', 'funnel_alpha', 'inner_alpha', 'band_alpha',
-          'core_alpha', 'top_cloud_alpha', 'ribbon_alpha', 'ground_ring_alpha',
+          'core_alpha', 'top_cloud_alpha', 'ribbon_alpha', 'ring_alpha',
+          'ring_glow_alpha', 'ring_highlight_alpha', 'ground_ring_alpha',
           'sprite_alpha', 'sprite_glow_alpha']) {
           if (av[k] !== undefined && !(Number.isFinite(av[k]) && av[k] >= 0 && av[k] <= 1)) {
             errors.push('weapon ' + w.id + '.area_visual.' + k + ' bad (0..1)');

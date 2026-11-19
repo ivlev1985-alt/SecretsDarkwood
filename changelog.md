@@ -261,3 +261,9 @@
 - Предусмотрена замена заглушки спрайтом: когда появится `assets/projectiles/tornado.png`, режим `area_visual.mode: "auto"` автоматически начнёт рисовать анимацию из `area_frames` (idle-кадры), при этом молнии и рунное кольцо можно оставить поверх (`lightning.with_sprite`). `"procedural"` принудительно оставляет воронку, `"sprite"` использует спрайт с fallback на процедурный вариант.
 - ConfigLoader валидирует `area_shape`, `tornado_move` и блок `area_visual` (режимы, тайминги, альфы, параметры молний/частиц); `SkillSystem` создаёт зону `shape: "tornado"`, а `Game` передаёт её в `TornadoRenderer`.
 
+## [Смерч: живая форма и светящиеся кольца]
+- Визуал смерча переработан под более реалистичный синий вихрь: десятки тонких светящихся колец, мягкая объёмная дымка, синее ядро, блики-дуги, спиральные ленты и искры. Кольца плотнее у основания и шире у вершины, добавлены плавные волны радиуса и вертикальные «заломы», поэтому silhouette не выглядит идеальным конусом.
+- Форма меняется во времени: высота, ширина основания и вершины, наклон, изгиб и положение верхушки «дышат» с разными фазами. Дополнительный наклон зависит от направления движения (`tornado_move`), поэтому при повороте смерч плавно меняет силуэт.
+- Все новые константы вынесены в `skills_config.weapons[tornado].area_visual`: `height_wobble`, `width_wobble`, `morph_speed`, `profile_power`, `ring_count`, `ring_segments`, `ring_spacing_power`, `ring_width_px`, `ring_glow_width_px`, `ring_alpha`, `ring_glow_alpha`, `ring_highlight_alpha`, `ring_wobble`, `ring_tilt*`, `ring_vertical_squash`, `ring_offset_px`, `top_ring_boost`, `ring_color_*`, `lean_*`, `move_lean_px`, `ribbons`, `ribbon_*`. ConfigLoader валидирует новые числовые и alpha-параметры.
+- Молнии сделаны реже и мягче (`bolts`, `chance`, `interval_ms`, `alpha`), чтобы не перебивать кольца; режим спрайта и `lightning.with_sprite` сохранены без изменений.
+
