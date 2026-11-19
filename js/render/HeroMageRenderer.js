@@ -11,6 +11,8 @@
 // смерть (падение + душа). Все константы — в game_config.hero.procedural.
 
 const TAU = Math.PI * 2;
+// Смещения для «наклеечного» контура (8 направлений, 1px в пикселях offscreen)
+const OUTLINE_OFF = [-1, 0, 1, 0, 0, -1, 0, 1, -1, -1, 1, -1, -1, 1, 1, 1];
 
 function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 function easeOutCubic(t) { t = clamp01(t); return 1 - Math.pow(1 - t, 3); }
@@ -22,8 +24,16 @@ function easeInOutCubic(t) {
 export class HeroMageRenderer {
   constructor(cfg = {}) {
     this.cfg = cfg || {};
-    this.off = null;
+    this.off = null; // финальная композиция: контур + арт
     this.offCtx = null;
+    this.art = null; // маг без контура
+    this.artCtx = null;
+    this.sil = null; // залитый silhouette для контура
+    this.silCtx = null;
+    this.dust = []; // пылинки из-под ног {x, y, vx, vy, life, max, r}
+    this.prevStep = 0;
+    this.lastTime = 0;
+    this._pxScale = 1; // масштаб арта в пикселях offscreen (для shadowBlur)
   }
 
   setConfig(cfg) { this.cfg = cfg || {}; }
@@ -35,38 +45,61 @@ export class HeroMageRenderer {
     const w = Math.max(1, opts.w || 64);
     const h = Math.max(1, opts.h || 64);
     const artScale = Math.min(w / 64, h / 64);
+    this._pxScale = scale * artScale;
     const pad = Math.max(0, cfg.frame_padding_px ?? 26);
     const pw = Math.max(1, Math.ceil((w + pad * 2) * scale));
     const ph = Math.max(1, Math.ceil((h + pad * 2) * scale));
-    const off = this._offscreen(pw, ph);
-    if (!off) return;
-    const o = this.offCtx;
+    const off = this._canvas('off', pw, ph);
+    const art = this._canvas('art', pw, ph);
+    const sil = this._canvas('sil', pw, ph);
+    if (!off || !art || !sil) return;
+    const o = this.offCtx, a = this.artCtx, s = this.silCtx;
 
-    o.setTransform(1, 0, 0, 1, 0, 0);
-    o.clearRect(0, 0, pw, ph);
-    o.save();
-    o.translate(pw / 2, ph / 2);
-    o.scale(scale * artScale, scale * artScale);
+    // dt для частиц пыли (time — игровые секунды; пауза/перемотка — клампим)
+    let dt = (time || 0) - this.lastTime;
+    if (!(dt > 0) || dt > 0.1) dt = 0.016;
+    this.lastTime = time || 0;
 
     const dir = this._dir(player);
-    const side = dir === 'left' || dir === 'right';
-    if (side && dir === 'left') o.scale(-1, 1);
+    const pose = this._pose(player, time, dir, dt);
 
-    const pose = this._pose(player, time, dir);
-    this._paint(o, pose, cfg);
-    o.restore();
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.clearRect(0, 0, pw, ph);
+    a.save();
+    a.translate(pw / 2, ph / 2);
+    a.scale(this._pxScale, this._pxScale);
+    if ((dir === 'left' || dir === 'right') && dir === 'left') a.scale(-1, 1);
+    this._paint(a, pose, cfg);
+    a.restore();
 
     // Подсветка урона: тонируем только непрозрачные пиксели магова холста.
     const flash = Math.max(0, player.hitFlash || 0);
     if (flash > 0) {
-      o.setTransform(1, 0, 0, 1, 0, 0);
-      o.globalCompositeOperation = 'source-atop';
-      o.globalAlpha = Math.min(0.35, flash * 2.5);
-      o.fillStyle = player.flashColor || '#ff5555';
-      o.fillRect(0, 0, pw, ph);
-      o.globalCompositeOperation = 'source-over';
-      o.globalAlpha = 1;
+      a.globalCompositeOperation = 'source-atop';
+      a.globalAlpha = Math.min(0.35, flash * 2.5);
+      a.fillStyle = player.flashColor || '#ff5555';
+      a.fillRect(0, 0, pw, ph);
+      a.globalCompositeOperation = 'source-over';
+      a.globalAlpha = 1;
     }
+
+    // Контур «наклейки»: silhouette (art, залитый тёмным) рисуется 8 раз со
+    // смещением ±1px, поверх — оригинал. Дёшево: никаких blur-проходов.
+    s.setTransform(1, 0, 0, 1, 0, 0);
+    s.clearRect(0, 0, pw, ph);
+    s.drawImage(art, 0, 0);
+    s.globalCompositeOperation = 'source-in';
+    s.fillStyle = cfg.outline || '#150a2e';
+    s.fillRect(0, 0, pw, ph);
+    s.globalCompositeOperation = 'source-over';
+
+    o.setTransform(1, 0, 0, 1, 0, 0);
+    o.clearRect(0, 0, pw, ph);
+    const k = Math.max(1, Math.round(1 * this._pxScale)); // ширина контура ~1px
+    for (let i = 0; i < OUTLINE_OFF.length; i += 2) {
+      o.drawImage(sil, OUTLINE_OFF[i] * k, OUTLINE_OFF[i + 1] * k);
+    }
+    o.drawImage(art, 0, 0);
 
     const alpha = Math.max(0, 1 - pose.deathK * (cfg.death_fade ?? 0.45));
     ctx.save();
@@ -78,17 +111,17 @@ export class HeroMageRenderer {
     ctx.restore();
   }
 
-  _offscreen(pw, ph) {
+  _canvas(key, pw, ph) {
     if (typeof document === 'undefined') return null;
-    if (!this.off) {
-      this.off = document.createElement('canvas');
-      this.offCtx = this.off.getContext('2d');
+    if (!this[key]) {
+      this[key] = document.createElement('canvas');
+      this[key + 'Ctx'] = this[key].getContext('2d');
     }
-    if (this.off.width !== pw || this.off.height !== ph) {
-      this.off.width = pw;
-      this.off.height = ph;
+    if (this[key].width !== pw || this[key].height !== ph) {
+      this[key].width = pw;
+      this[key].height = ph;
     }
-    return this.off;
+    return this[key];
   }
 
   _dir(player) {
@@ -96,7 +129,38 @@ export class HeroMageRenderer {
     return player.facing < 0 ? 'left' : 'right';
   }
 
-  _pose(player, time, dir) {
+  // Партиклы пыли: спавн при пересечении step нуля вверх (момент «шага»),
+  // живут ~0.5с, опускаются и затухают. Максимум 6 — фиксированный бюджет.
+  _updateDust(dt, moving, step, time, cfg, dir) {
+    const d = this.dust;
+    const crossed = moving && this.prevStep <= 0 && step > 0;
+    this.prevStep = moving ? step : 0;
+    if (crossed && d.length < 6) {
+      const side = dir === 'left' || dir === 'right';
+      const n = d.length < 4 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        d.push({
+          x: (side ? (dir === 'right' ? -4 : 4) : (i === 0 ? -4 : 4)) + (Math.random() - 0.5) * 2,
+          y: 27 + Math.random() * 1.5,
+          vx: (side ? (dir === 'right' ? -1 : 1) : (Math.random() - 0.5) * 2) * (6 + Math.random() * 6),
+          vy: 4 + Math.random() * 5,
+          r: 1 + Math.random() * 1.1,
+          life: 0,
+          max: 0.4 + Math.random() * 0.2
+        });
+      }
+    }
+    for (let i = d.length - 1; i >= 0; i--) {
+      const p = d[i];
+      p.life += dt;
+      if (p.life >= p.max) { d.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= 1 - Math.min(1, dt * 3);
+    }
+    this._dustCfg = { alpha: cfg.dust_alpha ?? 0.22, color: cfg.dust || '#b6ab96' };
+  }
+
+  _pose(player, time, dir, dt = 0.016) {
     const cfg = this.cfg || {};
     const moving = !!player.moving && player.alive !== false;
     const cycles = moving ? (cfg.walk_cycles_per_sec ?? 2.4) : (cfg.idle_cycles_per_sec ?? 0.85);
@@ -108,6 +172,16 @@ export class HeroMageRenderer {
     const sway = moving
       ? Math.sin(phase) * (cfg.walk_sway_px ?? 1.7)
       : Math.sin(phase + 0.7) * (cfg.idle_sway_px ?? 0.55);
+
+    // Дыхание (idle): лёгкое расширение робы по Y
+    const breath = !moving && player.alive !== false
+      ? Math.sin((time || 0) * 1.2) * (cfg.breath_bob_px ?? 0.3)
+      : 0;
+
+    // Пыль из-под ног: спавн на «шаге» (step пересекает 0 снизу вверх),
+    // частицы уходят вниз и затухают. Живут в this.dust между кадрами.
+    this._updateDust(dt, moving, step, time, cfg, dir);
+    const dust = this.dust;
 
     const castDur = Math.max(0.001, player.castDuration ?? 0.43);
     const castK = player.castT > 0
@@ -125,8 +199,8 @@ export class HeroMageRenderer {
       side: dir === 'left' || dir === 'right',
       back: dir === 'up',
       front: dir === 'down',
-      moving, phase, step, bob, sway,
-      castK, deathK, fall,
+      moving, phase, step, bob, sway, breath, dust,
+      castK, castCrit: !!player.castCrit, deathK, fall,
       trail: moving && (dir === 'left' || dir === 'right') ? -(cfg.side_trail_px ?? 1.8) : 0,
       deathRot: -fall * (cfg.death_fall_rad ?? 1.15),
       deathX: -fall * (cfg.death_slide_px ?? 5),
@@ -155,7 +229,23 @@ export class HeroMageRenderer {
     this._drawHat(o, pose, C);
     this._drawStaff(o, pose, C);
     this._drawStaffHand(o, pose, C);
+    if (pose.castCrit && pose.castK > 0.05) this._drawCritFlash(o, pose, C);
     o.restore();
+
+    // Пыль из-под ног (партиклы, координаты — локальные артовые)
+    if (this.dust.length) {
+      const dc = this._dustCfg || { alpha: 0.22, color: '#b6ab96' };
+      o.save();
+      o.fillStyle = dc.color;
+      for (const p of this.dust) {
+        o.globalAlpha = dc.alpha * (1 - p.life / p.max);
+        o.beginPath();
+        o.arc(p.x, p.y, p.r * (1 + p.life), 0, TAU);
+        o.fill();
+      }
+      o.globalAlpha = 1;
+      o.restore();
+    }
 
     if (pose.fall > 0.04) this._drawSoul(o, pose, C);
   }
@@ -222,9 +312,11 @@ export class HeroMageRenderer {
     const side = pose.side;
     const shift = side ? 1.5 : 0;
     const sway = pose.sway;
+    const breath = pose.breath || 0;
     const hem = 23;
-    const left = -13 + shift;
-    const right = 13 + shift;
+    // П.2: роба шире внизу (±16 вместо ±13)
+    const left = -14 + shift;
+    const right = 14 + shift;
 
     o.save();
     if (side && pose.moving) {
@@ -233,10 +325,13 @@ export class HeroMageRenderer {
       o.translate(0, -26);
     }
 
+    // П.8: волна подола при движении
+    const wave = pose.moving ? Math.sin(pose.phase * 1.5) * (C.hem_wave_px ?? 1.3) : 0;
+
     o.beginPath();
     o.moveTo(-7 + shift, -5);
-    o.quadraticCurveTo(left - 1, 7, left + sway * 0.7, hem);
-    o.quadraticCurveTo(shift, hem + 4, right + sway * 0.7, hem);
+    o.quadraticCurveTo(left - 1, 7, left + sway * 0.7 + wave, hem);
+    o.quadraticCurveTo(shift + breath * 0.3, hem + 4 + breath, right + sway * 0.7 - wave, hem);
     o.quadraticCurveTo(right + 1, 7, 7 + shift, -5);
     o.closePath();
     o.fillStyle = this._lin(o, 0, -6, 0, hem + 4, [
@@ -254,7 +349,7 @@ export class HeroMageRenderer {
       o.beginPath();
       o.moveTo(-4.5 + shift, -3);
       o.quadraticCurveTo(-2.5 + shift, 8, -3.5 + shift + sway * 0.3, 19);
-      o.quadraticCurveTo(shift, 21, 3.5 + shift + sway * 0.3, 19);
+      o.quadraticCurveTo(shift + breath * 0.2, 21 + breath, 3.5 + shift + sway * 0.3, 19);
       o.quadraticCurveTo(2.5 + shift, 8, 4.5 + shift, -3);
       o.closePath();
       o.fillStyle = 'rgba(16,6,40,0.28)';
@@ -279,21 +374,21 @@ export class HeroMageRenderer {
     // Блики складок.
     o.beginPath();
     o.moveTo(-5 + shift, -2);
-    o.quadraticCurveTo(-8 + shift, 10, -9 + shift + sway * 0.4, 20);
+    o.quadraticCurveTo(-8 + shift, 10, -9 + shift + sway * 0.4 + wave * 0.5, 20);
     o.strokeStyle = 'rgba(170,140,255,0.35)';
     o.lineWidth = 1.2;
     o.stroke();
     o.beginPath();
     o.moveTo(6 + shift, -2);
-    o.quadraticCurveTo(9 + shift, 10, 9 + shift + sway * 0.4, 18);
+    o.quadraticCurveTo(9 + shift, 10, 9 + shift + sway * 0.4 - wave * 0.5, 18);
     o.strokeStyle = 'rgba(170,140,255,0.22)';
     o.lineWidth = 1;
     o.stroke();
 
     // Подол.
     o.beginPath();
-    o.moveTo(left + 1 + sway * 0.7, hem - 1.5);
-    o.quadraticCurveTo(shift, hem + 2.5, right - 1 + sway * 0.7, hem - 1.5);
+    o.moveTo(left + 1 + sway * 0.7 + wave, hem - 1.5);
+    o.quadraticCurveTo(shift + breath * 0.3, hem + 2.5 + breath, right - 1 + sway * 0.7 - wave, hem - 1.5);
     o.strokeStyle = C.robe_trim || '#1b0b3f';
     o.lineWidth = 1.4;
     o.stroke();
@@ -401,10 +496,10 @@ export class HeroMageRenderer {
       return;
     }
 
-    // Лицо.
+    // П.2: лицо чуть уже и ниже (борода длиннее)
     o.fillStyle = C.skin || '#d7a578';
     o.beginPath();
-    o.ellipse(hx, hy, 6.2, 6.8, 0, 0, TAU);
+    o.ellipse(hx, hy + 0.5, 5.8, 7.2, 0, 0, TAU);
     o.fill();
     o.strokeStyle = 'rgba(90,50,30,0.35)';
     o.lineWidth = 0.6;
@@ -417,6 +512,14 @@ export class HeroMageRenderer {
       o.ellipse(hx - 4.5, hy + 0.5, 1.8, 2.2, 0, 0, TAU);
       o.fill();
     }
+
+    // П.3: тень от шляпы на лице
+    o.save();
+    o.fillStyle = C.face_shade || 'rgba(18,8,38,0.38)';
+    o.beginPath();
+    o.ellipse(hx, hy - 2.5, 5.5, 3.5, 0, 0, Math.PI);
+    o.fill();
+    o.restore();
 
     // Глаза (в смерти — закрытые дуги).
     const eyeY = hy - 1.4;
@@ -432,6 +535,12 @@ export class HeroMageRenderer {
         o.beginPath();
         o.arc(x, eyeY, 0.85, 0, TAU);
         o.fill();
+        // П.3: светящиеся зрачки (как в PNG)
+        o.fillStyle = C.eye_glow || '#efe6ff';
+        o.beginPath();
+        o.arc(x + 0.2, eyeY - 0.2, 0.3, 0, TAU);
+        o.fill();
+        o.fillStyle = C.eye || '#241633';
       }
     };
     if (side) {
@@ -474,20 +583,20 @@ export class HeroMageRenderer {
       o.fill();
     }
 
-    // Борода.
+    // П.2: борода длиннее и острее
     o.fillStyle = C.beard || '#ece8f2';
     o.beginPath();
     if (side) {
       o.moveTo(hx - 4.2, hy + 1.2);
-      o.quadraticCurveTo(hx - 1.5, hy + 11.5, hx + 2.5, hy + 14);
+      o.quadraticCurveTo(hx - 1.5, hy + 12, hx + 2.5, hy + 15);
       o.quadraticCurveTo(hx + 7.5, hy + 10, hx + 6.2, hy + 1.8);
       o.quadraticCurveTo(hx + 3.2, hy + 5.2, hx - 0.2, hy + 3.4);
       o.quadraticCurveTo(hx - 2.6, hy + 5.6, hx - 4.2, hy + 1.2);
     } else {
       o.moveTo(hx - 6, hy + 2);
-      o.quadraticCurveTo(hx - 8, hy + 10.5, hx - 3, hy + 14.5);
-      o.quadraticCurveTo(hx, hy + 16.5, hx + 3, hy + 14.5);
-      o.quadraticCurveTo(hx + 8, hy + 10.5, hx + 6, hy + 2);
+      o.quadraticCurveTo(hx - 8, hy + 11.5, hx - 3, hy + 15.5);
+      o.quadraticCurveTo(hx, hy + 17.5, hx + 3, hy + 15.5);
+      o.quadraticCurveTo(hx + 8, hy + 11.5, hx + 6, hy + 2);
       o.quadraticCurveTo(hx + 3, hy + 6, hx, hy + 4.2);
       o.quadraticCurveTo(hx - 3, hy + 6, hx - 6, hy + 2);
     }
@@ -534,31 +643,37 @@ export class HeroMageRenderer {
     const hx = (side ? 1.5 : 0) + pose.sway * 0.15;
     const hy = -15 + pose.bob * 0.25;
     const trail = pose.trail || 0;
-    const tipX = hx + pose.sway * 0.7 + trail * 0.5 + (side ? 2.2 : 0);
-    const tipY = hy - 16 - pose.bob * 0.2 + pose.castK * 0.7;
+    // П.2: конус заметно загнут вбок (против движения)
+    const bend = (C.hat_bend_px ?? 4) + Math.abs(trail) * 0.8;
+    const tipX = hx - bend + pose.sway * 0.7 + trail * 0.5;
+    const tipY = hy - 15 - pose.bob * 0.2 + pose.castK * 0.7;
+    // Контрольная точка изгиба — вверх и чуть назад
+    const midX = hx - bend * 0.35 + pose.sway * 0.3;
+    const midY = hy - 11;
 
     o.save();
-    // Поля шляпы.
+    // П.2: поля шире и «опущены»
     o.translate(hx, hy);
     o.rotate((side ? 0.04 : 0) + pose.sway * 0.006);
     o.beginPath();
-    o.ellipse(0, 0, 15, 4.5, 0, 0, TAU);
+    o.ellipse(0, 0.5, 16.5, 5.2, 0, 0, TAU);
     o.fillStyle = C.hat_dark || '#2a135c';
     o.fill();
     o.strokeStyle = C.hat_band || '#1b0b3f';
     o.lineWidth = 0.8;
     o.stroke();
     o.beginPath();
-    o.ellipse(0, -0.8, 13.5, 3.2, 0, 0, TAU);
+    o.ellipse(0, -0.4, 14.5, 3.6, 0, 0, TAU);
     o.fillStyle = C.hat_mid || '#4a2a9c';
     o.fill();
     o.restore();
 
-    // Конус.
+    // Конус с изгибом (две квадратичные дуги через mid).
     o.beginPath();
     o.moveTo(hx - 11, hy - 1);
-    o.quadraticCurveTo(hx - 7, hy - 9, tipX, tipY);
-    o.quadraticCurveTo(hx + 7, hy - 9, hx + 11, hy - 1);
+    o.quadraticCurveTo(hx - 8, hy - 9, midX, midY);
+    o.quadraticCurveTo(midX + 2, midY - 3, tipX, tipY);
+    o.quadraticCurveTo(hx + 8, hy - 9, hx + 11, hy - 1);
     o.closePath();
     o.fillStyle = this._lin(o, hx, hy, hx, tipY, [
       [0, C.hat_light || '#6b4ad6'],
@@ -573,24 +688,24 @@ export class HeroMageRenderer {
     // Блик на левой грани.
     o.beginPath();
     o.moveTo(hx - 9, hy - 3);
-    o.quadraticCurveTo(hx - 5, hy - 12, tipX - 1, tipY + 2);
+    o.quadraticCurveTo(hx - 6, hy - 11, midX - 1, midY);
     o.strokeStyle = 'rgba(160,130,255,0.35)';
     o.lineWidth = 1.2;
     o.stroke();
 
-    // Лента.
+    // П.2: лента крупнее.
     o.beginPath();
     o.moveTo(hx - 11, hy - 1);
-    o.quadraticCurveTo(hx, hy + 2, hx + 11, hy - 1);
+    o.quadraticCurveTo(hx, hy + 2.6, hx + 11, hy - 1);
     o.strokeStyle = C.hat_band || '#1b0b3f';
-    o.lineWidth = 2.2;
+    o.lineWidth = 2.8;
     o.stroke();
 
     // Задний шов.
     if (pose.back) {
       o.beginPath();
       o.moveTo(hx, hy - 2);
-      o.quadraticCurveTo(hx + pose.sway * 0.5, hy - 9, tipX, tipY);
+      o.quadraticCurveTo(midX, midY, tipX, tipY);
       o.strokeStyle = 'rgba(20,8,50,0.45)';
       o.lineWidth = 0.9;
       o.stroke();
@@ -660,9 +775,12 @@ export class HeroMageRenderer {
     const glow = (C.cast_glow_alpha ?? 0.55) * pose.castK + 0.10 + Math.sin(pose.phase || 0) * 0.02;
     const glowR = Math.max(1, (C.cast_glow_radius ?? 17) * (0.55 + pose.castK * 0.75));
 
-    // Свечение кристалла.
+    // Свечение кристалла. shadowBlur (п.5): один проход с фильтром даёт и
+    // «освещение» робы/земли — размытое пятно ложится под кристалл и вокруг.
     o.save();
     o.globalCompositeOperation = 'lighter';
+    o.shadowColor = C.staff_glow || '#7f5cff';
+    o.shadowBlur = (C.crystal_shadow_blur ?? 10) * this._pxScale;
     const gr = o.createRadialGradient(0, crystalY, 0, 0, crystalY, glowR);
     gr.addColorStop(0, `rgba(240,232,255,${Math.min(0.85, glow)})`);
     gr.addColorStop(0.25, `rgba(155,108,255,${Math.min(0.55, glow * 0.8)})`);
@@ -671,6 +789,7 @@ export class HeroMageRenderer {
     o.beginPath();
     o.arc(0, crystalY, glowR, 0, TAU);
     o.fill();
+    o.shadowBlur = 0;
     o.restore();
 
     // Кристалл.
@@ -733,6 +852,39 @@ export class HeroMageRenderer {
     o.moveTo(-2, -0.5);
     o.quadraticCurveTo(0, 1.2, 2, -0.5);
     o.stroke();
+    o.restore();
+  }
+
+  // П.6: золотая вспышка при крит-касте — радиальная вспышка на кристалле
+  // + расходящиеся «лучи». Синхронизирована с castK (вспыхнула и погасла).
+  _drawCritFlash(o, pose, C) {
+    const s = this._staffPose(pose, C);
+    const topY = -29 - s.lift * 0.2;
+    const cx = 0, cy = topY - 5;
+    const k = pose.castK;
+    const a = (C.crit_flash_alpha ?? 0.5) * k;
+    o.save();
+    o.globalCompositeOperation = 'lighter';
+    const gr = o.createRadialGradient(cx, cy, 0, cx, cy, 14 + k * 10);
+    gr.addColorStop(0, `rgba(255,240,190,${Math.min(0.9, a * 1.6)})`);
+    gr.addColorStop(0.4, `rgba(255,211,77,${a})`);
+    gr.addColorStop(1, 'rgba(255,180,40,0)');
+    o.fillStyle = gr;
+    o.beginPath();
+    o.arc(cx, cy, 14 + k * 10, 0, TAU);
+    o.fill();
+    // 4 луча
+    o.strokeStyle = `rgba(255,225,140,${a * 0.9})`;
+    o.lineWidth = 1.1;
+    o.lineCap = 'round';
+    const len = 5 + k * 9;
+    for (let i = 0; i < 4; i++) {
+      const ang = i * (Math.PI / 2) + Math.PI / 4 + pose.phase * 0.4;
+      o.beginPath();
+      o.moveTo(cx + Math.cos(ang) * 3, cy + Math.sin(ang) * 3);
+      o.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
+      o.stroke();
+    }
     o.restore();
   }
 

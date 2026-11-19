@@ -1566,7 +1566,7 @@ export class Game {
     const onHit = (p, e) => this._onHit(p, e);
     this.skills.update(dt, {
       player: this.player, enemies: this.enemies, onKill,
-      onCast: () => this.player.playCast()
+      onCast: (st, crit) => this.player.playCast(crit)
     });
     this.skills.updateProjectiles(dt);
     this.skills.updateChains(this.enemies, Math.random);

@@ -27,6 +27,7 @@ export class Player extends Entity {
     this.heroDir = 'down'; // down/up/left/right — последнее направление движения
     this.moving = false;
     this.castT = 0; // остаток анимации каста, сек
+    this.castCrit = false; // каст был критическим — золотая вспышка мага
     this.castDuration = 0.43; // переопределяется из game_config.hero.procedural
     this.deathT = 0; // остаток анимации смерти, сек
     this.deathDuration = 1.1; // переопределяется из game_config.hero.procedural
@@ -62,9 +63,13 @@ export class Player extends Entity {
 
   // Каст: поднимаем посох. Не перезапускаем анимацию, если она уже идёт —
   // иначе несколько заклинаний подряд дёргали бы её в начало каждый кадр.
-  playCast() {
+  // crit=true — золотая вспышка у процедурного мага (HeroMageRenderer).
+  playCast(crit = false) {
     if (!this.alive || this.deathT > 0) return;
-    if (this.castT <= 0) this.castT = this.castDuration ?? 0.43;
+    if (this.castT <= 0) {
+      this.castCrit = !!crit;
+      this.castT = this.castDuration ?? 0.43;
+    }
   }
 
   // Смерть: отдельный таймер для процедурного мага и death-анимации спрайта.
@@ -73,6 +78,7 @@ export class Player extends Entity {
     this.alive = false;
     this.moving = false;
     this.castT = 0;
+    this.castCrit = false;
     this.deathT = this.deathDuration ?? 1.1;
     if (this.anim) { try { this.anim.setAnimation('death'); } catch (e) {} }
   }
@@ -91,6 +97,7 @@ export class Player extends Entity {
     this.alive = true;
     this.deathT = 0;
     this.castT = 0;
+    this.castCrit = false;
     this.moving = false;
     this.heroDir = 'down';
     this.tilt = 0;
@@ -121,7 +128,10 @@ export class Player extends Entity {
       this.anim.setAnimation(moving ? 'run' : 'idle');
       this.anim.update(dt);
     }
-    if (this.castT > 0) this.castT = Math.max(0, this.castT - dt);
+    if (this.castT > 0) {
+      this.castT = Math.max(0, this.castT - dt);
+      if (this.castT === 0) this.castCrit = false;
+    }
     if (this.invT > 0) this.invT -= dt;
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.regen > 0 && this.hp > 0) this.hp = Math.min(this.maxHp, this.hp + this.regen * dt);

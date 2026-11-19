@@ -209,7 +209,8 @@ export class SkillSystem {
       st.waiting = !fired; // HUD: ждём цель — иконка не "перезаряжается"
       st.cd = fired ? this.weaponCooldown(st, player) : 0.25;
       // Визуальный каст героя (поднимает посох). Орбитальная пассивка не кастуется.
-      if (fired && c.type !== 'orbit' && typeof ctx.onCast === 'function') ctx.onCast(st);
+      // st.lastCrit проставляется в _fireToTarget — золотая вспышка при крит-касте.
+      if (fired && c.type !== 'orbit' && typeof ctx.onCast === 'function') ctx.onCast(st, !!st.lastCrit);
     }
 
     // орбитальная пассивная магия (Кольцо холода): позиции шаров + урон касанием
@@ -390,6 +391,7 @@ export class SkillSystem {
     const spread = ((c.spread_angle || 0) * Math.PI) / 180;
     const baseA = Math.atan2(target.y - player.y, target.x - player.x);
     const { damage, crit } = this.combat.rollDamage(this.weaponDamage(st, player));
+    st.lastCrit = crit; // для золотой вспышки каста у процедурного мага
     const slow = this.weaponSlow(st);
     const burn = this.weaponBurn(st, player);
     for (let i = 0; i < n; i++) {
