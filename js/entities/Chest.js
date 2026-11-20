@@ -81,11 +81,16 @@ export class Chest extends Entity {
   static rollReward(typeCfg, rand = Math.random) {
     const coins = typeCfg.coins_min + Math.floor(rand() * ((typeCfg.coins_max - typeCfg.coins_min) + 1));
     const spell = rand() < (typeCfg.spell_drop_chance || 0) ? (typeCfg.spell_count || 0) : 0;
+    const itemChance = typeCfg.item_drop_chance || 0;
+    const itemRarity = typeCfg.item_drop_rarity || null;
+    const item = !!(itemRarity && itemChance > 0 && rand() < itemChance);
     return {
       coins,
       potions: typeCfg.health_potions || 0,
       spells: spell,
       levels: typeCfg.level_up_bonus || 0,
+      item,
+      itemRarity: item ? itemRarity : null,
       rewardType: typeCfg.reward_type || 'mixed'
     };
   }

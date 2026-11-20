@@ -391,6 +391,12 @@ export class ConfigLoader {
       if (registries && registries.chest && c.reward_type && !registries.chest[c.reward_type]) {
         errors.push('chest ' + c.id + ' unknown reward_type=' + c.reward_type);
       }
+      if (c.item_drop_chance !== undefined && !(c.item_drop_chance >= 0 && c.item_drop_chance <= 1)) {
+        errors.push('chest ' + c.id + ' bad item_drop_chance (0..1)');
+      }
+      if (c.item_drop_rarity && !(c.item_drop_chance > 0)) {
+        errors.push('chest ' + c.id + ' item_drop_rarity without item_drop_chance');
+      }
     }
 
     for (const t of ((shop && shop.items) || []).map((i) => i.target)) {
@@ -417,13 +423,22 @@ export class ConfigLoader {
       }
       for (const r of (items.rarities || [])) {
         if (!(r.stats_count > 0)) errors.push('rarity ' + r.id + ' bad stats_count');
-        if (!(r.weight > 0)) errors.push('rarity ' + r.id + ' bad weight');
+        if (!r.drop_only && !(r.weight > 0)) errors.push('rarity ' + r.id + ' bad weight');
+        if (r.drop_only && (r.weight || 0) < 0) errors.push('rarity ' + r.id + ' bad weight');
+        if (!r.name_key) errors.push('rarity ' + r.id + ' missing name_key');
+        if (!r.color) errors.push('rarity ' + r.id + ' missing color');
       }
       for (const [sid, def] of Object.entries(items.stats || {})) {
         if (sid === 'radius') continue;
         for (const r of (items.rarities || [])) {
           const range = def.ranges && def.ranges[r.id];
           if (!range || !(range[0] <= range[1])) errors.push('stat ' + sid + ' bad range for ' + r.id);
+        }
+      }
+      // ссылки сундуков на редкости предметов
+      for (const c of (((b.chests || {}).types) || [])) {
+        if (c.item_drop_rarity && !rarIds.has(c.item_drop_rarity)) {
+          errors.push('chest ' + c.id + ' unknown item_drop_rarity=' + c.item_drop_rarity);
         }
       }
       // ссылки клеток на шаблоны питомцев и редкости

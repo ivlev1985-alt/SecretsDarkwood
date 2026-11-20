@@ -35,6 +35,7 @@ import { SettingsMenu } from '../ui/SettingsMenu.js';
 import { UpgradeMenu } from '../ui/UpgradeMenu.js';
 import { ShopMenu, DailyBonusPopup, StatsPopup, LeadersPopup } from '../ui/ShopMenu.js';
 import { PetSwapPopup } from '../ui/PetSwapPopup.js';
+import { ItemRewardPopup } from '../ui/ItemRewardPopup.js';
 import { fmtTime, pileOffset } from '../utils/math.js';
 import { healEase, healFillDuration } from '../utils/healAnimation.js';
 
@@ -126,6 +127,8 @@ export class Game {
     // Клетка с питомцем (тестовая — в начале забега, см. balance_config.cages).
     this.uiPetSwap = null;
     this.petSwapPopup = new PetSwapPopup();
+    this.uiItemReward = null;
+    this.itemRewardPopup = new ItemRewardPopup();
     // Аптечка: иконка летит к шкале HP, затем шкала плавно заполняется.
     this.hpDisplay = 0;
     this.potionFlyers = [];
@@ -444,6 +447,12 @@ export class Game {
       else if (r === 'swap') this.doPetSwap();
       return;
     }
+    if (this.uiItemReward) {
+      const r = this.itemRewardPopup.click(this, x, y);
+      if (r === 'equip') this.equipFoundItem();
+      else if (r === 'sell') this.sellFoundItem();
+      return;
+    }
     if (this.uiInventory) {
       const r = this.hud.invCloseRect(W);
       if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) this.uiInventory = false;
@@ -664,8 +673,9 @@ export class Game {
   // announce=false — следующий выбор из пачки: без полного вихря и звука.
   _openNextPendingModal(announce = true) {
     if (this.states.is('upgrade')) return;
-    // Попап замены питомца показываем первым; выбор наград откроется после него.
-    if (this.uiPetSwap) return;
+    // Попапы замены питомца/найденного предмета показываем первыми;
+    // выбор наград откроется после них.
+    if (this.uiPetSwap || this.uiItemReward) return;
     if (this.pendingLevels > 0) {
       this.choices = this.upgrades.buildChoices(this.skills, this.player, this.config.balance_config.progression.upgrade_options_count || 3, Math.random, this._petCtx());
       if (this.choices.length) {
@@ -808,6 +818,7 @@ export class Game {
     this.healAnim = null;
     this.fleeingPets = [];
     this.uiPetSwap = null;
+    this.uiItemReward = null;
     // --- сброс прогресса забега: заклинания не переносятся между забегами ---
     // Оставляем только дефолтные (unlocked_by_default). Заклинания, полученные
     // в предыдущем забеге (сундуки, апгрейды), должны сбрасываться при "Заново".
@@ -1219,6 +1230,8 @@ export class Game {
       this.loot.applySprite(p);
       this.pickups.push(p);
     }
+    // Редкий предмет из сундука: окно сравнения откроется раньше levelup-карточек.
+    if (reward.item && reward.itemRarity) this._showFoundItem(reward.itemRarity);
     // Заклинания из сундука — не выдаём автоматически: игрок выбирает
     // одну из 3 карточек (окно откроется в конце кадра). Уровни — сразу,
     // их апгрейды выберутся в следующих окнах.
@@ -1232,6 +1245,108 @@ export class Game {
     if (this.fx) this.fx.play(this.config.balance_config.chests.open_effect_id || 'chest_burst', c.x, c.y);
     try { this.audio.playSfx(this.config.balance_config.chests.sfx_open); } catch (e) {}
     if (this.config.game_config.save.save_on_important_events) this.save.save();
+  }
+
+  // Случайный не-особый шаблон предмета с заданной редкостью.
+  _showFoundItem(rarityId) {
+    if (!this.shop) return;
+    const pool = (this.shop.cfg.templates || []).filter((tpl) => !tpl.special);
+    if (!pool.length) return;
+    const tpl = pool[Math.floor(Math.random() * pool.length)];
+    const offer = this.shop.rollOffer(tpl, Math.random, rarityId);
+    this.uiItemReward = {
+      old: this.save.data.gear[offer.slot] || null,
+      new: offer
+    };
+    this._modalTs = performance.now();
+  }
+
+  // Надеть найденный предмет. Старый предмет в слоте автоматически продаётся
+  // за ту же цену, что и в инвентаре, а статы применяются сразу (без рестарта).
+  equipFoundItem() {
+    const d = this.uiItemReward;
+    if (!d || !d.new || !this.player) return;
+    const offer = d.new;
+    const old = this.save.data.gear[offer.slot] || null;
+    const sellOld = old ? this.shop.sellPrice(old) : 0;
+    if (sellOld > 0) this.player.coins += sellOld;
+    this._applyGearChange(old, offer);
+    this.save.data.gear[offer.slot] = JSON.parse(JSON.stringify(offer));
+    if (offer.slot === 'staff') this._equipStaffItem(offer);
+    else if (offer.slot === 'pet') this._equipPetItem(offer);
+    this.save.save();
+    this.uiItemReward = null;
+    this._openNextPendingModal(false);
+  }
+
+  // Продать найденный предмет, не меняя текущее снаряжение.
+  sellFoundItem() {
+    const d = this.uiItemReward;
+    if (!d || !d.new || !this.player) return;
+    const price = this.shop.sellPrice(d.new);
+    if (price > 0) this.player.coins += price;
+    this.uiItemReward = null;
+    this._openNextPendingModal(false);
+  }
+
+  // Разница характеристик старого и нового предмета -> к текущим статам игрока.
+  // Пассивки уже вложены в player, поэтому применяем только дельту снаряжения.
+  _applyGearChange(oldItem, newItem) {
+    if (!this.shop || !this.player || !newItem) return;
+    const slot = newItem.slot;
+    const oldMods = this.shop.gearMods(oldItem ? { [slot]: oldItem } : {});
+    const newMods = this.shop.gearMods({ [slot]: newItem });
+    const ratio = (n, o) => (o > 0 ? n / o : 1);
+    const p = this.player;
+    const hpDelta = (newMods.hpAdd || 0) - (oldMods.hpAdd || 0);
+    if (hpDelta) {
+      p.maxHp = Math.max(1, p.maxHp + hpDelta);
+      if (hpDelta > 0) p.hp = Math.min(p.maxHp, p.hp + hpDelta);
+      else p.hp = Math.min(p.hp, p.maxHp);
+    }
+    p.speed *= ratio(newMods.speedMul, oldMods.speedMul);
+    p.damageMul *= ratio(newMods.dmgMul, oldMods.dmgMul);
+    p.attackSpeedMul *= ratio(newMods.atkMul, oldMods.atkMul);
+    p.pickupMul *= ratio(newMods.pickupMul, oldMods.pickupMul);
+    p.critChance = Math.max(0, Math.min(1,
+      p.critChance + ((newMods.critAdd || 0) - (oldMods.critAdd || 0))));
+    p.regen += (newMods.regenAdd || 0) - (oldMods.regenAdd || 0);
+    p.xpMul *= ratio(newMods.xpMul, oldMods.xpMul);
+  }
+
+  _equipStaffItem(item) {
+    if (!item.spell || !this.skills) return;
+    if (!this.save.data.unlockedSpells.includes(item.spell)) {
+      this.save.data.unlockedSpells.push(item.spell);
+    }
+    const st = this.skills.weapons.get(item.spell);
+    if (st) {
+      st.cfg.unlocked = true;
+      st.active = true;
+      st.level = Math.max(st.level || 1,
+        Math.min(item.spell_level || 1, st.cfg.max_level || 5));
+      st.cd = 0;
+    }
+  }
+
+  _equipPetItem(item) {
+    if (!item || !this.player) return;
+    const pcfg = this.shop.cfg.pet || {};
+    const radius = (item.stats && item.stats[0] && item.stats[0].value) || 200;
+    this.pet = new Pet(this.player.x, this.player.y - 40, radius,
+      pcfg.speed || 260, pcfg.magnet_radius || 60, {
+        fetchPotions: !!item.fetch_potions,
+        fetchCoins: item.fetch_coins !== false,
+        fetchXp: item.fetch_xp !== false,
+        carryLimit: item.carry_limit || 3
+      });
+    this.pet.tpl = item.tpl;
+    const tpl = this.shop.tplById.get(item.tpl);
+    if (tpl && tpl.sprite) {
+      this.pet.sprite = tpl.sprite;
+      this.pet.sprite_frames = tpl.sprite_frames;
+    }
+    this.petLevels = {};
   }
 
   // Сколько HP восстанавливает одна аптечка (значение из balance.loot).
@@ -1410,8 +1525,9 @@ export class Game {
   async _die() {
     if (this._dying) return; // защита от повторного входа (мир продолжает тикать до смены состояния)
     this._dying = true;
-    // не оставляем модалку клетки/аптечку поверх экрана смерти
+    // не оставляем модалку клетки/предмета/аптечку поверх экрана смерти
     this.uiPetSwap = null;
+    this.uiItemReward = null;
     this.potionFlyers.length = 0;
     this.healQueue.length = 0;
     this.healAnim = null;
@@ -1465,7 +1581,7 @@ export class Game {
   _isModal() {
     const st = this.states.get();
     return st === 'upgrade' || st === 'paused' || st === 'gameover' || st === 'ads'
-      || !!this.uiPetSwap || !!this.uiInventory || !!this.uiSettings || !!this.uiShop
+      || !!this.uiPetSwap || !!this.uiItemReward || !!this.uiInventory || !!this.uiSettings || !!this.uiShop
       || !!this.uiBonus || !!this.uiStats || !!this.uiLeaders;
   }
 
@@ -1477,7 +1593,8 @@ export class Game {
 
   update(dt) {
     // Пауза мира с живой анимацией цифр: levelup, инвентарь, модалка питомца
-    if (this.states.is('upgrade') || (this.uiInventory && this.states.is('playing')) || this.uiPetSwap) {
+    if (this.states.is('upgrade') || (this.uiInventory && this.states.is('playing'))
+      || this.uiPetSwap || this.uiItemReward) {
       this.combat.updateTexts(dt);
       // аптечка/шкала HP продолжают анимацию и во время модалки
       this._updateHealthUI(dt);
@@ -1967,6 +2084,7 @@ export class Game {
       }
       if (st === 'upgrade') this.upgradeMenu.draw(ctx, this, W, H);
       if (this.uiPetSwap) this.petSwapPopup.draw(ctx, this, W, H);
+      if (this.uiItemReward) this.itemRewardPopup.draw(ctx, this, W, H);
       if (st === 'paused') this.pauseMenu.draw(ctx, this, W, H);
       if (st === 'gameover') this.gameover.draw(ctx, this, W, H);
       if (this.uiInventory && (st === 'playing' || st === 'paused')) this.hud.drawInventory(ctx, this, W, H);

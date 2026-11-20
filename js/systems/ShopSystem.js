@@ -11,14 +11,16 @@ export class ShopSystem {
   get shop() { return this.cfg.shop || {}; }
 
   pickRarity(rand = Math.random) {
-    const rs = this.cfg.rarities;
+    // drop_only-редкости (проклятые) в магазине не участвуют.
+    const rs = this.cfg.rarities.filter((r) => !r.drop_only && (r.weight || 0) > 0);
     const total = rs.reduce((s, r) => s + (r.weight || 0), 0);
+    if (total <= 0) return this.cfg.rarities[0];
     let x = rand() * total;
     for (const r of rs) {
       x -= r.weight || 0;
       if (x <= 0) return r;
     }
-    return rs[0];
+    return rs[rs.length - 1];
   }
 
   rollStatValue(statId, rarityId, rand = Math.random) {

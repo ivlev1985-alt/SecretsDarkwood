@@ -774,10 +774,12 @@
         "reward_type": "mixed",
         "coins_min": 1000,
         "coins_max": 1000,
-        "health_potions": 3,
-        "spell_drop_chance": 1,
-        "spell_count": 2,
-        "level_up_bonus": 2
+        "health_potions": 0,
+        "spell_drop_chance": 0,
+        "spell_count": 0,
+        "level_up_bonus": 2,
+        "item_drop_chance": 0.1,
+        "item_drop_rarity": "cursed"
       }
     ]
   },

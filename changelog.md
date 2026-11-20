@@ -273,3 +273,11 @@
 - Все новые константы вынесены в `skills_config.weapons[tornado].area_visual`: `height_wobble`, `width_wobble`, `morph_speed`, `profile_power`, `ring_count`, `ring_segments`, `ring_spacing_power`, `ring_width_px`, `ring_glow_width_px`, `ring_alpha`, `ring_glow_alpha`, `ring_highlight_alpha`, `ring_wobble`, `ring_tilt*`, `ring_vertical_squash`, `ring_offset_px`, `top_ring_boost`, `ring_color_*`, `lean_*`, `move_lean_px`, `ribbons`, `ribbon_*`. ConfigLoader валидирует новые числовые и alpha-параметры.
 - Молнии сделаны реже и мягче (`bolts`, `chance`, `interval_ms`, `alpha`), чтобы не перебивать кольца; режим спрайта и `lightning.with_sprite` сохранены без изменений.
 
+## [Пятая редкость: Проклятые предметы]
+- Добавлена пятая редкость `cursed` («Проклятые / Cursed») с красным цветом имени (`items_config.rarities[].color = #FF2E2E`). Характеристики, цена, уровень заклинания и радиус питомца на 17.5% выше королевского тира — в пределах запрошенных 15–20%.
+- Проклятые предметы не продаются в магазине: у редкости `drop_only: true` и `weight: 0`, поэтому `ShopSystem.pickRarity` их не выбирает. Их можно получить только из самого редкого сундука.
+- Названия всех пяти редкостей обновлены во всех языках: Потертые (Worn), Зачарованные (Enchanted), Тайные (Arcane), Королевские (Royal), Проклятые (Cursed). Внутренние id (`common`/`rare`/`epic`/`legendary`/`cursed`) сохранены для совместимости сейвов.
+- Легендарный сундук теперь даёт монеты, ровно 2 повышения уровня и с шансом 10% (`item_drop_chance`) проклятый предмет (`item_drop_rarity: "cursed"`). Аптечки и награды-заклинания из него убраны.
+- При выпадении предмета открывается окно сравнения: текущий предмет в слоте и найденный. «Надеть» заменяет предмет (старый автоматически продаётся за 50%), «Продать» продаёт новый. Характеристики применяются к игроку сразу, без рестарта забега; питомец и посох обновляются на месте, levelup-карточки открываются после закрытия окна.
+- ConfigLoader проверяет `drop_only`-редкости, наличие `name_key`/`color`, диапазоны характеристик проклятого тира и ссылку `item_drop_rarity` у сундуков.
+

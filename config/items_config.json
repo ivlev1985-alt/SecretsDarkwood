@@ -12,11 +12,11 @@
   // ============================================================
 
   // ------------------------------------------------------------
-  // ТИРЫ РЕДКОСТИ (4 тира)
+  // ТИРЫ РЕДКОСТИ (5 тиров)
   // ------------------------------------------------------------
   "rarities": [
     {
-      "id": "common",                          // обычный
+      "id": "common",                          // Потертые (worn)
       "name_key": "rarity_common",
       "color": "#B0B0B0",                       // цвет наименования предмета
       "stats_count": 1,                        // сколько характеристик у предмета
@@ -26,7 +26,7 @@
       "pet_mult": 1.0                          // множитель радиуса питомца
     },
     {
-      "id": "rare",                            // редкий
+      "id": "rare",                            // Зачарованные (enchanted)
       "name_key": "rarity_rare",
       "color": "#4DA6FF",
       "stats_count": 2,
@@ -36,7 +36,7 @@
       "pet_mult": 1.25
     },
     {
-      "id": "epic",                            // эпический
+      "id": "epic",                            // Тайные (arcane)
       "name_key": "rarity_epic",
       "color": "#B400FF",
       "stats_count": 3,
@@ -46,7 +46,7 @@
       "pet_mult": 1.5
     },
     {
-      "id": "legendary",                       // легендарный
+      "id": "legendary",                       // Королевский (royal)
       "name_key": "rarity_legendary",
       "color": "#FF9500",
       "stats_count": 4,
@@ -54,6 +54,17 @@
       "price_base": 2000,
       "spell_level": 4,
       "pet_mult": 2.0
+    },
+    {
+      "id": "cursed",                          // Проклятый (cursed) — только дроп из сундука
+      "name_key": "rarity_cursed",
+      "color": "#FF2E2E",                      // красное имя
+      "stats_count": 4,
+      "weight": 0,                             // в магазине не продаётся
+      "drop_only": true,
+      "price_base": 2350,                      // +17.5% к королевскому
+      "spell_level": 5,
+      "pet_mult": 2.35
     }
   ],
 
@@ -62,14 +73,14 @@
   // unit: "percent" (+N%), "flat" (+N), "pp" (+N п.п. — процентные пункты, для крита).
   // ------------------------------------------------------------
   "stats": {
-    "damage":       { "name_key": "passive_damage",        "unit": "percent", "ranges": { "common": [3, 6],     "rare": [6, 10],    "epic": [10, 16],  "legendary": [16, 25] } },
-    "max_hp":       { "name_key": "passive_max_hp",        "unit": "flat",    "ranges": { "common": [10, 20],   "rare": [20, 40],   "epic": [40, 70],   "legendary": [70, 120] } },
-    "speed":        { "name_key": "passive_speed",         "unit": "percent", "ranges": { "common": [3, 5],     "rare": [5, 8],     "epic": [8, 12],    "legendary": [12, 18] } },
-    "attack_speed": { "name_key": "passive_attack_speed",  "unit": "percent", "ranges": { "common": [2, 4],     "rare": [4, 7],     "epic": [7, 11],     "legendary": [11, 16] } },
-    "pickup":       { "name_key": "passive_pickup_radius", "unit": "percent", "ranges": { "common": [5, 10],    "rare": [10, 18],   "epic": [18, 28],   "legendary": [28, 40] } },
-    "crit":         { "name_key": "passive_crit_chance",   "unit": "pp",      "ranges": { "common": [1, 2],     "rare": [2, 4],     "epic": [4, 6],      "legendary": [6, 10] } },
-    "regen":        { "name_key": "passive_hp_regen",      "unit": "flat",    "ranges": { "common": [0.3, 0.6], "rare": [0.6, 1.2], "epic": [1.2, 2],   "legendary": [2, 3.5] } },
-    "xp":           { "name_key": "stat_xp",               "unit": "percent", "ranges": { "common": [3, 6],     "rare": [6, 10],    "epic": [10, 16],   "legendary": [16, 25] } },
+    "damage":       { "name_key": "passive_damage",        "unit": "percent", "ranges": { "common": [3, 6],     "rare": [6, 10],    "epic": [10, 16],  "legendary": [16, 25],  "cursed": [19, 29] } },
+    "max_hp":       { "name_key": "passive_max_hp",        "unit": "flat",    "ranges": { "common": [10, 20],   "rare": [20, 40],   "epic": [40, 70],   "legendary": [70, 120], "cursed": [82, 141] } },
+    "speed":        { "name_key": "passive_speed",         "unit": "percent", "ranges": { "common": [3, 5],     "rare": [5, 8],     "epic": [8, 12],    "legendary": [12, 18],  "cursed": [14, 21] } },
+    "attack_speed": { "name_key": "passive_attack_speed",  "unit": "percent", "ranges": { "common": [2, 4],     "rare": [4, 7],     "epic": [7, 11],     "legendary": [11, 16], "cursed": [13, 19] } },
+    "pickup":       { "name_key": "passive_pickup_radius", "unit": "percent", "ranges": { "common": [5, 10],    "rare": [10, 18],   "epic": [18, 28],   "legendary": [28, 40],  "cursed": [33, 47] } },
+    "crit":         { "name_key": "passive_crit_chance",   "unit": "pp",      "ranges": { "common": [1, 2],     "rare": [2, 4],     "epic": [4, 6],      "legendary": [6, 10],  "cursed": [7, 12] } },
+    "regen":        { "name_key": "passive_hp_regen",      "unit": "flat",    "ranges": { "common": [0.3, 0.6], "rare": [0.6, 1.2], "epic": [1.2, 2],   "legendary": [2, 3.5], "cursed": [2.4, 4.1] } },
+    "xp":           { "name_key": "stat_xp",               "unit": "percent", "ranges": { "common": [3, 6],     "rare": [6, 10],    "epic": [10, 16],   "legendary": [16, 25],  "cursed": [19, 29] } },
     "radius":       { "name_key": "stat_radius",           "unit": "flat",    "ranges": null }  // только питомцы: base_radius шаблона * pet_mult тира
   },
 
