@@ -11,7 +11,8 @@ export class SettingsMenu {
       sfx: { x: bx, y: 300, w: bw, h: 20 },
       lang: { x: bx, y: 350, w: bw, h: 40 },
       joy: { x: bx, y: 400, w: bw, h: 40 },
-      reset: { x: bx, y: 450, w: bw, h: 40 },
+      fps: { x: bx, y: 450, w: bw, h: 40 },
+      reset: { x: bx, y: 500, w: bw, h: 40 },
       back: { x: bx, y: 560, w: bw, h: 44 }
     };
     return this.R;
@@ -28,6 +29,8 @@ export class SettingsMenu {
     drawButton(ctx, R.lang, t('settings_lang') + ': ' + game.settings.lang.toUpperCase());
     const joyLabel = game.settings.joystick === 'left' ? t('settings_joystick_left') : t('settings_joystick_right');
     drawButton(ctx, R.joy, t('settings_joystick') + ': ' + joyLabel);
+    const fpsLabel = game.settings.showFps ? t('settings_on') : t('settings_off');
+    drawButton(ctx, R.fps, t('settings_fps') + ': ' + fpsLabel);
     drawButton(ctx, R.reset, this.confirmReset ? t('settings_reset_confirm') : '🗑 ' + t('settings_reset'));
     drawButton(ctx, R.back, t('back'), { primary: true });
   }
@@ -46,6 +49,7 @@ export class SettingsMenu {
     const R = this.R;
     if (hit(x, y, R.lang)) { game.cycleLang(); return true; }
     if (hit(x, y, R.joy)) { game.toggleJoystick(); return true; }
+    if (hit(x, y, R.fps)) { game.toggleFps(); return true; }
     if (hit(x, y, R.reset)) {
       if (!this.confirmReset) this.confirmReset = true;
       else { this.confirmReset = false; game.resetProgress(); }

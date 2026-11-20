@@ -90,7 +90,7 @@ export class Game {
     this.bossWarn = null;
     this.lang = 'ru';
     // Этап 4: UI
-    this.settings = { music: 0.5, sfx: 0.8, lang: 'ru', joystick: 'left' };
+    this.settings = { music: 0.5, sfx: 0.8, lang: 'ru', joystick: 'left', showFps: false };
     this.menu = new MainMenu();
     this.hud = new HUD();
     this.pauseMenu = new PauseMenu();
@@ -150,8 +150,13 @@ export class Game {
   loadSettings() {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) Object.assign(this.settings, JSON.parse(raw));
+      if (raw) {
+        const data = JSON.parse(raw);
+        Object.assign(this.settings, data);
+        return data;
+      }
     } catch (e) {}
+    return null;
   }
   saveSettings() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch (e) {}
@@ -168,6 +173,10 @@ export class Game {
   toggleJoystick() {
     this.settings.joystick = this.settings.joystick === 'left' ? 'right' : 'left';
     if (this.input) this.input.setJoystickSide(this.settings.joystick);
+    this.saveSettings();
+  }
+  toggleFps() {
+    this.settings.showFps = !this.settings.showFps;
     this.saveSettings();
   }
   closeSettings() {
@@ -315,7 +324,14 @@ export class Game {
     this.bestTime = this.save.data.stats.bestTime || 0;
     this._autosaveT = g.save.autosave_interval_sec || 30;
     // язык: настройки -> автоопределение
-    this.loadSettings();
+    const savedSettings = this.loadSettings();
+    // Миграция старых сохранённых настроек: счётчик FPS появился позже.
+    // Важно проверить именно наличие ключа в сейве: в конструкторе уже стоит
+    // showFps:false, поэтому typeof-проверка не отличила бы старый сейв от нового.
+    const hasSavedFps = !!(savedSettings && typeof savedSettings.showFps === 'boolean');
+    if (!hasSavedFps) {
+      this.settings.showFps = g.ui.show_fps === true;
+    }
     if (!localStorage.getItem(SETTINGS_KEY)) {
       try {
         const nav = (window.ysdk?.environment?.i18n?.lang) || (navigator.language || 'ru').slice(0, 2);
@@ -324,6 +340,7 @@ export class Game {
       this.settings.joystick = g.controls.joystick_position_default || 'left';
       this.settings.music = g.audio.music_volume_default;
       this.settings.sfx = g.audio.sfx_volume_default;
+      this.settings.showFps = g.ui.show_fps === true;
     }
     this.input = new InputManager(this.canvas, { joystickSide: this.settings.joystick });
     this.audio.applyVolumes(this.settings.music, this.settings.sfx, g.audio.pause_on_blur);
@@ -1972,10 +1989,6 @@ export class Game {
     }
 
     if (st !== 'menu') this.input.drawJoystick(ctx);
-    if (g.ui.show_fps) {
-      ctx.fillStyle = '#0f0'; ctx.font = '12px monospace'; ctx.textAlign = 'left';
-      ctx.fillText(this.fps + ' fps', 8, H - 8);
-    }
     ctx.restore();
   }
 

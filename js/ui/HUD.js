@@ -17,7 +17,9 @@ export class HUD {
   hpBarRect(game, W) {
     const g = game.config.game_config;
     const flip = g.controls.hud_flip_with_joystick && game.input.getJoystickSide() === 'left';
-    return { x: flip ? W - 196 : 12, y: 8, w: 184, h: 20 };
+    // Оставляем место в правом верхнем углу панели под счётчик FPS.
+    const fpsPad = game.settings && game.settings.showFps ? 58 : 0;
+    return { x: flip ? W - 196 - fpsPad : 12, y: 8, w: 184, h: 20 };
   }
   // Иконки аптечек, летящие из мира к шкале HP (экранные координаты).
   drawHealthFlyers(ctx, game, W, H) {
@@ -49,11 +51,13 @@ export class HUD {
     const g = game.config.game_config;
     const flip = g.controls.hud_flip_with_joystick && game.input.getJoystickSide() === 'left';
     const p = game.player;
+    const fpsOn = !!(game.settings && game.settings.showFps);
+    const fpsPad = fpsOn ? 58 : 0;
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, 0, W, 78);
     // HP слева / уровень справа (или наоборот при flip)
     const bar = this.hpBarRect(game, W);
-    const lvX = flip ? 12 : W - 84;
+    const lvX = flip ? 12 : W - 84 - fpsPad;
     // HP-бар с числом внутри. Ширина берётся из hpDisplay — она плавно
     // догоняет реальное HP после прилёта иконки аптечки (см. Game._updateHealthUI).
     const shownHp = (typeof game.hpDisplay === 'number') ? game.hpDisplay : p.hp;
@@ -80,6 +84,16 @@ export class HUD {
     ctx.fillText('⏱ ' + game.fmtTime(game.time), flip ? W - 120 : 12, 62);
     ctx.textAlign = 'right';
     ctx.fillText('💀 ' + game.combat.kills + '   🪙 ' + p.coins, flip ? 180 : W - 12, 62);
+    // Счётчик FPS — правый верхний угол верхней панели.
+    if (fpsOn) {
+      const label = game.fps + ' FPS';
+      ctx.font = 'bold 11px monospace';
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(W - 16 - tw, 5, tw + 12, 16);
+      ctx.fillStyle = '#0f0';
+      ctx.fillText(label, W - 10, 18);
+    }
     ctx.textAlign = 'center';
   }
   // Короткий код оружия для иконки-заглушки: magic_bolt -> MB.

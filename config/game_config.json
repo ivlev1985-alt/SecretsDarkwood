@@ -203,7 +203,7 @@
     "hud_flip_with_joystick": true
   },
   "ui": {
-    "show_fps": false,
+    "show_fps": true,
     "show_timer": true,
     "show_level": true,
     "show_kill_counter": true,
