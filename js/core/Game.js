@@ -1269,12 +1269,16 @@ export class Game {
     const offer = d.new;
     const old = this.save.data.gear[offer.slot] || null;
     const sellOld = old ? this.shop.sellPrice(old) : 0;
-    if (sellOld > 0) this.player.coins += sellOld;
+    if (sellOld > 0) {
+      this.player.coins += sellOld;
+      if (this.combat) this.combat.pushText(this.player.x, this.player.y - 30, '+' + sellOld, '#ffd34d');
+    }
     this._applyGearChange(old, offer);
     this.save.data.gear[offer.slot] = JSON.parse(JSON.stringify(offer));
     if (offer.slot === 'staff') this._equipStaffItem(offer);
     else if (offer.slot === 'pet') this._equipPetItem(offer);
     this.save.save();
+    try { this.audio.playSfx(this.shop.shop.sfx_success); } catch (e) {}
     this.uiItemReward = null;
     this._openNextPendingModal(false);
   }
@@ -1284,8 +1288,12 @@ export class Game {
     const d = this.uiItemReward;
     if (!d || !d.new || !this.player) return;
     const price = this.shop.sellPrice(d.new);
-    if (price > 0) this.player.coins += price;
+    if (price > 0) {
+      this.player.coins += price;
+      if (this.combat) this.combat.pushText(this.player.x, this.player.y - 30, '+' + price, '#ffd34d');
+    }
     this.uiItemReward = null;
+    try { this.audio.playSfx(this.shop.shop.sfx_success); } catch (e) {}
     this._openNextPendingModal(false);
   }
 
