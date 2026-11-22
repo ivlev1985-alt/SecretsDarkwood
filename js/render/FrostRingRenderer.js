@@ -108,22 +108,25 @@ export class FrostRingRenderer {
   }
 
   // === ЖИВОЕ ВРАЩЕНИЕ ===
-  // Скорость пульсирует, направление иногда меняется.
+  // Скорость плавно пульсирует (две медленные sin-гармоники), направление
+  // меняется мягко: скорость проходит через ноль и разворачивается, а не
+  // щёлкает. Период смены направления — ~20 сек (растянут по времени).
   _updateOrbSpin(st, t) {
     if (!st.orbSprites || !st.orbSpin) return;
-    const slot = Math.floor(t * 3); // «слот» — базовое время для slot-шума
     for (let i = 0; i < st.orbSpin.length; i++) {
       const sp = st.orbSprites[i];
       if (!sp) continue;
       const baseSpeed = sp.spinSpeed || 0.5;
-      // Пульсация скорости: ±40% от базовой, меняется дискретно по слотам.
-      const amp = 0.3 + hash(i * 11.3 + slot * 0.7) * 0.3;
-      const pulse = 1 + Math.sin(t * 4 + i * 2.7) * amp;
-      // Смена направления: раз в ~3–6 секунд, зависит от seed осколка.
-      const dirFlip = hash(i * 31.7 + (st.cfg.seed || 0)) > 0.6
-        ? (Math.sin(t * 0.8 + i * 4.1) > 0.3 ? -1 : 1)
-        : 1;
-      const effectiveSpeed = baseSpeed * pulse * dirFlip;
+      // Плавная пульсация скорости: ±35%, амплитуда закреплена за осколком.
+      const amp = 0.2 + hash(i * 11.3) * 0.15;
+      const pulse = 1
+        + Math.sin(t * 1.6 + i * 2.7) * amp
+        + Math.sin(t * 0.7 + i * 1.3 + 0.9) * amp * 0.5;
+      // Смена направления: у части осколков множитель — медленная синусоида
+      // (период ~21 сек), скорость плавно гаснет до нуля и разворачивается.
+      const flips = hash(i * 31.7 + (st.cfg.seed || 0)) > 0.6;
+      const dirK = flips ? Math.sin(t * 0.3 + i * 4.1) : Math.sign(baseSpeed || 1);
+      const effectiveSpeed = baseSpeed * pulse * dirK;
       st.orbSpin[i] += effectiveSpeed * TAU * 0.016; // ~60fps шаг
     }
   }
@@ -137,7 +140,10 @@ export class FrostRingRenderer {
     const py = st.player ? st.player.y : 0;
     const nearR = st.cfg.orbit_near_radius ?? 70;
     const farR = st.cfg.orbit_far_radius ?? 120;
-    const breatheAmp = Math.min(8, (farR - nearR) * 0.15); // не более 15% разницы
+    // 30% от расстояния между орбитами. Суммарный размах двух гармоник
+    // = 1.5×амплитуды с каждой стороны: орбиты сближаются на 0.9 от зазора,
+    // но никогда не пересекаются (1.5*0.3*2 = 0.9 < 1).
+    const breatheAmp = (farR - nearR) * 0.30;
 
     for (let i = 0; i < st.orbs.length; i++) {
       const o = st.orbs[i];
@@ -301,13 +307,15 @@ export class FrostRingRenderer {
         const k = i / steps;
         const a = pts[i - 1], b = pts[i];
         const flick = 0.6 + hash(i * 3.3 + slot * 1.7 + pass * 50) * 0.4;
-        const fade = (1 - k * 0.85) * flick;
+        // У основания (k≈0 — кристалл) — почти полная непрозрачность,
+        // к кончику (k≈1) хвост растворяется.
+        const fade = (1 - 0.55 * k) * flick;
         if (wide) {
-          ctx.globalAlpha = 0.08 * fade;
+          ctx.globalAlpha = 0.12 * fade;
           ctx.strokeStyle = cfg.trail_glow_color || '#3aa0ff';
           ctx.lineWidth = wBase * (0.7 + 0.9 * (1 - k)) * pulse;
         } else {
-          ctx.globalAlpha = 0.28 * fade;
+          ctx.globalAlpha = 0.45 * fade;
           ctx.strokeStyle = cfg.trail_color || '#cfeeff';
           ctx.lineWidth = wBase * (0.18 + 0.35 * (1 - k)) * pulse;
         }
@@ -393,8 +401,9 @@ export class FrostRingRenderer {
 
   _shardRadius(o) {
     const cfg = this.cfg;
-    const base = (o.r || 10) * (cfg.shard_scale ?? 1.6);
-    return Math.max(6, base);
+    // Базовый размер ~12px (как fireball), рандомизация ±25% по seed осколка.
+    const base = (o.r || 10) * (cfg.shard_scale ?? 1.0);
+    return Math.max(5, base);
   }
 
   reset() { this._vapor.clear(); this._shapes.clear(); }
