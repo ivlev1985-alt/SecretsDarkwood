@@ -156,6 +156,11 @@
       "arrow_fletching": "#c8a832",
       "dust": "#b6ab96",
       "dust_alpha": 0.22
+    },
+    "fireball": {
+      "enabled": true,
+      "mode": "missing",
+      "trail_length": 14
     }
   },
   "camera": {

@@ -69,6 +69,7 @@ export class Projectile extends Entity {
       this.nova.phase = 'spiral';
     }
     this.trail = [];
+    this._fbTrail = []; // процедурный огненный хвост (FireballRenderer)
     this.hitFlash = 0;
     this.exploding = false;
     if (o.frames && o.animName) this.makeAnim(o.frames, o.animName);

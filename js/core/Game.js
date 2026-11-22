@@ -22,6 +22,7 @@ import { Pet } from '../entities/Pet.js';
 import { HeroMageRenderer } from '../render/HeroMageRenderer.js';
 import { SkeletonArcherRenderer } from '../render/SkeletonArcherRenderer.js';
 import { TornadoRenderer } from '../render/TornadoRenderer.js';
+import { FireballRenderer } from '../render/FireballRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
@@ -803,6 +804,9 @@ export class Game {
     // Процедурный скелет-лучник: конфиг в visuals.skeleton_archer
     const skelVisual = (g.visuals && g.visuals.skeleton_archer) || {};
     this.skeletonArcherRenderer = new SkeletonArcherRenderer(skelVisual);
+    // Процедурный файербол: конфиг в visuals.fireball
+    const fbVisual = (g.visuals && g.visuals.fireball) || {};
+    this.fireballRenderer = new FireballRenderer(fbVisual);
     this._deathPending = false;
     this._deathTimer = 0;
     this.enemies = [];
@@ -2216,6 +2220,12 @@ export class Game {
   }
 
   _drawShot(ctx, p, color) {
+    // Процедурный файербол: спрайт fireball.png отсутствует (или mode
+    // 'always') — рисуем огненный шар с хвостом/дымом/искрами и взрыв.
+    if (p.weaponId === 'fireball' && this.fireballRenderer
+      && this.fireballRenderer.draw(ctx, p, this.time, this.assets)) {
+      return;
+    }
     // Тайная нова: за снарядом тянется слабый шлейф, подчёркивающий спираль
     // и гиперболическую дугу. Рисуется и при наличии спрайта, и без него.
     if (p.nova && !p.exploding && p.trail && p.trail.length > 1) {
