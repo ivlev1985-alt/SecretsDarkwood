@@ -1,25 +1,15 @@
 // Процедурный рендерер «Кольца холода» (frost_ring).
 //
-// Заменяет projectiles/frost_ring.png: вместо шара из спрайтшита вокруг мага
-// летают ледяные ОСКОЛКИ (2..6 — количество по уровням в skills_config.
-// orbit_levels). Каждый осколок — гранёный кристалл, который кружится вместе
-// с орбитой и дополнительно вращается вокруг собственной оси.
+// Заменяет projectiles/frost_ring.png: ледяные ОСКОЛКИ летают вокруг мага
+// на двух орбитах. Каждый осколок — уникально-сгенерированный кристалл
+// (разная форма, пропорции, грани), вращение — с пульсацией скорости
+// и случайными сменами направления, орбиты — с радиальным «дыханием»,
+// хвосты — извивающиеся, как у файрбола.
 //
-// Эффекты (всё рисовалось программно до появления арта):
-//   • ШЛЕЙФ — за осколком тянется дуга по его орбите: широкая холодная
-//     подложка + яркая сердцевина + отдельные искорки;
-//   • ЛЕДЯНОЙ ПАР — белые полупрозрачные клубы, которые отрываются от
-//     осколка, поднимаются вверх и растворяются (аналог дыма файрбола);
-//   • мягкое свечение, блик и иней на гранях кристалла.
-//
-// Режимы (game_config.visuals.frost_ring.mode) — как у fireball:
+// Режимы (game_config.visuals.frost_ring.mode):
 //   "missing" — рисовать процедурно, если спрайт не загрузился (по умолчанию);
 //   "always"  — всегда процедурный;
-//   "never"   — не использовать процедурный (тогда SkillSystem сам нарисует
-//               спрайт/заглушку).
-//
-// Вызывается из Game перед skills.drawOrbits(ctx); когда рендерер берёт орбы
-// на себя, SkillSystem их пропускает (skills.orbitsHandled = true).
+//   "never"   — не использовать процедурный.
 
 const TAU = Math.PI * 2;
 
@@ -29,19 +19,46 @@ function hash(n) {
   return x - Math.floor(x);
 }
 
+// Генерация формы кристалла: случайное количество вершин (5–8),
+// случайные радиусы для каждой вершины, чередование длинных/коротких граней.
+function genCrystalShape(seed, t) {
+  const verts = 5 + Math.floor(hash(seed) * 4); // 5..8
+  const shape = new Array(verts);
+  for (let i = 0; i < verts; i++) {
+    const ang = (i / verts) * TAU - Math.PI / 2;
+    // Радиус: базовый + шум по вершинам + лёгкая пульсация по времени.
+    const rNoise = hash(seed + i * 3.7) * 0.35;
+    const pulse = Math.sin(t * 2.5 + i * 1.9 + seed) * 0.04;
+    const r = 1 + rNoise + pulse;
+    shape[i] = { x: Math.cos(ang) * r, y: Math.sin(ang) * r };
+  }
+  return shape;
+}
+
+// Генерация «бликовой грани» — полигон внутри кристалла, имитирующий
+// отражение света на грани.
+function genHighlightShape(seed, verts) {
+  const hlVerts = 3 + Math.floor(hash(seed + 99) * 3); // 3..5
+  const shape = new Array(hlVerts);
+  for (let i = 0; i < hlVerts; i++) {
+    const ang = (i / hlVerts) * TAU + hash(seed + 77) * 0.5;
+    const r = 0.3 + hash(seed + i * 5.1) * 0.3;
+    shape[i] = { x: Math.cos(ang) * r, y: Math.sin(ang) * r };
+  }
+  return shape;
+}
+
 export class FrostRingRenderer {
   constructor(cfg = {}) {
     this.cfg = cfg || {};
-    // Пар — «живые» частицы: порождаются по времени, живут свою фазу.
-    // Ключ — индекс осколка (шары стабильны между кадрами).
     this._vapor = new Map();
+    // Кэш форм кристаллов: key = idx → { shape, highlight, seed }.
+    // Формы генерируются один раз и не меняются между кадрами.
+    this._shapes = new Map();
   }
 
   setConfig(cfg) { this.cfg = cfg || {}; }
 
-  // Главный метод: вызывается из Game.render для активных орбит.
-  // Возвращает true, если осколки нарисованы процедурно
-  // (Game тогда говорит SkillSystem не рисовать свои шары).
   draw(ctx, weapons, time, assets) {
     if (!ctx || !weapons) return false;
     const cfg = this.cfg;
@@ -51,9 +68,6 @@ export class FrostRingRenderer {
       if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
       if (!st.orbs || !st.orbs.length) continue;
       const c = st.cfg;
-      // mode 'always' — рисуем процедурно даже при наличии арта;
-      // mode 'missing' (по умолчанию) — только если спрайт не загрузился
-      // (файл переименован в *.png.off → AssetLoader помечает путь missing).
       if (cfg.mode !== 'always') {
         const hasArt = c.orb_sprite && assets && !assets.isMissing(c.orb_sprite)
           && assets.get(c.orb_sprite) && assets.get(c.orb_sprite).tagName === 'IMG';
@@ -67,44 +81,97 @@ export class FrostRingRenderer {
 
   _drawWeapon(ctx, st, time) {
     const t = time || 0;
-    const c = st.cfg;
-    const cx = c.orbit_center_x ?? st.orbs[0].playerX ?? 0;
-    // Центр кольца — позиция игрока (её передаёт Game через st.player).
-    const px = st.player ? st.player.x : cx;
+    const px = st.player ? st.player.x : 0;
     const py = st.player ? st.player.y : 0;
-    st.orbs.forEach((o, i) => {
-      this._drawTrail(ctx, o, t, i);
-    });
-    st.orbs.forEach((o, i) => {
-      this._drawVapor(ctx, o, t, i, px, py);
-    });
-    st.orbs.forEach((o, i) => {
-      this._drawShard(ctx, o, t, i);
-    });
+
+    // Обновляем «живое» вращение каждого осколка: пульсация скорости
+    // и случайные смены направления.
+    this._updateOrbSpin(st, t);
+
+    // Обновляем орбитальное положение с радиальным «дыханием».
+    this._updateOrbPositions(st, t);
+
+    // Генерируем формы кристаллов (один раз на осколок).
+    for (let i = 0; i < st.orbs.length; i++) {
+      if (!this._shapes.has(i)) {
+        this._shapes.set(i, {
+          shape: genCrystalShape(i * 17.3 + (st.cfg.seed || 0), t),
+          highlight: genHighlightShape(i * 17.3 + (st.cfg.seed || 0),
+            5 + Math.floor(hash(i * 17.3 + (st.cfg.seed || 0)) * 4))
+        });
+      }
+    }
+
+    st.orbs.forEach((o, i) => { this._drawTrail(ctx, o, t, i); });
+    st.orbs.forEach((o, i) => { this._drawVapor(ctx, o, t, i, px, py); });
+    st.orbs.forEach((o, i) => { this._drawShard(ctx, o, t, i); });
   }
 
-  // Геометрия осколка: радиус кристалла и параметры орбиты (для шлейфа-дуги).
-  _shardRadius(o) {
-    const cfg = this.cfg;
-    const base = (o.r || 10) * (cfg.shard_scale ?? 1.6);
-    return Math.max(6, base);
+  // === ЖИВОЕ ВРАЩЕНИЕ ===
+  // Скорость пульсирует, направление иногда меняется.
+  _updateOrbSpin(st, t) {
+    if (!st.orbSprites || !st.orbSpin) return;
+    const slot = Math.floor(t * 3); // «слот» — базовое время для slot-шума
+    for (let i = 0; i < st.orbSpin.length; i++) {
+      const sp = st.orbSprites[i];
+      if (!sp) continue;
+      const baseSpeed = sp.spinSpeed || 0.5;
+      // Пульсация скорости: ±40% от базовой, меняется дискретно по слотам.
+      const amp = 0.3 + hash(i * 11.3 + slot * 0.7) * 0.3;
+      const pulse = 1 + Math.sin(t * 4 + i * 2.7) * amp;
+      // Смена направления: раз в ~3–6 секунд, зависит от seed осколка.
+      const dirFlip = hash(i * 31.7 + (st.cfg.seed || 0)) > 0.6
+        ? (Math.sin(t * 0.8 + i * 4.1) > 0.3 ? -1 : 1)
+        : 1;
+      const effectiveSpeed = baseSpeed * pulse * dirFlip;
+      st.orbSpin[i] += effectiveSpeed * TAU * 0.016; // ~60fps шаг
+    }
   }
 
-  // === ЛЕДЯНОЙ ОСКОЛКОВ ===
-  // Кристалл: удлинённый шестиугольник с двумя скруглёнными «огранками».
-  // Вращение вокруг своей оси — st.orbSpin[i] (уже считает SkillSystem),
-  // плюс лёгкий «фасеточный» блеск граней.
+  // === ОРБИТАЛЬНОЕ ДЫХАНИЕ ===
+  // Радиус орбиты пульсирует с фазовым сдвигом, но ближняя и дальняя
+  // орбиты всегда разделены: амплитуда пульсации меньше половины расстояния
+  // между ними.
+  _updateOrbPositions(st, t) {
+    const px = st.player ? st.player.x : 0;
+    const py = st.player ? st.player.y : 0;
+    const nearR = st.cfg.orbit_near_radius ?? 70;
+    const farR = st.cfg.orbit_far_radius ?? 120;
+    const breatheAmp = Math.min(8, (farR - nearR) * 0.15); // не более 15% разницы
+
+    for (let i = 0; i < st.orbs.length; i++) {
+      const o = st.orbs[i];
+      const baseR = o.far ? farR : nearR;
+      // Радиальная пульсация: фаза зависит от индекса и времени.
+      const phase = o.angle + (o.far ? Math.PI : 0);
+      const rPulse = Math.sin(t * 1.8 + i * 2.3 + (o.far ? 3.1 : 0)) * breatheAmp;
+      const rPulse2 = Math.sin(t * 2.7 + i * 1.7 + (o.far ? 1.4 : 2.2)) * breatheAmp * 0.5;
+      const r = baseR + rPulse + rPulse2;
+      o.x = px + Math.cos(o.angle) * r;
+      o.y = py + Math.sin(o.angle) * r;
+      o.orbitR = r;
+      // Скорость для пара (нужна для расчёта направления).
+      const dt = 0.016;
+      const prevAngle = o.angle - (o.dir || 1) * TAU / (o.far ? (st.cfg.orbit_far_period_sec || 5) : (st.cfg.orbit_period_sec || 4));
+      o.vx = (px + Math.cos(o.angle) * r) - (px + Math.cos(prevAngle) * r);
+      o.vy = (py + Math.sin(o.angle) * r) - (py + Math.sin(prevAngle) * r);
+    }
+  }
+
+  // === ЛЕДЯНОЙ ОСКОЛОК ===
   _drawShard(ctx, o, t, idx) {
     const r = this._shardRadius(o);
     const spin = o.spin || 0;
     const col = this.cfg.color || o.color || '#9fe8ff';
     const core = this.cfg.core_color || '#eaffff';
     const deep = this.cfg.edge_color || '#2a7fff';
+    const shapeData = this._shapes.get(idx);
+    if (!shapeData) return;
 
     ctx.save();
     ctx.translate(o.x, o.y);
 
-    // Внешнее холодное свечение (пульсирует).
+    // Свечение.
     const glowR = r * (this.cfg.glow_scale ?? 2.6);
     const pulse = 1 + Math.sin(t * 6 + idx * 1.7) * 0.08;
     const glow = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, glowR * pulse);
@@ -118,69 +185,66 @@ export class FrostRingRenderer {
 
     ctx.rotate(spin);
 
-    // Контур кристалла: 6 точек (вытянут по Y — «осколок»).
-    const L = r * 1.35; // полуlength продольный
-    const Wd = r * 0.62; // полуширина
-    const pts = [
-      { x: 0, y: -L },            // остриё
-      { x: Wd, y: -L * 0.35 },
-      { x: Wd * 0.85, y: L * 0.45 },
-      { x: 0, y: L * 0.8 },       // тупое основание
-      { x: -Wd * 0.85, y: L * 0.45 },
-      { x: -Wd, y: -L * 0.35 }
-    ];
-    const path = () => {
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.closePath();
-    };
+    // Рисуем сгенерированную форму кристалла.
+    const s = shapeData.shape;
+    const hl = shapeData.highlight;
 
     // Тело — градиент льда.
-    const body = ctx.createLinearGradient(-Wd, -L, Wd, L);
+    const body = ctx.createLinearGradient(-r, -r, r, r);
     body.addColorStop(0, core);
     body.addColorStop(0.45, col);
     body.addColorStop(1, deep);
     ctx.globalAlpha = 0.95;
     ctx.fillStyle = body;
-    path();
-    ctx.fill();
-
-    // Грань-блик: светлая половина кристалла.
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = core;
     ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    ctx.lineTo(pts[1].x * 0.55, pts[1].y * 0.6);
-    ctx.lineTo(pts[2].x * 0.4, pts[2].y * 0.6);
-    ctx.lineTo(0, pts[3].y * 0.7);
-    ctx.lineTo(-pts[4].x * 0.15, pts[4].y * 0.6);
+    ctx.moveTo(s[0].x * r, s[0].y * r);
+    for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x * r, s[i].y * r);
     ctx.closePath();
     ctx.fill();
 
-    // Рёбра (иней) — тонкие светлые линии по огранке.
-    ctx.globalAlpha = 0.85;
+    // Бликовая грань.
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.moveTo(hl[0].x * r, hl[0].y * r);
+    for (let i = 1; i < hl.length; i++) ctx.lineTo(hl[i].x * r, hl[i].y * r);
+    ctx.closePath();
+    ctx.fill();
+
+    // Рёбра (иней).
+    ctx.globalAlpha = 0.7;
     ctx.strokeStyle = core;
-    ctx.lineWidth = Math.max(1, r * 0.09);
+    ctx.lineWidth = Math.max(1, r * 0.08);
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    ctx.lineTo(0, pts[3].y * 0.9);
+    ctx.moveTo(s[0].x * r, s[0].y * r);
+    // Линия к ближайшей «глубокой» вершине.
+    let deepest = 0;
+    for (let i = 1; i < s.length; i++) {
+      if (s[i].y > s[deepest].y) deepest = i;
+    }
+    ctx.lineTo(s[deepest].x * r * 0.7, s[deepest].y * r * 0.7);
     ctx.stroke();
 
-    // Обводка тёмно-синяя — кристалл читается на любом фоне.
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = 'rgba(20,60,140,0.9)';
-    ctx.lineWidth = Math.max(1, r * 0.08);
-    path();
+    // Обводка.
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = 'rgba(20,60,140,0.85)';
+    ctx.lineWidth = Math.max(1, r * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(s[0].x * r, s[0].y * r);
+    for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x * r, s[i].y * r);
+    ctx.closePath();
     ctx.stroke();
 
-    // Искрящийся блик-звёздочка у острия («бегает» по грани).
+    // Искрящийся блик — бегает по форме.
     const tw = 0.5 + 0.5 * Math.sin(t * 7 + idx * 2.3);
-    ctx.globalAlpha = 0.35 + 0.55 * tw;
+    ctx.globalAlpha = 0.3 + 0.5 * tw;
     ctx.fillStyle = '#ffffff';
-    const bx = Wd * 0.15, by = -L * 0.55;
-    const bs = r * (0.22 + 0.12 * tw);
+    // Бликовая точка — на одной из вершин, «перепрыгивает» между ними.
+    const jumpIdx = Math.floor(t * 3 + idx) % s.length;
+    const bx = s[jumpIdx].x * r * 0.6;
+    const by = s[jumpIdx].y * r * 0.6;
+    const bs = r * (0.18 + 0.1 * tw);
     ctx.beginPath();
     ctx.moveTo(bx, by - bs); ctx.lineTo(bx + bs * 0.3, by - bs * 0.3);
     ctx.lineTo(bx + bs, by); ctx.lineTo(bx + bs * 0.3, by + bs * 0.3);
@@ -192,66 +256,82 @@ export class FrostRingRenderer {
     ctx.restore();
   }
 
-  // === ШЛЕЙФ ===
-  // Осколок движется по окружности, поэтому хвост — дуга НАЗАД по орбите
-  // (против знака dir). Три слоя: широкая холодная подложка, яркая
-  // сердцевина, редкие искорки. Затухание к концу дуги.
+  // === ИЗВИВАЮЩИЙСЯ ШЛЕЙФ ===
+  // Хвост идёт назад по орбите, каждая точка смещается по нормали
+  // с рваной волной (slot-шум), как у файрбола, но с ледяной палитрой.
   _drawTrail(ctx, o, t, idx) {
     const cfg = this.cfg;
     const arcDeg = cfg.trail_arc_deg ?? 70;
     const arc = (arcDeg * Math.PI) / 180;
     const R = Math.max(4, o.orbitR || 70);
     const wBase = this._shardRadius(o);
-    const steps = Math.max(6, cfg.trail_segments ?? 16);
-    const back = -Math.sign(o.dir || 1); // назад по ходу орбиты
+    const steps = Math.max(6, cfg.trail_segments ?? 14);
+    const back = -Math.sign(o.dir || 1);
     const phase = (hash(idx * 13.7) - 0.5) * 0.4;
+    const slot = Math.floor(t * 14); // дискретный слот для рваности
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
 
-    // Подложка + сердцевина одним проходом по сегментам дуги.
+    // Пульсация пламени.
+    const pulse = 1 + Math.sin(t * 18 + idx * 2.1) * 0.12;
+
+    // Считаем развевающиеся точки.
+    const pts = new Array(steps + 1);
+    for (let i = 0; i <= steps; i++) {
+      const k = i / steps;
+      const a = o.angle + back * arc * k;
+      const x = o.cx + Math.cos(a) * R;
+      const y = o.cy + Math.sin(a) * R;
+      // Нормаль к орбите (перпендикуляр радиусу).
+      const nx = -Math.sin(a), ny = Math.cos(a);
+      // Рваная амплитуда: slot-шум + профиль (максимум у головы, минимум у хвоста).
+      const amp = (0.3 + hash(idx * 7.7 + slot * 3.13 + i * 0.5) * 0.7);
+      const prof = k * k; // 0 у хвоста, 1 у головы
+      const wave = Math.sin(t * 11 - k * 5 + hash(slot + i) * TAU)
+        * prof * amp * wBase * 0.35;
+      pts[i] = { x: x + nx * wave, y: y + ny * wave };
+    }
+
+    // Два прохода: подложка + сердцевина.
     for (let pass = 0; pass < 2; pass++) {
       const wide = pass === 0;
-      for (let i = 0; i < steps; i++) {
-        const k0 = i / steps, k1 = (i + 1) / steps;
-        const a0 = o.angle + back * arc * k0;
-        const a1 = o.angle + back * arc * k1;
-        const x0 = o.cx + Math.cos(a0) * R, y0 = o.cy + Math.sin(a0) * R;
-        const x1 = o.cx + Math.cos(a1) * R, y1 = o.cy + Math.sin(a1) * R;
-        // мерцание языка шлейфа (как всполохи пламени у файрбола)
-        const flick = 0.7 + 0.3 * Math.sin(t * 16 - k0 * 9 + idx * 2.1 + phase * TAU);
-        const fade = (1 - k0) * flick;
+      for (let i = 1; i <= steps; i++) {
+        const k = i / steps;
+        const a = pts[i - 1], b = pts[i];
+        const flick = 0.6 + hash(i * 3.3 + slot * 1.7 + pass * 50) * 0.4;
+        const fade = (1 - k * 0.85) * flick;
         if (wide) {
-          ctx.globalAlpha = 0.10 * fade;
+          ctx.globalAlpha = 0.08 * fade;
           ctx.strokeStyle = cfg.trail_glow_color || '#3aa0ff';
-          ctx.lineWidth = wBase * (0.9 + 0.9 * (1 - k0));
+          ctx.lineWidth = wBase * (0.7 + 0.9 * (1 - k)) * pulse;
         } else {
-          ctx.globalAlpha = 0.32 * fade;
+          ctx.globalAlpha = 0.28 * fade;
           ctx.strokeStyle = cfg.trail_color || '#cfeeff';
-          ctx.lineWidth = wBase * (0.22 + 0.4 * (1 - k0));
+          ctx.lineWidth = wBase * (0.18 + 0.35 * (1 - k)) * pulse;
         }
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
         ctx.stroke();
       }
     }
 
-    // Искорки вдоль шлейфа — мелкие точки, «срезаемые» потоком.
+    // Искорки вдоль шлейфа.
     const sparks = cfg.trail_sparks ?? 5;
     for (let i = 0; i < sparks; i++) {
-      const slot = Math.floor(t * 6 + i * 2.7 + idx * 5.3);
-      const seed = i * 17.3 + idx * 7.7 + slot * 1.31;
-      const k = hash(seed); // положение вдоль дуги 0..1
+      const s = Math.floor(t * 6 + i * 2.7 + idx * 5.3);
+      const seed = i * 17.3 + idx * 7.7 + s * 1.31;
+      const k = hash(seed);
       const side = (hash(seed + 3) - 0.5) * 2;
       const a = o.angle + back * arc * k;
       const rr = R + side * wBase * (0.5 + k * 1.2);
       const sx = o.cx + Math.cos(a) * rr;
       const sy = o.cy + Math.sin(a) * rr;
       const life = (t * 6 + i * 2.7 + idx * 5.3) % 1;
-      const alpha = (1 - k) * (1 - life) * 0.8;
-      const size = wBase * 0.14 * (1 - k * 0.5);
+      const alpha = (1 - k) * (1 - life) * 0.7;
+      const size = wBase * 0.12 * (1 - k * 0.5);
       if (alpha <= 0.03 || size <= 0.3) continue;
       ctx.globalAlpha = alpha;
       ctx.fillStyle = k < 0.4 ? '#ffffff' : (cfg.color || '#9fe8ff');
@@ -263,22 +343,17 @@ export class FrostRingRenderer {
   }
 
   // === ЛЕДЯНОЙ ПАР ===
-  // Холод осколка конденсирует пар: белые клубы отрываются от кристалла,
-  // поднимаются вверх (в экранных координатах Y меньше) и растворяются.
-  // source-over — lighter «съел» бы полупрозрачный белый.
-  _drawVapor(ctx, o, t, idx) {
+  _drawVapor(ctx, o, t, idx, px, py) {
     const cfg = this.cfg;
     if (cfg.vapor && cfg.vapor.enabled === false) return;
-    const count = cfg.vapor_count ?? 6;
-    const speed = cfg.vapor_rate ?? 1.4; // клубов в секунду на осколок
-    const rise = cfg.vapor_rise_px ?? 34; // насколько поднимается за жизнь
+    const count = cfg.vapor_count ?? 5;
+    const speed = cfg.vapor_rate ?? 1.2;
+    const rise = cfg.vapor_rise_px ?? 28;
     const r = this._shardRadius(o);
 
     let list = this._vapor.get(idx);
     if (!list) list = this._vapor.set(idx, []).get(idx);
 
-    // Порождение: детерминированные «слоты» времени — без накопления state
-    // между забегями список чистим по размеру.
     while (list.length && list[0].born + list[0].life < t) list.shift();
     const wantN = Math.min(count, Math.floor(t * speed) % (count + 1) + Math.min(count, 2));
     while (list.length < count) {
@@ -297,17 +372,16 @@ export class FrostRingRenderer {
       const ph = clamp01((t - v.born) / v.life);
       if (ph >= 1) continue;
       const drift = (hash(v.seed) - 0.5) * 2;
-      const swirl = Math.sin(t * 2.2 + v.seed * TAU) * r * 0.35;
-      // Пар живёт у осколка и уплывает вверх, слегка раскачиваясь.
+      const swirl = Math.sin(t * 2.2 + v.seed * TAU) * r * 0.3;
       const vx = o.x + drift * r * 0.8 + swirl - (o.vx || 0) * 0.02 * ph;
       const vy = o.y - ph * rise + (hash(v.seed + 1) - 0.5) * r * 0.6;
-      const size = r * (0.35 + ph * 1.1);
-      const alpha = 0.28 * (1 - ph) * Math.min(1, ph * 8);
+      const size = r * (0.3 + ph * 0.9);
+      const alpha = 0.25 * (1 - ph) * Math.min(1, ph * 8);
       if (alpha <= 0.01) continue;
       ctx.globalAlpha = alpha;
       const g = ctx.createRadialGradient(vx, vy, 0, vx, vy, size);
-      g.addColorStop(0, 'rgba(235,250,255,0.9)');
-      g.addColorStop(0.55, 'rgba(190,230,255,0.45)');
+      g.addColorStop(0, 'rgba(235,250,255,0.85)');
+      g.addColorStop(0.55, 'rgba(190,230,255,0.4)');
       g.addColorStop(1, 'rgba(160,210,255,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -317,6 +391,11 @@ export class FrostRingRenderer {
     ctx.restore();
   }
 
-  // Сброс состояния при рестарте забега (пар привязан к игровому времени).
-  reset() { this._vapor.clear(); }
+  _shardRadius(o) {
+    const cfg = this.cfg;
+    const base = (o.r || 10) * (cfg.shard_scale ?? 1.6);
+    return Math.max(6, base);
+  }
+
+  reset() { this._vapor.clear(); this._shapes.clear(); }
 }
