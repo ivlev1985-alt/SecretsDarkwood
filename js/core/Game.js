@@ -2002,6 +2002,7 @@ export class Game {
         }
       }
       // орбитальная пассивная магия: ледяные шары вокруг игрока
+      this.skills.orbitsHandled = !!(this.frostRingRenderer && this.frostRingRenderer.draw(ctx, this.skills.weapons, this.time, this.assets));
       this.skills.drawOrbits(ctx);
       // питомец (монстры его не бьют — коллизий с ним нет)
       if (this.pet) {
