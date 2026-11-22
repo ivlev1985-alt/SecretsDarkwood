@@ -369,6 +369,7 @@ export class TornadoRenderer {
   _drawFunnel(ctx, area, visual, geom, life, age) {
     const { height, baseHalf, topHalf, spin, centerAt, halfAt } = geom;
     const steps = Math.max(6, Math.floor(visual.silhouette_segments ?? 18));
+    const seed = area.seed ?? 1;
 
     // Мягкое синее свечение за вихрем.
     const glowAlpha = visual.glow_alpha ?? 0;
@@ -390,6 +391,14 @@ export class TornadoRenderer {
       ctx.restore();
     }
 
+    // Низкочастотные «горбы» по кромке силуэта — воронка не должна быть
+    // идеальным конусом. Дешёвые sin-вызовы на 18 сегментов, ~0 стоимости.
+    const silWobble = visual.silhouette_wobble_px ?? 7;
+    const bulgeAt = (t) => (
+      Math.sin(age * 1.6 + t * 6.2 + seed * 0.011) * 0.6
+      + Math.sin(age * 2.9 + t * 12.7 + 2.2) * 0.4
+    ) * silWobble * (0.15 + 0.85 * t);
+
     // Полупрозрачный объём воронки: не забивает кольца, но даёт глубину.
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -399,15 +408,20 @@ export class TornadoRenderer {
     body.addColorStop(0.55, visual.funnel_mid || '#0066ff');
     body.addColorStop(1, visual.funnel_top || '#8ff4ff');
     ctx.fillStyle = body;
+    const capRy = Math.max(2, topHalf * (visual.top_open_aspect ?? 0.22));
+    const topCx = centerAt(1);
     ctx.beginPath();
     ctx.moveTo(centerAt(0) - baseHalf, 0);
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
-      ctx.lineTo(centerAt(t) - halfAt(t), -t * height);
+      ctx.lineTo(centerAt(t) - halfAt(t) - bulgeAt(t), -t * height);
     }
+    // Верх закрываем дальней дугой эллипса — край воронки «уходит» назад,
+    // создавая вид чуть сверху, а не прямой срез.
+    ctx.ellipse(topCx, -height, halfAt(1) + bulgeAt(1), capRy, 0, Math.PI, 0, false);
     for (let i = steps; i >= 0; i--) {
       const t = i / steps;
-      ctx.lineTo(centerAt(t) + halfAt(t), -t * height);
+      ctx.lineTo(centerAt(t) + halfAt(t) + bulgeAt(t), -t * height);
     }
     ctx.closePath();
     ctx.fill();
@@ -418,6 +432,29 @@ export class TornadoRenderer {
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
+
+    // «Пасть» воронки сверху: тёмная глубина + светлый ободок.
+    // Именно она даёт ощущение вида чуть сверху.
+    const capAlpha = visual.top_cap_alpha ?? 0.55;
+    if (capAlpha > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const capRx = halfAt(1) + bulgeAt(1);
+      const cap = ctx.createRadialGradient(topCx, -height, capRx * 0.1, topCx, -height, capRx);
+      cap.addColorStop(0, 'rgba(2,10,48,0.9)');
+      cap.addColorStop(0.62, visual.funnel_mid || '#0066ff');
+      cap.addColorStop(1, visual.funnel_top || '#8ff4ff');
+      ctx.globalAlpha = life.alpha * capAlpha * 0.5;
+      ctx.fillStyle = cap;
+      ctx.beginPath();
+      ctx.ellipse(topCx, -height, capRx, capRy, 0, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = life.alpha * capAlpha;
+      ctx.strokeStyle = visual.ring_color_top || visual.funnel_top || '#c8fbff';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // Светящаяся внутренняя дымка.
     ctx.save();
@@ -433,11 +470,11 @@ export class TornadoRenderer {
     ctx.moveTo(centerAt(0) - baseHalf * 0.36, 0);
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
-      ctx.lineTo(centerAt(t) - halfAt(t) * 0.55, -t * height);
+      ctx.lineTo(centerAt(t) - halfAt(t) * 0.55 - bulgeAt(t) * 0.5, -t * height);
     }
     for (let i = steps; i >= 0; i--) {
       const t = i / steps;
-      ctx.lineTo(centerAt(t) + halfAt(t) * 0.55, -t * height);
+      ctx.lineTo(centerAt(t) + halfAt(t) * 0.55 + bulgeAt(t) * 0.5, -t * height);
     }
     ctx.closePath();
     ctx.fill();
@@ -461,7 +498,6 @@ export class TornadoRenderer {
     const bandColorTop = visual.band_color_top || visual.funnel_top || '#8ff4ff';
     const bandHighlightColor = visual.band_highlight_color || '#f2ffff';
     const bandGlowColor = visual.band_glow_color || visual.glow_color || '#1a8cff';
-    const seed = area.seed ?? 1;
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -544,19 +580,36 @@ export class TornadoRenderer {
       ctx.restore();
     }
 
-    // Пыль у основания — несколько облаков с волнами
-    const dustCloudCount = Math.max(3, Math.floor(visual.dust_clouds ?? 5));
+    // Пыль у основания — жизненный цикл клубов: каждый клубок рождается
+    // маленьким у земли, разрастается в ~3 раза и на этом же пути
+    // растворяется (alpha → 0). Фазы сдвинуты hash-ом, поэтому клубы
+    // появляются непрерывно и вразнобой. Дёшево: ~6 эллипсов + 6
+    // градиента, и всё это — только при перерисовке кэша (cache_fps).
+    const dustCloudCount = Math.max(3, Math.floor(visual.dust_clouds ?? 6));
     if (dustCloudCount > 0) {
+      const dustColor = visual.dust_color || '#c8b898';
+      const dustSpeed = visual.dust_speed ?? 0.9;
       ctx.save();
-      ctx.globalAlpha = life.alpha * 0.5;
-      ctx.fillStyle = '#c8b898';
       for (let i = 0; i < dustCloudCount; i++) {
-        const seedI = i * 13.7;
-        const cx = Math.sin(age * 0.5 + seedI) * baseHalf * 0.6;
-        const cy = 2 + Math.sin(age * 0.3 + seedI * 2) * 2;
-        const r = baseHalf * (0.3 + hash(seedI) * 0.3);
+        const seedI = i * 13.7 + seed * 0.37;
+        // Жизненная фаза 0..1: 0 — родился, 1 — рассеялся.
+        const ph = (age * dustSpeed * (0.7 + hash(seedI) * 0.6) + hash(seedI + 5)) % 1;
+        const grow = 0.25 + ph * ph * 2.4;            // кратный рост размера
+        const fade = (1 - ph) * (1 - ph);             // нелинейное растворение
+        const ang = hash(seedI + 1) * TAU + ph * 0.9; // расползается от центра
+        const dist = baseHalf * (0.25 + hash(seedI + 2) * 0.85) * (0.4 + ph);
+        const cx = Math.cos(ang) * dist;
+        const cy = 2 + Math.sin(ang) * dist * 0.3 - ph * baseHalf * 0.35; // чуть вверх
+        const r = Math.max(2, baseHalf * 0.28 * grow);
+        const ry = Math.max(1.5, r * 0.62);           // приплюснутая — лежит на земле
+
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, dustColor);
+        g.addColorStop(1, 'rgba(200,184,152,0)');
+        ctx.globalAlpha = Math.min(1, life.alpha * 0.45 * fade);
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, TAU);
+        ctx.ellipse(cx, cy, r, ry, 0, 0, TAU);
         ctx.fill();
       }
       ctx.restore();
