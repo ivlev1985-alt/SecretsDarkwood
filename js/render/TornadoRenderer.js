@@ -117,12 +117,14 @@ export class TornadoRenderer {
     const lifeFull = { alpha: 1, scale: 1, inK: 1, outK: 1 };
     const radius = area.radius || 100;
     // Границы кадра: воронка рисуется вверх от (0,0) до -height,
-    // вниз — земля/тени, в стороны — sway + верхняя ширина.
+    // вниз — земля/тени, в стороны — sway + верхняя ширина + запас на
+    // «хаос»: ленты, камни и молнии специально вылетают за кромку конуса.
+    const chaosPad = geom.topHalf * 0.7 + 12;
     const sidePad = (visual.sway_px ?? radius * 0.12)
       + Math.abs(visual.lean_px ?? 0) + Math.abs(visual.move_lean_px ?? 0)
-      + (visual.turbulence_px ?? 2) + 10;
+      + (visual.turbulence_px ?? 2) + 10 + chaosPad;
     const w = Math.ceil(Math.max(geom.baseHalf, geom.topHalf) * 2 + sidePad * 2);
-    const h = Math.ceil(geom.height + radius * 1.3 + 24);
+    const h = Math.ceil(geom.height + radius * 1.3 + 24 + chaosPad);
     const ox = -Math.floor(w / 2);
     const oy = -(h - Math.ceil(radius * 0.9)); // (0,0) земли внутри кадра
     if (c.canvas.width !== w || c.canvas.height !== h) {
@@ -397,10 +399,12 @@ export class TornadoRenderer {
 
     // Низкочастотные «горбы» по кромке силуэта — воронка не должна быть
     // идеальным конусом. Дешёвые sin-вызовы на 18 сегментов, ~0 стоимости.
-    const silWobble = visual.silhouette_wobble_px ?? 7;
+    // Три гармоники с разными скоростями: грани «плывут» несинхронно.
+    const silWobble = visual.silhouette_wobble_px ?? 13;
     const bulgeAt = (t) => (
-      Math.sin(age * 1.6 + t * 6.2 + seed * 0.011) * 0.6
-      + Math.sin(age * 2.9 + t * 12.7 + 2.2) * 0.4
+      Math.sin(age * 1.6 + t * 6.2 + seed * 0.011) * 0.5
+      + Math.sin(age * 2.9 + t * 12.7 + 2.2) * 0.3
+      + Math.sin(age * 0.83 + t * 3.1 + seed * 0.037) * 0.2
     ) * silWobble * (0.15 + 0.85 * t);
 
     // Полупрозрачный объём воронки: не забивает кольца, но даёт глубину.
@@ -425,7 +429,8 @@ export class TornadoRenderer {
     ctx.ellipse(topCx, -height, halfAt(1) + bulgeAt(1), capRy, 0, Math.PI, 0, false);
     for (let i = steps; i >= 0; i--) {
       const t = i / steps;
-      ctx.lineTo(centerAt(t) + halfAt(t) + bulgeAt(t), -t * height);
+      // Правая кромка — со сдвигом фазы: грани искажаются асимметрично.
+      ctx.lineTo(centerAt(t) + halfAt(t) + bulgeAt(t + 0.47), -t * height);
     }
     ctx.closePath();
     ctx.fill();
@@ -506,6 +511,10 @@ export class TornadoRenderer {
     const bandHighlightAlpha = visual.band_highlight_alpha ?? 0.7;
     const bandHighlightWidth = Math.max(0.5, visual.band_highlight_width_px ?? 1.8);
     const bandWobble = Math.max(0.001, visual.band_wobble ?? 0.04);
+    // «Хаос» лент: радиус витков гуляет вокруг конуса (внутрь и наружу),
+    // число витков увеличено — вихрь выглядит небрежным, рисованным.
+    const bandChaos = Math.max(0, visual.band_chaos ?? 0.38);
+    const bandTurns = Math.max(1, visual.band_turns ?? 3.4);
     const bandColorBottom = visual.band_color_bottom || visual.funnel_bottom || '#031a6b';
     const bandColorMid = visual.band_color_mid || visual.funnel_mid || '#0066ff';
     const bandColorTop = visual.band_color_top || visual.funnel_top || '#8ff4ff';
@@ -520,14 +529,15 @@ export class TornadoRenderer {
     for (let b = 0; b < bandCount; b++) {
       const phase0 = age * spin * 1.15 + (b * TAU) / bandCount;
       const amp = b * 0.6;
+      const bandArgs = [ctx, height, baseHalf, topHalf, centerAt, halfAt,
+        spin, age, phase0, amp, bandWobble, bandSegments];
 
       // Свечение ленты
       if (bandGlowWidth > 0 && bandGlowAlpha > 0) {
         ctx.globalAlpha = Math.min(1, life.alpha * bandGlowAlpha);
         ctx.strokeStyle = bandGlowColor;
         ctx.lineWidth = bandGlowWidth * (0.7 + 0.3 * Math.sin(age * 0.5 + b));
-        this._drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
-          spin, age, phase0, amp, bandWobble, bandSegments, 0, 1);
+        this._drawSpiralBand(...bandArgs, 0, 1, bandChaos, bandTurns, seed + b * 17.3);
         ctx.stroke();
       }
 
@@ -536,8 +546,7 @@ export class TornadoRenderer {
       ctx.globalAlpha = Math.min(1, life.alpha * bandAlpha);
       ctx.strokeStyle = mixColor(bandColorMid, bandColorTop, 0.35);
       ctx.lineWidth = bandWidth * (0.8 + 0.2 * Math.sin(age * 0.7 + b));
-      this._drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
-        spin, age, phase0, amp, bandWobble, bandSegments, 0, 1);
+      this._drawSpiralBand(...bandArgs, 0, 1, bandChaos, bandTurns, seed + b * 17.3);
       ctx.stroke();
 
       // Яркая дуга с одной стороны — блик (часть спирали по t)
@@ -547,15 +556,16 @@ export class TornadoRenderer {
         ctx.globalAlpha = Math.min(1, life.alpha * bandHighlightAlpha * 0.5);
         ctx.strokeStyle = bandHighlightColor;
         ctx.lineWidth = bandHighlightWidth;
-        this._drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
-          spin, age, phase0, amp, bandWobble, bandSegments, t0, t1);
+        this._drawSpiralBand(...bandArgs, t0, t1, bandChaos, bandTurns, seed + b * 17.3);
         ctx.stroke();
       }
     }
     ctx.restore();
 
-    // Камни/обломки — разбросаны по высоте, поднимаются медленно
+    // Камни/обломки — разбросаны по высоте, поднимаются медленно.
+    // Часть камней вылетает за кромку конуса — вихрь «разбрасывает» мусор.
     const debrisCount = Math.max(4, Math.floor(visual.debris_count ?? 8));
+    const debrisOut = visual.debris_outer_scale ?? 1.45;
     if (debrisCount > 0) {
       ctx.save();
       for (let i = 0; i < debrisCount; i++) {
@@ -564,7 +574,7 @@ export class TornadoRenderer {
         const half = halfAt(t);
         const cx = centerAt(t);
         const ang = spin * age * 0.8 + t * Math.PI * 3 + i * 1.7;
-        const dist = half * (0.5 + hash(seedI + 1) * 0.5);
+        const dist = half * (0.45 + hash(seedI + 1) * debrisOut);
         const x = cx + Math.cos(ang) * dist;
         const y = -t * height + Math.sin(ang) * half * 0.15;
         const rot = ang + hash(seedI + 2) * 0.5;
@@ -639,22 +649,33 @@ export class TornadoRenderer {
 
   // Спиральная лента: path от t0 до t1 (0..1 по высоте), угол растёт с
   // высотой — лента обвивает воронку по спирали, как мазки кисти на референсе.
+  // chaos — случайные отклонения радиуса витков (ленты выходят за конус),
+  // turns — сколько витков делает лента (больше — «небрежнее»).
   _drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
-    spin, age, phase0, amp, wobble, segments, t0, t1) {
+    spin, age, phase0, amp, wobble, segments, t0, t1, chaos = 0, turns = 1.35, seed = 0) {
     const span = Math.max(0.001, t1 - t0);
-    const n = Math.max(8, Math.round(segments * span));
+    // Больше витков → больше сегментов, чтобы спираль оставалась гладкой.
+    const n = Math.max(8, Math.round(segments * span * Math.max(1, turns / 1.35)));
     ctx.beginPath();
     for (let i = 0; i <= n; i++) {
       const t = t0 + (span * i) / n;
       const y = -t * height;
       const half = halfAt(t);
       const cx = centerAt(t);
-      // Витков больше внизу (ленты плотнее у основания — как на референсе)
-      const ang = phase0 + Math.pow(t, 0.8) * Math.PI * 4 + amp;
+      const ang = phase0 + Math.pow(t, 0.8) * Math.PI * 2 * turns + amp;
       const wobbleX = wobble * Math.sin(age * 2 + t * 6) * half * 0.15;
       const wobbleY = wobble * Math.cos(age * 1.5 + t * 4) * half * 0.05;
-      const x = cx + Math.cos(ang) * half * 0.9 + wobbleX;
-      const y2 = y + Math.sin(ang) * half * 0.2 + wobbleY;
+      // Псевдослучайный радиус витка: медленно гуляет вдоль ленты и
+      // слегка во времени — ленты то вжимаются в конус, то вылетают наружу.
+      const rNoise = chaos > 0
+        ? 1 + chaos * (
+          Math.sin(t * 11.7 + seed * 1.31 + age * 0.9) * 0.6
+          + Math.sin(t * 27.3 + seed * 0.77 - age * 1.4) * 0.4
+        )
+        : 1;
+      const rr = half * 0.9 * rNoise;
+      const x = cx + Math.cos(ang) * rr + wobbleX;
+      const y2 = y + Math.sin(ang) * rr * 0.22 + wobbleY;
       if (i === 0) ctx.moveTo(x, y2);
       else ctx.lineTo(x, y2);
     }
@@ -744,8 +765,11 @@ export class TornadoRenderer {
       const t1 = Math.min(0.98, t0 + 0.06 + hash(s + 2) * 0.35);
       const y0 = -t0 * height;
       const y1 = -t1 * height;
-      const half0 = halfAt(t0) * 0.72;
-      const half1 = halfAt(t1) * 0.72;
+      // Молнии не обязаны оставаться внутри воронки — часть вылетает
+      // наружу, за кромку конуса (как на референсе).
+      const outK = l.outer_scale ?? 1.35;
+      const half0 = halfAt(t0) * outK;
+      const half1 = halfAt(t1) * outK;
       const x0 = centerAt(t0) + (hash(s + 3) * 2 - 1) * half0;
       const x1 = centerAt(t1) + (hash(s + 4) * 2 - 1) * half1;
 
