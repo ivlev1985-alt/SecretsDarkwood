@@ -104,6 +104,10 @@ export class TornadoRenderer {
     if (c.canvas) {
       ctx.drawImage(c.canvas, c.ox, c.oy, c.w, c.h);
     }
+    // Пыль рисуется вне кэша — каждый кадр, с настоящим возрастом:
+    // клубы плавно растут и растворяются на 60fps. 6 градиентных
+    // эллипсов — ничтожная стоимость по сравнению с перерисовкой кэша.
+    this._drawDust(ctx, area, visual, geom, life, age);
     ctx.restore();
   }
 
@@ -433,25 +437,34 @@ export class TornadoRenderer {
     ctx.stroke();
     ctx.restore();
 
-    // «Пасть» воронки сверху: тёмная глубина + светлый ободок.
-    // Именно она даёт ощущение вида чуть сверху.
+    // «Пасть» воронки сверху: тёмная глубина + ободок в цветах спиралей
+    // с вращающимся градиентом — без белого, читается как продолжение
+    // воронки.
     const capAlpha = visual.top_cap_alpha ?? 0.55;
     if (capAlpha > 0) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const capRx = halfAt(1) + bulgeAt(1);
-      const cap = ctx.createRadialGradient(topCx, -height, capRx * 0.1, topCx, -height, capRx);
-      cap.addColorStop(0, 'rgba(2,10,48,0.9)');
-      cap.addColorStop(0.62, visual.funnel_mid || '#0066ff');
-      cap.addColorStop(1, visual.funnel_top || '#8ff4ff');
-      ctx.globalAlpha = life.alpha * capAlpha * 0.5;
+      // Вращающийся градиент по ободку — перелив bottom→mid→top
+      const rot = age * spin * 0.3;
+      const cap = ctx.createRadialGradient(
+        topCx + Math.cos(rot) * capRx * 0.2, -height + Math.sin(rot) * capRy * 0.2,
+        capRx * 0.05,
+        topCx, -height, capRx
+      );
+      cap.addColorStop(0, 'rgba(2,10,48,0.92)');
+      cap.addColorStop(0.35, mixColor(visual.funnel_bottom || '#031a6b', visual.funnel_mid || '#0066ff', 0.5));
+      cap.addColorStop(0.7, mixColor(visual.funnel_mid || '#0066ff', visual.funnel_top || '#8ff4ff', 0.55));
+      cap.addColorStop(1, mixColor(visual.funnel_top || '#8ff4ff', visual.funnel_mid || '#0066ff', 0.3));
+      ctx.globalAlpha = life.alpha * capAlpha * 0.55;
       ctx.fillStyle = cap;
       ctx.beginPath();
       ctx.ellipse(topCx, -height, capRx, capRy, 0, 0, TAU);
       ctx.fill();
-      ctx.globalAlpha = life.alpha * capAlpha;
-      ctx.strokeStyle = visual.ring_color_top || visual.funnel_top || '#c8fbff';
-      ctx.lineWidth = 1.6;
+      // Ободок — тонкая яркая спиральная линия
+      ctx.globalAlpha = life.alpha * capAlpha * 0.7;
+      ctx.strokeStyle = mixColor(visual.funnel_top || '#8ff4ff', visual.funnel_mid || '#0066ff', 0.4);
+      ctx.lineWidth = 1.4;
       ctx.stroke();
       ctx.restore();
     }
@@ -580,40 +593,48 @@ export class TornadoRenderer {
       ctx.restore();
     }
 
-    // Пыль у основания — жизненный цикл клубов: каждый клубок рождается
-    // маленьким у земли, разрастается в ~3 раза и на этом же пути
-    // растворяется (alpha → 0). Фазы сдвинуты hash-ом, поэтому клубы
-    // появляются непрерывно и вразнобой. Дёшево: ~6 эллипсов + 6
-    // градиента, и всё это — только при перерисовке кэша (cache_fps).
-    const dustCloudCount = Math.max(3, Math.floor(visual.dust_clouds ?? 6));
-    if (dustCloudCount > 0) {
-      const dustColor = visual.dust_color || '#c8b898';
-      const dustSpeed = visual.dust_speed ?? 0.9;
-      ctx.save();
-      for (let i = 0; i < dustCloudCount; i++) {
-        const seedI = i * 13.7 + seed * 0.37;
-        // Жизненная фаза 0..1: 0 — родился, 1 — рассеялся.
-        const ph = (age * dustSpeed * (0.7 + hash(seedI) * 0.6) + hash(seedI + 5)) % 1;
-        const grow = 0.25 + ph * ph * 2.4;            // кратный рост размера
-        const fade = (1 - ph) * (1 - ph);             // нелинейное растворение
-        const ang = hash(seedI + 1) * TAU + ph * 0.9; // расползается от центра
-        const dist = baseHalf * (0.25 + hash(seedI + 2) * 0.85) * (0.4 + ph);
-        const cx = Math.cos(ang) * dist;
-        const cy = 2 + Math.sin(ang) * dist * 0.3 - ph * baseHalf * 0.35; // чуть вверх
-        const r = Math.max(2, baseHalf * 0.28 * grow);
-        const ry = Math.max(1.5, r * 0.62);           // приплюснутая — лежит на земле
+    // Пыль у основания рисуется вне кэша (_drawDust) — каждый кадр,
+    // чтобы клубы плавно росли и растворялись на 60fps.
+  }
 
-        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, dustColor);
-        g.addColorStop(1, 'rgba(200,184,152,0)');
-        ctx.globalAlpha = Math.min(1, life.alpha * 0.45 * fade);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r, ry, 0, 0, TAU);
-        ctx.fill();
-      }
-      ctx.restore();
+  // Пыль у основания — жизненный цикл клубов: каждый клубок рождается
+  // маленьким у земли, разрастается до размера, соизмеримого с воронкой
+  // и персонажем, и на этом же пути растворяется (alpha → 0). Фазы
+  // сдвинуты hash-ом, поэтому клубы появляются непрерывно и вразнобой.
+  _drawDust(ctx, area, visual, geom, life, age) {
+    const dustCloudCount = Math.max(3, Math.floor(visual.dust_clouds ?? 6));
+    if (dustCloudCount <= 0 || life.alpha <= 0.01) return;
+    const baseHalf = geom.baseHalf;
+    const seed = area.seed ?? 1;
+    const dustColor = visual.dust_color || '#c8b898';
+    const dustSpeed = visual.dust_speed ?? 0.55;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < dustCloudCount; i++) {
+      const seedI = i * 13.7 + seed * 0.37;
+      // Жизненная фаза 0..1: 0 — родился, 1 — рассеялся.
+      const ph = (age * dustSpeed * (0.7 + hash(seedI) * 0.6) + hash(seedI + 5)) % 1;
+      const grow = 0.3 + ph * 2.2;                   // разрастание до ~2.5×
+      const fade = Math.sin(Math.PI * ph);           // плавное появление и растворение
+      const ang = hash(seedI + 1) * TAU + ph * 0.9;  // расползается от центра
+      const dist = baseHalf * (0.35 + hash(seedI + 2) * 1.1) * (0.4 + ph);
+      const cx = Math.cos(ang) * dist;
+      const cy = 3 + Math.sin(ang) * dist * 0.3 - ph * baseHalf * 0.5; // чуть вверх
+      // Пиковый радиус ~ соизмерим с шириной основания воронки.
+      const r = Math.max(4, baseHalf * 0.85 * grow);
+      const ry = Math.max(3, r * 0.55);              // приплюснутая — лежит на земле
+
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, dustColor);
+      g.addColorStop(0.6, 'rgba(180,160,125,0.55)');
+      g.addColorStop(1, 'rgba(160,140,110,0)');
+      ctx.globalAlpha = Math.min(1, life.alpha * 0.5 * fade);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r, ry, 0, 0, TAU);
+      ctx.fill();
     }
+    ctx.restore();
   }
 
   // Спиральная лента: path от t0 до t1 (0..1 по высоте), угол растёт с
