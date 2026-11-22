@@ -42,6 +42,7 @@ export class FireballRenderer {
   _draw(ctx, p, time) {
     const r = p.radius || 12;
     const t = time || 0;
+    const cfg = this.cfg;
 
     if (p.exploding) {
       this._drawExplosion(ctx, p, t);
@@ -50,7 +51,7 @@ export class FireballRenderer {
 
     // Хвост ведём сами: fireball (в отличие от nova) trail не имеет.
     // Точки добавляем только при реальном перемещении, кольцевой лимит.
-    const maxTrail = Math.max(4, cfg.trail_length ?? 14);
+    const maxTrail = Math.max(4, this.cfg.trail_length ?? 14);
     let tr = p._fbTrail;
     if (!tr) tr = p._fbTrail = [];
     const last = tr[tr.length - 1];
