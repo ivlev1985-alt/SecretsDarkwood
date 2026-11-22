@@ -260,6 +260,7 @@
       // спрайт с fallback на воронку. Молнии можно оставить поверх спрайта.
       "area_visual": {
         "mode": "auto",
+        "cache_fps": 12,
         "height_px": 260,
         "height_wobble": 0.055,
         "base_width_px": 30,

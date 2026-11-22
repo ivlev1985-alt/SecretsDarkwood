@@ -33,6 +33,7 @@ export class HeroMageRenderer {
     this.dust = []; // пылинки из-под ног {x, y, vx, vy, life, max, r}
     this.prevStep = 0;
     this.lastTime = 0;
+    this._cacheKey = null; // ключ последней закэшированной позы
     this._pxScale = 1; // масштаб арта в пикселях offscreen (для shadowBlur)
   }
 
@@ -49,18 +50,50 @@ export class HeroMageRenderer {
     const pad = Math.max(0, cfg.frame_padding_px ?? 26);
     const pw = Math.max(1, Math.ceil((w + pad * 2) * scale));
     const ph = Math.max(1, Math.ceil((h + pad * 2) * scale));
-    const off = this._canvas('off', pw, ph);
-    const art = this._canvas('art', pw, ph);
-    const sil = this._canvas('sil', pw, ph);
-    if (!off || !art || !sil) return;
-    const o = this.offCtx, a = this.artCtx, s = this.silCtx;
+    if (!this._canvas('off', pw, ph) || !this._canvas('art', pw, ph) || !this._canvas('sil', pw, ph)) return;
 
-    // dt для частиц пыли (time — игровые секунды; пауза/перемотка — клампим)
-    let dt = (time || 0) - this.lastTime;
-    if (!(dt > 0) || dt > 0.1) dt = 0.016;
-    this.lastTime = time || 0;
-
+    // Кэш позы: векторная перерисовка (десятки патчей + контур) нужна только
+    // при смене квантованного кадра анимации (~cache_fps раз/сек), а не 60.
+    // Позиция, наклон (tilt) и альфа смерти применяются ниже каждый кадр,
+    // поэтому движение остаётся плавным — дёргается только внутренняя поза.
+    const cacheFps = cfg.cache_fps ?? 15;
+    const qf = Math.floor((time || 0) * cacheFps);
     const dir = this._dir(player);
+    const flashQ = Math.round(Math.max(0, player.hitFlash || 0) * 8);
+    const castQ = Math.round(Math.max(0, player.castT || 0) * 16);
+    const deathQ = Math.round(Math.max(0, player.deathT || 0) * 16);
+    const key = dir + '|' + qf + '|' + castQ + '|' + deathQ + '|' + flashQ
+      + '|' + (player.moving ? 1 : 0) + '|' + (player.alive === false ? 1 : 0);
+
+    if (key !== this._cacheKey) {
+      this._cacheKey = key;
+      const qt = qf / cacheFps; // квантованное время для фаз анимации
+      let dt = qt - this.lastTime;
+      if (!(dt > 0) || dt > 0.5) dt = 1 / cacheFps;
+      this.lastTime = qt;
+      this._renderFrame(player, qt, dir, cfg, pw, ph, dt);
+    }
+
+    // Смертельное затухание — плавно, вне кэша (альфа при drawImage).
+    let alpha = 1;
+    if (player.alive === false) {
+      const deathDur = Math.max(0.001, player.deathDuration ?? 1.1);
+      const deathK = player.deathT > 0 ? clamp01(1 - player.deathT / deathDur) : 1;
+      alpha = Math.max(0, 1 - deathK * (cfg.death_fade ?? 0.45));
+    }
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    if (player.tilt) ctx.rotate(player.tilt);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(this.off, -pw / 2, -ph / 2, pw, ph);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Полная перерисовка одного кэшируемого кадра в offscreen-холсты.
+  _renderFrame(player, time, dir, cfg, pw, ph, dt) {
+    const o = this.offCtx, a = this.artCtx, s = this.silCtx;
+    const art = this.art, sil = this.sil;
     const pose = this._pose(player, time, dir, dt);
 
     a.setTransform(1, 0, 0, 1, 0, 0);
@@ -100,15 +133,6 @@ export class HeroMageRenderer {
       o.drawImage(sil, OUTLINE_OFF[i] * k, OUTLINE_OFF[i + 1] * k);
     }
     o.drawImage(art, 0, 0);
-
-    const alpha = Math.max(0, 1 - pose.deathK * (cfg.death_fade ?? 0.45));
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    if (player.tilt) ctx.rotate(player.tilt);
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(this.off, -pw / 2, -ph / 2, pw, ph);
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
 
   _canvas(key, pw, ph) {

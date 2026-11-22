@@ -66,9 +66,8 @@ export class TornadoRenderer {
     ctx.scale(life.scale, life.scale);
     ctx.globalAlpha = life.alpha;
 
-    this._drawGround(ctx, area, visual, geom, life, age);
-
     if (img) {
+      this._drawGround(ctx, area, visual, geom, life, age);
       this._drawSprite(ctx, area, img, visual, life, age);
       if (this._lightningEnabled(visual, true)) {
         this._drawLightning(ctx, area, visual, geom, life, age);
@@ -76,17 +75,71 @@ export class TornadoRenderer {
       if (visual.particles && visual.particles.enabled !== false && visual.particles.with_sprite) {
         this._drawParticles(ctx, area, visual, geom, life, age);
       }
-    } else {
-      this._drawFunnel(ctx, area, visual, geom, life, age);
-      if (this._lightningEnabled(visual, false)) {
-        this._drawLightning(ctx, area, visual, geom, life, age);
-      }
-      if (!visual.particles || visual.particles.enabled !== false) {
-        this._drawParticles(ctx, area, visual, geom, life, age);
-      }
+      ctx.restore();
+      return;
     }
 
+    // Процедурный смерч: КЭШ ПОЗЫ. Полная перерисовка (58 колец × 40
+    // сегментов + ленты + частицы) стоит десятки мс на слабом GPU/CPU,
+    // поэтому рисуем её только при смене квантованного возраста
+    // (cache_fps раз/сек), а каждый кадр отдаём один drawImage.
+    // life.alpha и life.scale линейны (почти всё рисуется в 'lighter'),
+    // поэтому применяются при выводе — появление/исчезновение остаются
+    // плавными 60fps.
+    const cacheFps = visual.cache_fps ?? 12;
+    const qAge = Math.floor(age * cacheFps) / cacheFps;
+    const moveAngQ = area.move ? Math.round((area.move.angle || 0) * 10) : 0;
+    const seed = area.seed ?? 0;
+    const radQ = Math.round(area.radius || 100);
+    const key = qAge + '|' + radQ + '|' + seed + '|' + moveAngQ;
+    let c = area._tornadoCache;
+    if (!c || c.key !== key) {
+      if (!c || !c.canvas) {
+        if (typeof document === 'undefined') { ctx.restore(); return; }
+        c = area._tornadoCache = { canvas: document.createElement('canvas') };
+      }
+      this._renderTornadoFrame(c, area, visual, qAge, key);
+      if (!c.canvas) { ctx.restore(); return; }
+    }
+    if (c.canvas) {
+      ctx.drawImage(c.canvas, c.ox, c.oy, c.w, c.h);
+    }
     ctx.restore();
+  }
+
+  // Рендер одного кэшируемого кадра смерча (полный масштаб 1:1, alpha=1).
+  _renderTornadoFrame(c, area, visual, qAge, key) {
+    const geom = this._geometry(area, visual, qAge);
+    const lifeFull = { alpha: 1, scale: 1, inK: 1, outK: 1 };
+    const radius = area.radius || 100;
+    // Границы кадра: воронка рисуется вверх от (0,0) до -height,
+    // вниз — земля/тени, в стороны — sway + верхняя ширина.
+    const sidePad = (visual.sway_px ?? radius * 0.12)
+      + Math.abs(visual.lean_px ?? 0) + Math.abs(visual.move_lean_px ?? 0)
+      + (visual.turbulence_px ?? 2) + 10;
+    const w = Math.ceil(Math.max(geom.baseHalf, geom.topHalf) * 2 + sidePad * 2);
+    const h = Math.ceil(geom.height + radius * 1.3 + 24);
+    const ox = -Math.floor(w / 2);
+    const oy = -(h - Math.ceil(radius * 0.9)); // (0,0) земли внутри кадра
+    if (c.canvas.width !== w || c.canvas.height !== h) {
+      c.canvas.width = w; c.canvas.height = h;
+    }
+    const x = c.canvas.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.clearRect(0, 0, w, h);
+    x.save();
+    x.translate(-ox, -oy);
+    this._drawGround(x, area, visual, geom, lifeFull, qAge);
+    this._drawFunnel(x, area, visual, geom, lifeFull, qAge);
+    if (this._lightningEnabled(visual, false)) {
+      this._drawLightning(x, area, visual, geom, lifeFull, qAge);
+    }
+    if (!visual.particles || visual.particles.enabled !== false) {
+      this._drawParticles(x, area, visual, geom, lifeFull, qAge);
+    }
+    x.restore();
+    c.key = key;
+    c.w = w; c.h = h; c.ox = ox; c.oy = oy;
   }
 
   _life(area, visual, age) {

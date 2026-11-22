@@ -48,19 +48,70 @@ export class SkeletonArcherRenderer {
     const pad = Math.max(0, cfg.frame_padding_px ?? 26);
     const pw = Math.max(1, Math.ceil((w + pad * 2) * scale));
     const ph = Math.max(1, Math.ceil((h + pad * 2) * scale));
-    const off = this._canvas('off', pw, ph);
-    const art = this._canvas('art', pw, ph);
-    const sil = this._canvas('sil', pw, ph);
-    if (!off || !art || !sil) return;
-    const o = this.offCtx, a = this.artCtx, s = this.silCtx;
 
-    // dt для частиц пыли
-    let dt = (time || 0) - this.lastTime;
-    if (!(dt > 0) || dt > 0.1) dt = 0.016;
-    this.lastTime = time || 0;
+    // Кэш позы ПЕРСОНАЛЬНЫЙ (на враге): один renderer обслуживает всех
+    // скелетов, поэтому холст, пыль и ключ храним в enemy._skelCache.
+    // Векторная перерисовка — только при смене квантованного кадра.
+    let c = enemy._skelCache;
+    if (!c || c.pw !== pw || c.ph !== ph) {
+      c = enemy._skelCache = {
+        key: null, pw, ph, dust: [], prevStep: 0, lastTime: 0,
+        canvas: (typeof document !== 'undefined') ? document.createElement('canvas') : null,
+        art: (typeof document !== 'undefined') ? document.createElement('canvas') : null,
+        sil: (typeof document !== 'undefined') ? document.createElement('canvas') : null
+      };
+      if (c.canvas) { c.canvas.width = pw; c.canvas.height = ph; c.ctx = c.canvas.getContext('2d'); }
+      if (c.art) { c.art.width = pw; c.art.height = ph; c.artCtx = c.art.getContext('2d'); }
+      if (c.sil) { c.sil.width = pw; c.sil.height = ph; c.silCtx = c.sil.getContext('2d'); }
+    }
+    if (!c.canvas) return;
 
+    const cacheFps = cfg.cache_fps ?? 15;
+    const qf = Math.floor((time || 0) * cacheFps);
     const dir = this._dir(enemy);
+    const flashQ = Math.round(Math.max(0, enemy.hitFlash || 0) * 8);
+    const shootQ = Math.round(Math.max(0, enemy.shootT || 0) * 16);
+    const deathQ = Math.round(Math.max(0, enemy.deathT || 0) * 16);
+    const key = dir + '|' + qf + '|' + shootQ + '|' + deathQ + '|' + flashQ
+      + '|' + (enemy.alive === false || enemy.deathT > 0 ? 1 : 0);
+
+    if (key !== c.key) {
+      c.key = key;
+      const qt = qf / cacheFps;
+      let dt = qt - c.lastTime;
+      if (!(dt > 0) || dt > 0.5) dt = 1 / cacheFps;
+      c.lastTime = qt;
+      this._renderFrame(enemy, qt, dir, cfg, c, dt);
+    }
+
+    // Затухание трупа — плавно, вне кэша
+    let alpha = 1;
+    if (enemy.deathT > 0 || enemy.alive === false) {
+      let deathDur = Math.max(0.001, enemy.deathDuration ?? 1.1);
+      if (typeof enemy.deathTiming === 'function') {
+        const t = enemy.deathTiming();
+        deathDur = Math.max(0.001, t.dur + t.fade);
+      }
+      const deathK = clamp01((enemy.deathT || 0) / deathDur);
+      alpha = Math.max(0, 1 - deathK * (cfg.death_fade ?? 0.45));
+    }
+    ctx.save();
+    ctx.translate(enemy.x, enemy.y);
+    if (enemy.tilt) ctx.rotate(enemy.tilt);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(c.canvas, -pw / 2, -ph / 2, pw, ph);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Полная перерисовка одного кэшируемого кадра скелета (личные холсты врага).
+  _renderFrame(enemy, time, dir, cfg, c, dt) {
+    const o = c.ctx, a = c.artCtx, s = c.silCtx;
+    const art = c.art, sil = c.sil;
+    const pw = c.pw, ph = c.ph;
+    this.dust = c.dust; this.prevStep = c.prevStep;
     const pose = this._pose(enemy, time, dir, dt);
+    c.prevStep = this.prevStep; c.dust = this.dust;
 
     a.setTransform(1, 0, 0, 1, 0, 0);
     a.clearRect(0, 0, pw, ph);
@@ -98,15 +149,6 @@ export class SkeletonArcherRenderer {
       o.drawImage(sil, OUTLINE_OFF[i] * k, OUTLINE_OFF[i + 1] * k);
     }
     o.drawImage(art, 0, 0);
-
-    const alpha = Math.max(0, 1 - pose.deathK * (cfg.death_fade ?? 0.45));
-    ctx.save();
-    ctx.translate(enemy.x, enemy.y);
-    if (enemy.tilt) ctx.rotate(enemy.tilt);
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(this.off, -pw / 2, -ph / 2, pw, ph);
-    ctx.globalAlpha = 1;
-    ctx.restore();
   }
 
   _canvas(key, pw, ph) {

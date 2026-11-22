@@ -31,6 +31,7 @@
     "procedural": {
       "enabled": true,
       "mode": "missing",
+      "cache_fps": 15,
       "frame_padding_px": 26,
       "shadow_color": "rgba(0,0,0,0.30)",
       "shadow_rx": 15,
@@ -129,6 +130,7 @@
       "death_slide_px": 5,
       "death_sink_px": 6,
       "death_fade": 0.45,
+      "cache_fps": 15,
       "frame_padding_px": 26,
       "outline": "#150a2e",
       "shadow_color": "rgba(0,0,0,0.30)",
