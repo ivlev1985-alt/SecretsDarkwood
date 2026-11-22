@@ -443,162 +443,146 @@ export class TornadoRenderer {
     ctx.fill();
     ctx.restore();
 
-    // Главная часть — множество тонких светящихся колец. Чем ближе к
-    // основанию, тем плотнее: так вихрь читается как закрученная спираль.
-    const ringCount = Math.max(4, Math.floor(visual.ring_count ?? visual.bands ?? 44));
-    const segments = Math.max(12, Math.floor(visual.ring_segments ?? 36));
-    const spacingPower = visual.ring_spacing_power ?? 1.32;
-    const ringWidth = Math.max(0.4, visual.ring_width_px ?? 1.15);
-    const ringGlowWidth = Math.max(0, visual.ring_glow_width_px ?? 6);
-    const ringAlpha = visual.ring_alpha ?? visual.band_alpha ?? 0.5;
-    const ringGlowAlpha = visual.ring_glow_alpha ?? 0.10;
-    const highlightAlpha = visual.ring_highlight_alpha ?? 0.8;
-    const highlightWidth = Math.max(0.4, visual.ring_highlight_width_px ?? 1.6);
-    const wobble = Math.max(0.001, visual.ring_wobble ?? 0.035);
-    const tiltBase = visual.ring_tilt ?? 0.14;
-    const tiltSpeed = visual.ring_tilt_speed ?? 0.65;
-    const squash = visual.ring_vertical_squash ?? 0.24;
-    const offsetPx = visual.ring_offset_px ?? 2;
-    const topBoost = visual.top_ring_boost ?? 1.07;
-    const glowColor = visual.ring_glow_color || visual.glow_color || '#1a8cff';
-    const highlightColor = visual.ring_highlight_color || '#f2ffff';
+    // Спиральные ленты — заменяют горизонтальные кольца.
+    // Каждая лента — одна path-операция из ~40 сегментов,
+    // вместо 58 колец × 40 сегментов = 3000 операций.
+    // 5 лент × 40 сегментов = 200 операций → в 15 раз быстрее.
+    const bandCount = Math.max(3, Math.floor(visual.spiral_bands ?? 5));
+    const bandSegments = Math.max(24, Math.floor(visual.band_segments ?? 40));
+    const bandWidth = Math.max(0.5, visual.band_width_px ?? 3.5);
+    const bandGlowWidth = Math.max(0, visual.band_glow_width_px ?? 8);
+    const bandAlpha = visual.band_alpha ?? 0.55;
+    const bandGlowAlpha = visual.band_glow_alpha ?? 0.12;
+    const bandHighlightAlpha = visual.band_highlight_alpha ?? 0.7;
+    const bandHighlightWidth = Math.max(0.5, visual.band_highlight_width_px ?? 1.8);
+    const bandWobble = Math.max(0.001, visual.band_wobble ?? 0.04);
+    const bandColorBottom = visual.band_color_bottom || visual.funnel_bottom || '#031a6b';
+    const bandColorMid = visual.band_color_mid || visual.funnel_mid || '#0066ff';
+    const bandColorTop = visual.band_color_top || visual.funnel_top || '#8ff4ff';
+    const bandHighlightColor = visual.band_highlight_color || '#f2ffff';
+    const bandGlowColor = visual.band_glow_color || visual.glow_color || '#1a8cff';
     const seed = area.seed ?? 1;
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    for (let i = 0; i < ringCount; i++) {
-      const u = (i + 0.5) / ringCount;
-      const t = Math.pow(u, spacingPower);
-      const y = -t * height;
-      const topK = t > 0.92 ? lerp(1, topBoost, (t - 0.92) / 0.08) : 1;
-      const half = Math.max(1, halfAt(t) * topK);
-      const ry = Math.max(
-        1,
-        half * squash * (0.86 + 0.22 * Math.sin(age * 0.63 + t * 5.7 + seed * 0.001))
-      );
-      const cx = centerAt(t)
-        + Math.sin(age * 0.9 + t * 3.1 + i * 0.23) * offsetPx * (0.2 + 0.8 * t);
-      const rot = tiltBase * Math.sin(age * tiltSpeed + t * 4.2 + i * 0.07)
-        * (0.35 + 0.65 * t);
-      const phase = seed * 0.0007 + age * spin * 0.55 + t * 6.4 + i * 0.41;
-      const alphaK = life.alpha
-        * (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, t)))
-        * (0.82 + 0.18 * hash(seed + i * 1.7));
 
-      if (ringGlowWidth > 0 && ringGlowAlpha > 0) {
-        ctx.globalAlpha = Math.min(1, alphaK * ringGlowAlpha * (0.55 + 0.45 * t));
-        ctx.strokeStyle = glowColor;
-        ctx.lineWidth = ringGlowWidth * (0.72 + 0.42 * t);
-        this._ringPath(ctx, cx, y, half, ry, rot, phase, wobble, segments);
+    for (let b = 0; b < bandCount; b++) {
+      const phase0 = age * spin * 1.15 + (b * TAU) / bandCount;
+      const amp = b * 0.6;
+
+      // Свечение ленты
+      if (bandGlowWidth > 0 && bandGlowAlpha > 0) {
+        ctx.globalAlpha = Math.min(1, life.alpha * bandGlowAlpha);
+        ctx.strokeStyle = bandGlowColor;
+        ctx.lineWidth = bandGlowWidth * (0.7 + 0.3 * Math.sin(age * 0.5 + b));
+        this._drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
+          spin, age, phase0, amp, bandWobble, bandSegments, 0, 1);
         ctx.stroke();
       }
 
-      ctx.globalAlpha = Math.min(1, alphaK * ringAlpha * (0.38 + 0.62 * t));
-      ctx.strokeStyle = this._ringColor(visual, t);
-      ctx.lineWidth = ringWidth * (0.82 + 0.35 * t);
-      this._ringPath(ctx, cx, y, half, ry, rot, phase, wobble, segments);
+      // Основная лента: цвет — средний тон воронки (низ/верх читаются
+      // за счёт градиентной подложки тела под лентами).
+      ctx.globalAlpha = Math.min(1, life.alpha * bandAlpha);
+      ctx.strokeStyle = mixColor(bandColorMid, bandColorTop, 0.35);
+      ctx.lineWidth = bandWidth * (0.8 + 0.2 * Math.sin(age * 0.7 + b));
+      this._drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
+        spin, age, phase0, amp, bandWobble, bandSegments, 0, 1);
       ctx.stroke();
 
-      // Яркая дуга с одной стороны кольца — ощущение вращения и блика.
-      if (highlightAlpha > 0 && (i % 2 === 0 || t > 0.82)) {
-        const a0 = age * spin * 1.1 + i * 0.9 + t * 2.4;
-        const span = 0.75 + 0.45 * hash(seed + i * 2.3);
-        ctx.globalAlpha = Math.min(1, alphaK * highlightAlpha * (0.35 + 0.65 * t));
-        ctx.strokeStyle = highlightColor;
-        ctx.lineWidth = highlightWidth * (0.8 + 0.4 * t);
-        this._ringArc(ctx, cx, y, half, ry, rot, phase, wobble, segments, a0, a0 + span);
+      // Яркая дуга с одной стороны — блик (часть спирали по t)
+      if (bandHighlightAlpha > 0) {
+        const t0 = (age * spin * 0.11 + b * 0.23) % 0.7;
+        const t1 = t0 + 0.3;
+        ctx.globalAlpha = Math.min(1, life.alpha * bandHighlightAlpha * 0.5);
+        ctx.strokeStyle = bandHighlightColor;
+        ctx.lineWidth = bandHighlightWidth;
+        this._drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
+          spin, age, phase0, amp, bandWobble, bandSegments, t0, t1);
         ctx.stroke();
       }
     }
     ctx.restore();
 
-    // Спиральные ленты, обвивающие вихрь.
-    const ribbons = Math.max(0, Math.floor(visual.ribbons ?? 2));
-    if (ribbons > 0) {
-      const segs = Math.max(16, Math.floor(visual.ribbon_segments ?? 44));
+    // Камни/обломки — разбросаны по высоте, поднимаются медленно
+    const debrisCount = Math.max(4, Math.floor(visual.debris_count ?? 8));
+    if (debrisCount > 0) {
       ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.lineCap = 'round';
-      for (let k = 0; k < ribbons; k++) {
-        const phase0 = age * spin * 1.15 + (k * TAU) / ribbons;
-        for (let pass = 0; pass < 2; pass++) {
-          ctx.globalAlpha = Math.min(
-            1,
-            life.alpha * (visual.ribbon_alpha ?? 0.18) * (pass === 0 ? 0.45 : 1)
-          );
-          ctx.strokeStyle = pass === 0
-            ? glowColor
-            : (visual.ribbon_color || '#bff6ff');
-          ctx.lineWidth = pass === 0
-            ? Math.max(1, visual.ribbon_glow_width_px ?? 4)
-            : Math.max(0.5, visual.ribbon_width_px ?? 1.2);
-          ctx.beginPath();
-          for (let i = 0; i <= segs; i++) {
-            const t = i / segs;
-            const half = halfAt(t);
-            const ry = Math.max(1, half * squash);
-            const ang = phase0 + t * TAU * 1.35;
-            const x = centerAt(t) + Math.cos(ang) * half * 0.96;
-            const y = -t * height + Math.sin(ang) * ry * 0.95;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.stroke();
+      for (let i = 0; i < debrisCount; i++) {
+        const seedI = i * 37.1 + seed;
+        const t = (hash(seedI) + age * 0.12) % 1;
+        const half = halfAt(t);
+        const cx = centerAt(t);
+        const ang = spin * age * 0.8 + t * Math.PI * 3 + i * 1.7;
+        const dist = half * (0.5 + hash(seedI + 1) * 0.5);
+        const x = cx + Math.cos(ang) * dist;
+        const y = -t * height + Math.sin(ang) * half * 0.15;
+        const rot = ang + hash(seedI + 2) * 0.5;
+        const size = 2 + hash(seedI + 3) * 4;
+        const alpha = life.alpha * (0.4 + 0.6 * (1 - t));
+
+        ctx.globalAlpha = Math.min(1, alpha);
+        ctx.fillStyle = '#3a3a3a';
+        ctx.strokeStyle = '#2a2a2a';
+        ctx.lineWidth = 0.8;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.beginPath();
+        for (let j = 0; j < 6; j++) {
+          const a = (j / 6) * TAU;
+          const r = size * (0.7 + hash(seedI + j * 0.3) * 0.3);
+          if (j === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+          else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
         }
-      }
-      ctx.restore();
-    }
-
-    // Светящееся ядро внутри воронки.
-    const coreAlpha = visual.core_alpha ?? 0.22;
-    if (coreAlpha > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha *= coreAlpha;
-      const coreCx = centerAt(0.58);
-      const coreCy = -height * 0.58;
-      const coreR = Math.max(baseHalf * 1.4, topHalf * 0.55);
-      const core = ctx.createRadialGradient(coreCx, coreCy, 0, coreCx, coreCy, coreR);
-      core.addColorStop(0, 'rgba(255,255,255,0.85)');
-      core.addColorStop(0.22, visual.core_color || '#eaffff');
-      core.addColorStop(0.62, visual.glow_color || '#1a8cff');
-      core.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = core;
-      ctx.beginPath();
-      ctx.ellipse(coreCx, coreCy, coreR, height * 0.42, 0, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // Крупные верхние кольца вместо «облачной» шапки.
-    const crownAlpha = visual.top_cloud_alpha ?? 0.24;
-    if (crownAlpha > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (let k = 0; k < 3; k++) {
-        const t = 1 - k * 0.018;
-        const half = halfAt(1) * (1.02 + k * 0.045);
-        const cy = -height + k * 1.5;
-        const cx = centerAt(1) + Math.sin(age * 0.52 + k * 2.0) * topHalf * 0.045;
-        const ry = Math.max(1, half * squash * (1.15 + k * 0.12));
-        const rot = tiltBase * 1.35 * Math.sin(age * 0.45 + k * 1.6);
-        const phase = seed * 0.0007 + age * spin * 0.4 + t * 5.1 + k * 1.2;
-        ctx.globalAlpha = Math.min(1, life.alpha * crownAlpha * (0.55 - k * 0.12));
-        ctx.strokeStyle = k === 0
-          ? highlightColor
-          : (visual.ring_color_top || visual.funnel_top || '#c8fbff');
-        ctx.lineWidth = 2.2 - k * 0.45;
-        this._ringPath(ctx, cx, cy, half, ry, rot, phase, wobble, segments);
+        ctx.closePath();
+        ctx.fill();
         ctx.stroke();
-        if (k === 0) {
-          ctx.globalAlpha = Math.min(1, life.alpha * crownAlpha * 0.08);
-          ctx.fillStyle = visual.ring_color_top || visual.funnel_top || '#c8fbff';
-          ctx.fill();
-        }
+        ctx.restore();
       }
       ctx.restore();
+    }
+
+    // Пыль у основания — несколько облаков с волнами
+    const dustCloudCount = Math.max(3, Math.floor(visual.dust_clouds ?? 5));
+    if (dustCloudCount > 0) {
+      ctx.save();
+      ctx.globalAlpha = life.alpha * 0.5;
+      ctx.fillStyle = '#c8b898';
+      for (let i = 0; i < dustCloudCount; i++) {
+        const seedI = i * 13.7;
+        const cx = Math.sin(age * 0.5 + seedI) * baseHalf * 0.6;
+        const cy = 2 + Math.sin(age * 0.3 + seedI * 2) * 2;
+        const r = baseHalf * (0.3 + hash(seedI) * 0.3);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Спиральная лента: path от t0 до t1 (0..1 по высоте), угол растёт с
+  // высотой — лента обвивает воронку по спирали, как мазки кисти на референсе.
+  _drawSpiralBand(ctx, height, baseHalf, topHalf, centerAt, halfAt,
+    spin, age, phase0, amp, wobble, segments, t0, t1) {
+    const span = Math.max(0.001, t1 - t0);
+    const n = Math.max(8, Math.round(segments * span));
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const t = t0 + (span * i) / n;
+      const y = -t * height;
+      const half = halfAt(t);
+      const cx = centerAt(t);
+      // Витков больше внизу (ленты плотнее у основания — как на референсе)
+      const ang = phase0 + Math.pow(t, 0.8) * Math.PI * 4 + amp;
+      const wobbleX = wobble * Math.sin(age * 2 + t * 6) * half * 0.15;
+      const wobbleY = wobble * Math.cos(age * 1.5 + t * 4) * half * 0.05;
+      const x = cx + Math.cos(ang) * half * 0.9 + wobbleX;
+      const y2 = y + Math.sin(ang) * half * 0.2 + wobbleY;
+      if (i === 0) ctx.moveTo(x, y2);
+      else ctx.lineTo(x, y2);
     }
   }
 
