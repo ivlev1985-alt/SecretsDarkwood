@@ -64,14 +64,15 @@ export class FireballRenderer {
     const sp = Math.hypot(p.vx, p.vy) || 1;
     const bx = -p.vx / sp, by = -p.vy / sp;
 
+    // Дым (позади шара, поднимается) — первым слоем, чтобы огонь и шар
+    // лежали поверх него, а не перекрывали.
+    this._drawSmoke(ctx, p.x, p.y, r, t, bx, by);
+
     // Огненный хвост (trail).
     if (tr.length > 1) this._drawTrail(ctx, tr, r, t);
 
-    // Дым (позади шара, поднимается).
-    this._drawSmoke(ctx, p.x, p.y, r, t, bx, by);
-
     // Искры вокруг шара.
-    this._drawSparks(ctx, p.x, p.y, r, t);
+    this._drawSparks(ctx, p.x, p.y, r, t, bx, by);
 
     // Огненный шар.
     this._drawFireball(ctx, p.x, p.y, r, t);
@@ -143,7 +144,8 @@ export class FireballRenderer {
 
   // === ОГНЕННЫЙ ХВОСТ (trail) ===
   // trail[0] — самая старая точка (хвост), trail[n-1] — голова (шар).
-  // Сегменты рисуем от хвоста к голове: дым -> огонь -> белое ядро.
+  // Хвост «развевается»: каждая точка смещается вдоль нормали к оси
+  // сегмента волной, бегущей от головы к хвосту, плюс пульс толщины.
   _drawTrail(ctx, tr, r, t) {
     const n = tr.length;
     if (n < 2) return;
@@ -152,16 +154,37 @@ export class FireballRenderer {
     ctx.lineJoin = 'round';
     ctx.globalCompositeOperation = 'lighter';
 
+    // Пульс пламени: два несинхронных осциллятора.
+    const pulse = 1 + Math.sin(t * 22) * 0.18 + Math.sin(t * 35 + 1.7) * 0.1;
+
+    // Считаем «развевающиеся» точки один раз — слои используют их общими.
+    const pts = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const k = i / (n - 1);           // 0 — хвост, 1 — голова
+      // Нормаль к локальному направлению хвоста.
+      const a = tr[Math.max(0, i - 1)];
+      const b = tr[Math.min(n - 1, i + 1)];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      // Волна бежит от головы к хвосту; амплитуда растёт к хвосту
+      // (у головы хвост «пришит» к шару).
+      const wave = Math.sin(t * 9 - k * 7.5) * (1 - k) * r * 0.85
+        + Math.sin(t * 15.7 - k * 12 + 2.1) * (1 - k) * r * 0.35;
+      pts[i] = { x: tr[i].x + nx * wave, y: tr[i].y + ny * wave };
+    }
+
     for (let i = 1; i < n; i++) {
-      const k = i / (n - 1);          // 0 — хвост, 1 — голова
-      const a = tr[i - 1], b = tr[i];
-      // Дымная часть (хвост) рисуется в source-over, огненная — в lighter.
-      if (k < 0.45) continue;          // дым рисует _drawSmoke
-      const f = (k - 0.45) / 0.55;     // 0..1 по огненной части
+      const k = i / (n - 1);
+      if (k < 0.35) continue;          // дым рисует _drawSmoke
+      const f = (k - 0.35) / 0.65;     // 0..1 по огненной части
+      const a = pts[i - 1], b = pts[i];
+      // Пульс толщины сильнее к хвосту — там пламя «гуляет» активнее.
+      const puff = pulse * (1 + (1 - f) * 0.35);
       // Широкий тёмно-оранжевый подложечный слой.
-      ctx.globalAlpha = 0.25 + f * 0.45;
+      ctx.globalAlpha = (0.25 + f * 0.45) * (0.8 + 0.2 * Math.sin(t * 27 + i * 2));
       ctx.strokeStyle = '#ff4400';
-      ctx.lineWidth = r * (0.4 + f * 1.1);
+      ctx.lineWidth = r * (0.4 + f * 1.1) * puff;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -169,7 +192,7 @@ export class FireballRenderer {
       // Яркая сердцевина.
       ctx.globalAlpha = 0.3 + f * 0.6;
       ctx.strokeStyle = f > 0.6 ? '#ffcc44' : '#ff8800';
-      ctx.lineWidth = r * (0.15 + f * 0.45);
+      ctx.lineWidth = r * (0.15 + f * 0.45) * puff;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -213,7 +236,7 @@ export class FireballRenderer {
   // Клубы рождаются за шаром, расходятся в стороны, поднимаются вверх
   // и растворяются. source-over — дым тёмный, lighter его «съест».
   _drawSmoke(ctx, x, y, r, t, bx, by) {
-    const count = 5;
+    const count = 6;
     ctx.save();
     for (let i = 0; i < count; i++) {
       const slot = Math.floor(t * 2.2 + i * 1.9);
@@ -222,18 +245,19 @@ export class FireballRenderer {
       const jitter = (hash(seed) - 0.5) * 1.2;
       const dx = bx + Math.cos(jitter + TAU * hash(seed + 2)) * 0.5;
       const dy = by + Math.sin(jitter + TAU * hash(seed + 2)) * 0.5;
-      const dist = r * (0.8 + phase * 2.6);
+      const dist = r * (1.2 + phase * 3.2);
       const sx = x + dx * dist;
-      const sy = y + dy * dist - phase * r * 1.6; // дым поднимается
-      const size = r * (0.45 + phase * 1.5);
-      const alpha = (1 - phase) * 0.22 * Math.min(1, phase * 6);
+      const sy = y + dy * dist - phase * r * 2.2; // дым поднимается
+      const size = r * (0.7 + phase * 2.2);
+      // Резкий вход (минимум фазы), затем медленное растворение.
+      const alpha = (1 - phase) * 0.5 * Math.min(1, phase * 8);
 
       if (size > 2 && alpha > 0.02) {
         ctx.globalAlpha = alpha;
         const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, size);
-        sg.addColorStop(0, '#6b5a48');
-        sg.addColorStop(0.6, '#3d3126');
-        sg.addColorStop(1, 'rgba(30,20,10,0)');
+        sg.addColorStop(0, '#8a7a66');
+        sg.addColorStop(0.55, '#5a4c3e');
+        sg.addColorStop(1, 'rgba(40,30,22,0)');
         ctx.fillStyle = sg;
         ctx.beginPath();
         ctx.arc(sx, sy, size, 0, TAU);
@@ -247,7 +271,10 @@ export class FireballRenderer {
 
   _drawExplosion(ctx, p, t) {
     const r = p.radius || 12;
-    const explosionR = p.explosionR || 100;
+    // Визуал привязан к РЕАЛЬНОМУ радиусу сплэша (CombatSystem использует
+    // p.explosionR для урона): все фазы умещаются внутри него, чтобы игрок
+    // видел честную зону поражения.
+    const eR = Math.max(10, p.explosionR || 100) * 0.85;
     const maxLife = p.maxLife || 0.5;
     const life = p.life || 0;
     const k = clamp01(life / maxLife); // 0..1 за время взрыва
@@ -257,7 +284,7 @@ export class FireballRenderer {
     // Фаза 0–0.15: яркая вспышка.
     if (k < 0.15) {
       const flashK = k / 0.15;
-      const flashR = explosionR * (0.3 + flashK * 0.7);
+      const flashR = eR * (0.25 + flashK * 0.55);
       const flash = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, flashR);
       flash.addColorStop(0, `rgba(255,255,200,${1 - flashK})`);
       flash.addColorStop(0.3, `rgba(255,200,50,${(1 - flashK) * 0.7})`);
@@ -271,7 +298,7 @@ export class FireballRenderer {
     // Фаза 0.05–0.6: расширяющееся огненное кольцо.
     if (k > 0.05 && k < 0.6) {
       const ringK = clamp01((k - 0.05) / 0.55);
-      const ringR = explosionR * ringK;
+      const ringR = eR * ringK;
       const ringAlpha = (1 - ringK) * 0.7;
 
       // Внешнее кольцо огня.
@@ -296,15 +323,16 @@ export class FireballRenderer {
       ctx.stroke();
     }
 
-    // Фаза 0.1–0.8: разлетающиеся частицы (искры).
+    // Фаза 0.1–0.8: разлетающиеся частицы (искры). Летят строго
+    // в пределах радиуса сплэша.
     if (k > 0.1 && k < 0.8) {
       const partK = clamp01((k - 0.1) / 0.7);
       const partCount = 24;
       for (let i = 0; i < partCount; i++) {
         const seed = i * 31.7;
         const baseAng = (i / partCount) * TAU + hash(seed + 99) * 0.5;
-        const speed = 0.6 + hash(seed + 77) * 0.8;
-        const dist = explosionR * partK * speed;
+        const speed = 0.5 + hash(seed + 77) * 0.5; // 0.5..1.0 — не вылетают за eR
+        const dist = eR * partK * speed;
         const px = p.x + Math.cos(baseAng) * dist;
         const py = p.y + Math.sin(baseAng) * dist;
         const size = r * 0.3 * (1 - partK * 0.7);
@@ -327,7 +355,7 @@ export class FireballRenderer {
       for (let i = 0; i < smokeCount; i++) {
         const seed = i * 41.3;
         const ang = (i / smokeCount) * TAU + hash(seed) * 0.8;
-        const dist = explosionR * smokeK * (0.5 + hash(seed + 1) * 0.5);
+        const dist = eR * smokeK * (0.4 + hash(seed + 1) * 0.5);
         const sx = p.x + Math.cos(ang) * dist;
         const sy = p.y + Math.sin(ang) * dist - smokeK * 20;
         const size = r * (1 + smokeK * 3);
@@ -350,7 +378,7 @@ export class FireballRenderer {
     // Фаза 0.5–1.0: тёмное ядро (остывающий пепел).
     if (k > 0.5 && k < 1.0) {
       const ashK = clamp01((k - 0.5) / 0.5);
-      const ashR = explosionR * (0.3 + ashK * 0.5);
+      const ashR = eR * (0.3 + ashK * 0.5);
       const ashAlpha = (1 - ashK) * 0.2;
       const ash = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, ashR);
       ash.addColorStop(0, `rgba(80,60,40,${ashAlpha})`);
