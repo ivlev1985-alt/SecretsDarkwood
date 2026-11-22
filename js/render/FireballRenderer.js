@@ -51,7 +51,7 @@ export class FireballRenderer {
 
     // Хвост ведём сами: fireball (в отличие от nova) trail не имеет.
     // Точки добавляем только при реальном перемещении, кольцевой лимит.
-    const maxTrail = Math.max(4, this.cfg.trail_length ?? 14);
+    const maxTrail = Math.max(4, this.cfg.trail_length ?? 9);
     let tr = p._fbTrail;
     if (!tr) tr = p._fbTrail = [];
     const last = tr[tr.length - 1];
@@ -59,6 +59,7 @@ export class FireballRenderer {
       tr.push({ x: p.x, y: p.y });
       while (tr.length > maxTrail) tr.shift();
     }
+    p._fbBoomScaled = false; // взрыв ещё не шел — можно масштабировать жизнь
 
     // Направление назад (против скорости) — для хвоста/дыма/искр.
     const sp = Math.hypot(p.vx, p.vy) || 1;
@@ -143,9 +144,10 @@ export class FireballRenderer {
   }
 
   // === ОГНЕННЫЙ ХВОСТ (trail) ===
-  // trail[0] — самая старая точка (хвост), trail[n-1] — голова (шар).
-  // Хвост «развевается»: каждая точка смещается вдоль нормали к оси
-  // сегмента волной, бегущей от головы к хвосту, плюс пульс толщины.
+  // trail[0] — самая старая точка (кончик хвоста), trail[n-1] — голова (шар).
+  // Языки пламени: амплитуда извивания случайная (slot-шум, обновляется
+  // дискретно — «рваные» всполохи), максимальна у головы и гаснет к
+  // кончику, чтобы снаряд не «размахивал» хвостом.
   _drawTrail(ctx, tr, r, t) {
     const n = tr.length;
     if (n < 2) return;
@@ -155,44 +157,49 @@ export class FireballRenderer {
     ctx.globalCompositeOperation = 'lighter';
 
     // Пульс пламени: два несинхронных осциллятора.
-    const pulse = 1 + Math.sin(t * 22) * 0.18 + Math.sin(t * 35 + 1.7) * 0.1;
+    const pulse = 1 + Math.sin(t * 22) * 0.14 + Math.sin(t * 35 + 1.7) * 0.08;
+    // Дискретный «слот» — источник рваности: амплитуда меняется скачками,
+    // как настоящие всполохи, а не плавно кружится.
+    const slot = Math.floor(t * 14);
 
     // Считаем «развевающиеся» точки один раз — слои используют их общими.
     const pts = new Array(n);
     for (let i = 0; i < n; i++) {
-      const k = i / (n - 1);           // 0 — хвост, 1 — голова
+      const k = i / (n - 1);           // 0 — кончик, 1 — голова
       // Нормаль к локальному направлению хвоста.
       const a = tr[Math.max(0, i - 1)];
       const b = tr[Math.min(n - 1, i + 1)];
       const dx = b.x - a.x, dy = b.y - a.y;
       const len = Math.hypot(dx, dy) || 1;
       const nx = -dy / len, ny = dx / len;
-      // Волна бежит от головы к хвосту; амплитуда растёт к хвосту
-      // (у головы хвост «пришит» к шару).
-      const wave = Math.sin(t * 9 - k * 7.5) * (1 - k) * r * 0.85
-        + Math.sin(t * 15.7 - k * 12 + 2.1) * (1 - k) * r * 0.35;
+      // Случайная амплитуда на сегмент (slot-шум) — непредсказуемо.
+      const amp = 0.35 + hash(i * 7.7 + slot * 3.13) * 0.65;
+      // Профиль: 0 у кончика, максимум у головы — кончик почти неподвижен.
+      const prof = k * k;
+      const wave = Math.sin(t * 13 - k * 5.5 + hash(slot + i) * TAU)
+        * prof * amp * r * 0.4;
       pts[i] = { x: tr[i].x + nx * wave, y: tr[i].y + ny * wave };
     }
 
     for (let i = 1; i < n; i++) {
       const k = i / (n - 1);
-      if (k < 0.35) continue;          // дым рисует _drawSmoke
-      const f = (k - 0.35) / 0.65;     // 0..1 по огненной части
+      if (k < 0.3) continue;           // дым рисует _drawSmoke
+      const f = (k - 0.3) / 0.7;       // 0..1 по огненной части
       const a = pts[i - 1], b = pts[i];
-      // Пульс толщины сильнее к хвосту — там пламя «гуляет» активнее.
-      const puff = pulse * (1 + (1 - f) * 0.35);
+      // Рваная alpha по slot-шуму — язык пламени то вспыхивает, то гаснет.
+      const flick = 0.65 + hash(i * 3.3 + slot * 1.7) * 0.35;
       // Широкий тёмно-оранжевый подложечный слой.
-      ctx.globalAlpha = (0.25 + f * 0.45) * (0.8 + 0.2 * Math.sin(t * 27 + i * 2));
+      ctx.globalAlpha = (0.2 + f * 0.4) * flick;
       ctx.strokeStyle = '#ff4400';
-      ctx.lineWidth = r * (0.4 + f * 1.1) * puff;
+      ctx.lineWidth = r * (0.3 + f * 0.85) * pulse;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
       // Яркая сердцевина.
-      ctx.globalAlpha = 0.3 + f * 0.6;
+      ctx.globalAlpha = (0.25 + f * 0.55) * flick;
       ctx.strokeStyle = f > 0.6 ? '#ffcc44' : '#ff8800';
-      ctx.lineWidth = r * (0.15 + f * 0.45) * puff;
+      ctx.lineWidth = r * (0.12 + f * 0.35) * pulse;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -233,24 +240,24 @@ export class FireballRenderer {
   }
 
   // === ДЫМ ===
-  // Клубы рождаются за шаром, расходятся в стороны, поднимаются вверх
-  // и растворяются. source-over — дым тёмный, lighter его «съест».
+  // Узкий и длинный: клубы расходятся медленно, поднимаются высоко,
+  // растворяются к концу фазы. source-over — дым тёмный, lighter его «съест».
   _drawSmoke(ctx, x, y, r, t, bx, by) {
-    const count = 6;
+    const count = 5;
     ctx.save();
     for (let i = 0; i < count; i++) {
-      const slot = Math.floor(t * 2.2 + i * 1.9);
+      const slot = Math.floor(t * 1.6 + i * 1.9);
       const seed = i * 23.7 + slot * 1.31;
-      const phase = (t * 2.2 + i * 1.9) % 1;
+      const phase = (t * 1.6 + i * 1.9) % 1;
       const jitter = (hash(seed) - 0.5) * 1.2;
       const dx = bx + Math.cos(jitter + TAU * hash(seed + 2)) * 0.5;
       const dy = by + Math.sin(jitter + TAU * hash(seed + 2)) * 0.5;
-      const dist = r * (1.2 + phase * 3.2);
+      const dist = r * (1.5 + phase * 4.5);
       const sx = x + dx * dist;
-      const sy = y + dy * dist - phase * r * 2.2; // дым поднимается
-      const size = r * (0.7 + phase * 2.2);
-      // Резкий вход (минимум фазы), затем медленное растворение.
-      const alpha = (1 - phase) * 0.5 * Math.min(1, phase * 8);
+      const sy = y + dy * dist - phase * r * 3.5; // дым поднимается выше
+      const size = r * (0.35 + phase * 0.9);       // узкий
+      // Резкий вход, затем медленное растворение.
+      const alpha = (1 - phase) * 0.45 * Math.min(1, phase * 10);
 
       if (size > 2 && alpha > 0.02) {
         ctx.globalAlpha = alpha;
@@ -275,15 +282,21 @@ export class FireballRenderer {
     // p.explosionR для урона): все фазы умещаются внутри него, чтобы игрок
     // видел честную зону поражения.
     const eR = Math.max(10, p.explosionR || 100) * 0.85;
-    const maxLife = p.maxLife || 0.5;
+    // Взрыв по спрайтовой анимации был ~0.4 сек — слишком быстро, чтобы
+    // считаться. Растягиваем жизнь один раз при входе в фазу взрыва.
+    if (!p._fbBoomScaled) {
+      p._fbBoomScaled = true;
+      p.maxLife = Math.max(p.maxLife || 0.4, (this.cfg.boom_life_ms ?? 900) / 1000);
+    }
+    const maxLife = p.maxLife || 0.9;
     const life = p.life || 0;
     const k = clamp01(life / maxLife); // 0..1 за время взрыва
 
     ctx.save();
 
-    // Фаза 0–0.15: яркая вспышка.
-    if (k < 0.15) {
-      const flashK = k / 0.15;
+    // Фаза 0–0.12: первичная белая вспышка.
+    if (k < 0.12) {
+      const flashK = k / 0.12;
       const flashR = eR * (0.25 + flashK * 0.55);
       const flash = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, flashR);
       flash.addColorStop(0, `rgba(255,255,200,${1 - flashK})`);
@@ -295,10 +308,35 @@ export class FireballRenderer {
       ctx.fill();
     }
 
-    // Фаза 0.05–0.6: расширяющееся огненное кольцо.
-    if (k > 0.05 && k < 0.6) {
-      const ringK = clamp01((k - 0.05) / 0.55);
-      const ringR = eR * ringK;
+    // Вторичные вспышки: 3 «хлопка» в разные моменты, в разных точках
+    // вокруг центра — взрыв живёт дольше и читается.
+    const flashes = [
+      { at: 0.10, dur: 0.10, ang: 0.7, dist: 0.45, hue: '255,220,120' },
+      { at: 0.26, dur: 0.12, ang: 3.6, dist: 0.55, hue: '255,170,60' },
+      { at: 0.44, dur: 0.12, ang: 5.3, dist: 0.4, hue: '255,120,40' }
+    ];
+    for (const fl of flashes) {
+      if (k < fl.at || k > fl.at + fl.dur) continue;
+      const fk = (k - fl.at) / fl.dur;          // 0..1 внутри вспышки
+      const a = Math.sin(Math.PI * fk);          // плавный пик
+      const fx = p.x + Math.cos(fl.ang + fk * 1.5) * eR * fl.dist;
+      const fy = p.y + Math.sin(fl.ang + fk * 1.5) * eR * fl.dist * 0.8;
+      const fr = eR * (0.12 + fk * 0.2);
+      const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+      fg.addColorStop(0, `rgba(${fl.hue},${a * 0.85})`);
+      fg.addColorStop(0.5, `rgba(255,90,20,${a * 0.4})`);
+      fg.addColorStop(1, 'rgba(255,60,0,0)');
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(fx, fy, fr, 0, TAU);
+      ctx.fill();
+    }
+
+    // Фаза 0.05–0.75: расширяющееся огненное кольцо (медленнее).
+    if (k > 0.05 && k < 0.75) {
+      const ringK = clamp01((k - 0.05) / 0.7);
+      const ease = 1 - Math.pow(1 - ringK, 1.6); // выбег: старт резче, дальше замедление
+      const ringR = eR * ease;
       const ringAlpha = (1 - ringK) * 0.7;
 
       // Внешнее кольцо огня.
@@ -323,16 +361,16 @@ export class FireballRenderer {
       ctx.stroke();
     }
 
-    // Фаза 0.1–0.8: разлетающиеся частицы (искры). Летят строго
-    // в пределах радиуса сплэша.
-    if (k > 0.1 && k < 0.8) {
-      const partK = clamp01((k - 0.1) / 0.7);
+    // Фаза 0.1–0.9: разлетающиеся частицы (искры). Медленнее и дольше.
+    if (k > 0.1 && k < 0.9) {
+      const partK = clamp01((k - 0.1) / 0.8);
+      const ease = 1 - Math.pow(1 - partK, 1.8); // замедление к концу
       const partCount = 24;
       for (let i = 0; i < partCount; i++) {
         const seed = i * 31.7;
         const baseAng = (i / partCount) * TAU + hash(seed + 99) * 0.5;
         const speed = 0.5 + hash(seed + 77) * 0.5; // 0.5..1.0 — не вылетают за eR
-        const dist = eR * partK * speed;
+        const dist = eR * ease * speed;
         const px = p.x + Math.cos(baseAng) * dist;
         const py = p.y + Math.sin(baseAng) * dist;
         const size = r * 0.3 * (1 - partK * 0.7);
