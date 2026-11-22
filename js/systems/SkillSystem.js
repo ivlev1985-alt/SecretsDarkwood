@@ -13,6 +13,9 @@ export class SkillSystem {
     this.areas = []; // { cfg, level, x, y, ttl, tickT, color, weaponId }
     this.lightningFx = []; // { x1, y1, x2, y2, t, max } — ломаные молний
     this.auraTick = 0;
+    // true — процедурный FrostRingRenderer взял орбы на себя (ставит Game
+    // каждый кадр перед drawOrbits): собственные шары не рисуем.
+    this.orbitsHandled = false;
     this.clock = 0; // общее время для кулдаунов попаданий орбитальных шаров
     this._orbHitAt = new WeakMap(); // enemy -> время последнего попадания шаром
     this.pool = new Pool(() => new Projectile(), 128);
@@ -599,10 +602,19 @@ export class SkillSystem {
       const orbR = c.orb_radius ?? 10;
       const a0 = st.orbitAngle;
       const a0Far = st.orbitFarAngle;
+      // Для процедурного рендера осколков у каждого шара храним параметры
+      // его орбиты: центр, радиус, угол, направление и угол собственного
+      // вращения (вокруг своей оси).
+      const mkOrb = (a, R, far, dir) => ({
+        x: player.x + Math.cos(a) * R, y: player.y + Math.sin(a) * R,
+        r: orbR, far,
+        cx: player.x, cy: player.y, orbitR: R, angle: a, dir,
+        spin: (st.orbSpin && st.orbSpin[orbs.length]) || 0
+      });
       const orbs = [];
       for (let i = 0; i < nearN; i++) {
         const a = a0 + (Math.PI * 2 * i) / nearN;
-        orbs.push({ x: player.x + Math.cos(a) * nearR, y: player.y + Math.sin(a) * nearR, r: orbR, far: false });
+        orbs.push(mkOrb(a, nearR, false, nearDir));
       }
       // Дальняя орбита смещена на полшага, чтобы шары чередовались с ближними.
       // Если на дальней орбите всего один шар — берём полшага ближней,
@@ -612,10 +624,13 @@ export class SkillSystem {
         : (nearN > 1 ? Math.PI / nearN : 0);
       for (let i = 0; i < farN; i++) {
         const a = a0Far + farOffset + (Math.PI * 2 * i) / farN;
-        orbs.push({ x: player.x + Math.cos(a) * farR, y: player.y + Math.sin(a) * farR, r: orbR, far: true });
+        orbs.push(mkOrb(a, farR, true, farDir));
       }
       st.orbs = orbs;
       this._syncOrbSprites(st, orbs.length);
+      // синхронизировали список орбов — обновляем углы собственного вращения
+      for (let i = 0; i < orbs.length; i++) orbs[i].spin = (st.orbSpin && st.orbSpin[i]) || 0;
+      st.player = player; // процедурному рендеру нужен центр кольца
       if (!enemies || !enemies.length) continue;
 
       const slow = this.weaponSlow(st);
@@ -666,8 +681,9 @@ export class SkillSystem {
   }
 
   // Отрисовка ледяных шаров: спрайт из атласа (кадр + вращение),
-  // программная заглушка — если арта нет.
+  // программные осколки (FrostRingRenderer) или заглушка — если арта нет.
   drawOrbits(ctx) {
+    if (this.orbitsHandled) return; // процедурный рендерер уже нарисовал
     for (const st of this.weapons.values()) {
       if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
       if (!st.orbs) continue;
