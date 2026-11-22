@@ -23,6 +23,7 @@ import { HeroMageRenderer } from '../render/HeroMageRenderer.js';
 import { SkeletonArcherRenderer } from '../render/SkeletonArcherRenderer.js';
 import { TornadoRenderer } from '../render/TornadoRenderer.js';
 import { FireballRenderer } from '../render/FireballRenderer.js';
+import { FrostRingRenderer } from '../render/FrostRingRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
@@ -807,6 +808,9 @@ export class Game {
     // Процедурный файербол: конфиг в visuals.fireball
     const fbVisual = (g.visuals && g.visuals.fireball) || {};
     this.fireballRenderer = new FireballRenderer(fbVisual);
+    // Процедурное кольцо холода: конфиг в visuals.frost_ring
+    const frVisual = (g.visuals && g.visuals.frost_ring) || {};
+    this.frostRingRenderer = new FrostRingRenderer(frVisual);
     this._deathPending = false;
     this._deathTimer = 0;
     this.enemies = [];
