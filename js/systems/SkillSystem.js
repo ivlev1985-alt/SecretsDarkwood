@@ -314,14 +314,22 @@ export class SkillSystem {
   }
 
   // Хук попаданий из Combat: цепочка молнии от предыдущей точки к цели.
+  // Первый сегмент цепи стартует не с «застывшей» точки выстрела (p.ox),
+  // а с актуальной позиции игрока (p.owner) — иначе при быстром беге молния
+  // визуально «отстаёт» и вылезает из точки, где маг был несколько кадров
+  // назад.
   registerHitFx(p, e) {
     if (p.weaponId !== 'lightning_chain') return;
+    const first = p.lastX == null;
     this.lightningFx.push({
-      x1: p.lastX ?? p.ox ?? p.x,
-      y1: p.lastY ?? p.oy ?? p.y,
+      x1: first && p.owner ? p.owner.x : (p.lastX ?? p.ox ?? p.x),
+      y1: first && p.owner ? p.owner.y : (p.lastY ?? p.oy ?? p.y),
       x2: e.x, y2: e.y,
       t: 0.22, max: 0.22,
-      seed: Math.random() * 1e4
+      seed: Math.random() * 1e4,
+      // первый сегмент цепи растёт прямо из мага: держим ссылку на игрока,
+      // чтобы каждый кадр подтягивать x1/y1 к его текущей позиции
+      fromOwner: first ? (p.owner || null) : null
     });
     if (this.lightningFx.length > 24) this.lightningFx.shift();
     p.lastX = e.x; p.lastY = e.y;
@@ -344,6 +352,12 @@ export class SkillSystem {
     const glowW = Math.max(coreW, C.bolt_glow_width_px ?? 5.5);
     const tick = Math.floor(Date.now() * 0.03);
     for (const f of this.lightningFx) {
+      // Первый сегмент цепи «привязан» к магу: пока дуга живёт, её начало
+      // следует за игроком — молния не отстаёт при быстром беге.
+      if (f.fromOwner) {
+        f.x1 = f.fromOwner.x;
+        f.y1 = f.fromOwner.y;
+      }
       const k = Math.max(0, f.t / f.max);
       const seed = (f.seed || 0) + tick;
       const pts = this._boltPoints(f, n, amp, seed);
@@ -524,7 +538,7 @@ export class SkillSystem {
           burnDuration: burn ? burn.duration : 0,
           chainRange: c.chain_range || 0,
           chainTarget: (c.chain_range > 0) ? target : null,
-          weaponId: c.id, friendly: true,
+          weaponId: c.id, friendly: true, owner: player,
           spritePath: c.projectile_sprite,
           frames: c.projectile_frames, animName: 'fly',
           arc: {
@@ -559,7 +573,7 @@ export class SkillSystem {
           burnDuration: burn ? burn.duration : 0,
           chainRange: c.chain_range || 0,
           chainTarget: (c.chain_range > 0) ? target : null,
-          weaponId: c.id, friendly: true,
+          weaponId: c.id, friendly: true, owner: player,
           spritePath: c.projectile_sprite,
           frames: c.projectile_frames, animName: 'fly'
         });

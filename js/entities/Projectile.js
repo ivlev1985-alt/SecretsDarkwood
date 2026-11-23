@@ -26,6 +26,7 @@ export class Projectile extends Entity {
     this.chainRange = 0;
     this.chainTarget = null;
     this.weaponId = '';
+    this.owner = null; // источник снаряда (игрок) — для «живого» начала цепной молнии
     this.spritePath = '';
     this.color = ''; // цвет фолбэка, если спрайт не загружен
     // арочная траектория (magic_bolt): фаза up -> turn -> dive
@@ -58,6 +59,7 @@ export class Projectile extends Entity {
     this.chainRange = o.chainRange || 0;
     this.chainTarget = o.chainTarget || null;
     this.weaponId = o.weaponId || '';
+    this.owner = o.owner || null;
     this.friendly = o.friendly !== false;
     this.spritePath = o.spritePath || '';
     this.color = o.color || '';
