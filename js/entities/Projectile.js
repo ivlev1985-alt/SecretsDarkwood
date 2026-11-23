@@ -71,7 +71,6 @@ export class Projectile extends Entity {
     this.trail = [];
     this._fbTrail = []; // процедурный огненный хвост (FireballRenderer)
     this._mbTrail = []; // процедурный хвост магического снаряда
-    this._lcTrail = []; // процедурный хвост цепной молнии
     this._fbBoomScaled = false;
     this.hitFlash = 0;
     this.exploding = false;

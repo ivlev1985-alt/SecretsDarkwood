@@ -308,6 +308,10 @@ export class MagicProjectileRenderer {
   }
 
   // ===================== ЦЕПНАЯ МОЛНИЯ =====================
+  // Снаряд рисуется только компактным сгустком энергии (ядро + свечение +
+  // короткие разряды). «Провод» между целями рисует единственный слой —
+  // SkillSystem.drawLightning (lightningFx), иначе две ломаные совпадали
+  // и дублировались с задержкой.
 
   _drawLightning(ctx, p, t, C) {
     if (p.exploding) {
@@ -315,38 +319,12 @@ export class MagicProjectileRenderer {
       return;
     }
     const r = Math.max(3, (p.radius || 8) * (C.orb_scale ?? 1));
-    const tr = this._trail(p, '_lcTrail', C.trail_length ?? 12);
     const tick = Math.floor(t * 28);
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-
-    // Ломаная молния по хвосту.
-    for (let i = 1; i < tr.length; i++) {
-      const k = i / tr.length;
-      const a = tr[i - 1], b = tr[i];
-      this._jaggedLine(ctx, a, b, i + tick, k, C);
-    }
-
-    // Ветки от хвоста.
-    const branchChance = C.branch_chance ?? 0.45;
-    for (let i = 1; i < tr.length; i++) {
-      const seed = i * 11.3 + tick * 0.71;
-      if (hash(seed) > branchChance) continue;
-      const a = tr[i - 1], b = tr[i];
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const ang = hash(seed + 1) * TAU;
-      const len = (C.branch_length_px ?? 12) * (0.4 + hash(seed + 2) * 0.8);
-      ctx.globalAlpha = 0.18 + 0.25 * hash(seed + 3);
-      ctx.strokeStyle = C.trail_color || '#8fe8ff';
-      ctx.lineWidth = Math.max(0.5, (C.bolt_width_px ?? 1.6) * 0.7);
-      ctx.beginPath();
-      ctx.moveTo(mx, my);
-      ctx.lineTo(mx + Math.cos(ang) * len, my + Math.sin(ang) * len);
-      ctx.stroke();
-    }
 
     // Ядро снаряда.
     ctx.translate(p.x, p.y);
@@ -378,51 +356,6 @@ export class MagicProjectileRenderer {
     }
 
     ctx.restore();
-  }
-
-  _jaggedLine(ctx, a, b, seed, k, C) {
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len, ny = dx / len;
-    const n = Math.max(2, Math.floor(C.bolt_segments ?? 7));
-    const amp = (C.bolt_amp_px ?? 9) * (0.35 + k * 0.8);
-    const pts = [{ x: a.x, y: a.y }];
-    for (let i = 1; i < n; i++) {
-      const u = i / n;
-      const off = (hash(seed + i * 1.73) * 2 - 1) * amp * Math.sin(Math.PI * u);
-      pts.push({ x: a.x + dx * u + nx * off, y: a.y + dy * u + ny * off });
-    }
-    pts.push({ x: b.x, y: b.y });
-
-    ctx.globalAlpha = 0.07 + 0.12 * k;
-    ctx.strokeStyle = C.glow_color || '#2fa8ff';
-    ctx.lineWidth = Math.max(2, C.bolt_glow_width_px ?? 5.5);
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
-      else ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.45 + 0.5 * k;
-    ctx.strokeStyle = C.trail_color || '#8fe8ff';
-    ctx.lineWidth = Math.max(1, C.bolt_width_px ?? 1.6);
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
-      else ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.65 + 0.3 * k;
-    ctx.strokeStyle = C.core_color || '#f2ffff';
-    ctx.lineWidth = Math.max(0.4, (C.bolt_width_px ?? 1.6) * 0.4);
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
-      else ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
   }
 
   // ===================== ПОПАДАНИЕ / ВЗРЫВ =====================
