@@ -308,54 +308,16 @@ export class MagicProjectileRenderer {
   }
 
   // ===================== ЦЕПНАЯ МОЛНИЯ =====================
-  // Снаряд рисуется только компактным сгустком энергии (ядро + свечение +
-  // короткие разряды). «Провод» между целями рисует единственный слой —
-  // SkillSystem.drawLightning (lightningFx), иначе две ломаные совпадали
-  // и дублировались с задержкой.
+  // Снаряд больше не рисует ядро-сгусток — «провод» цепи рисуется
+  // исключительно в SkillSystem.drawLightning (дубликат со смещением +
+  // жёлтые цвета + случайные разряды). Здесь остаётся только взрыв.
 
   _drawLightning(ctx, p, t, C) {
     if (p.exploding) {
       this._impact(ctx, p, C, C.impact_ring_color || '#bff6ff');
       return;
     }
-    const r = Math.max(3, (p.radius || 8) * (C.orb_scale ?? 1));
-    const tick = Math.floor(t * 28);
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Ядро снаряда.
-    ctx.translate(p.x, p.y);
-    const pulse = 1 + Math.sin(t * (C.pulse_speed ?? 10)) * 0.09;
-    this._glow(ctx, 0, 0, r * (C.glow_scale ?? 3.4) * pulse, C.glow_color || '#2fa8ff');
-
-    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.15);
-    core.addColorStop(0, C.core_color || '#f2ffff');
-    core.addColorStop(0.35, C.inner_color || '#7fe8ff');
-    core.addColorStop(0.75, C.outer_color || '#1a6eff');
-    core.addColorStop(1, 'rgba(0,20,70,0)');
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 1.15, 0, TAU);
-    ctx.fill();
-
-    // Короткие разряды вокруг шара.
-    const arcs = Math.max(2, Math.floor(C.spark_count ?? 6));
-    for (let i = 0; i < arcs; i++) {
-      const a = hash(i * 7.7 + tick * 0.37) * TAU;
-      const rr = r * (1.1 + hash(i * 3.1) * 0.9);
-      ctx.globalAlpha = 0.25 + 0.45 * hash(i + tick);
-      ctx.strokeStyle = i % 2 ? (C.trail_color || '#8fe8ff') : (C.core_color || '#f2ffff');
-      ctx.lineWidth = Math.max(0.5, (C.bolt_width_px ?? 1.6) * 0.65);
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7);
-      ctx.lineTo(Math.cos(a + 0.45) * rr, Math.sin(a + 0.45) * rr);
-      ctx.stroke();
-    }
-
-    ctx.restore();
+    // Снаряд невидим в полёте — провод рисуется в SkillSystem.drawLightning.
   }
 
   // ===================== ПОПАДАНИЕ / ВЗРЫВ =====================

@@ -334,8 +334,8 @@ export class SkillSystem {
     }
   }
 
-  // Ломаная молния между целями: несколько слоёв свечения, рваные ветки.
-  // Параметры — game_config.visuals.lightning_chain.
+  // Ломаная молния между целями: дублированный провод (синий + жёлтый со
+  // смещением) + случайные короткие разряды голубых и жёлтых цветов.
   drawLightning(ctx) {
     const C = this.lightningCfg || {};
     const n = Math.max(3, Math.floor(C.bolt_segments ?? 7));
@@ -347,6 +347,10 @@ export class SkillSystem {
       const k = Math.max(0, f.t / f.max);
       const seed = (f.seed || 0) + tick;
       const pts = this._boltPoints(f, n, amp, seed);
+      // Вторые точки со смещением — для жёлтого дубликата.
+      const ptsOff = this._boltPoints(f, n, amp, seed + 9999);
+
+      // === СЛОЙ 1: оригинал (синий) ===
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
@@ -370,7 +374,7 @@ export class SkillSystem {
       ctx.lineWidth = Math.max(0.35, coreW * 0.45);
       this._strokePts(ctx, pts);
 
-      // Короткие ветки от середины.
+      // Короткие ветки от середины (голубые).
       const branches = Math.max(1, Math.floor((C.spark_count ?? 6) / 2));
       for (let i = 0; i < branches; i++) {
         const idx = 1 + ((i * 3 + Math.floor(seed)) % Math.max(1, pts.length - 2));
@@ -386,6 +390,54 @@ export class SkillSystem {
         ctx.stroke();
       }
       ctx.restore();
+
+      // === СЛОЙ 2: дубликат со смещением (жёлтый) ===
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Жёлтое свечение.
+      ctx.globalAlpha = k * 0.18;
+      ctx.strokeStyle = C.yellow_glow_color || '#ffdd44';
+      ctx.lineWidth = glowW * 0.85;
+      this._strokePts(ctx, ptsOff);
+
+      // Жёлтая основная ветвь.
+      ctx.globalAlpha = k * 0.75;
+      ctx.strokeStyle = C.yellow_color || '#ffee66';
+      ctx.lineWidth = coreW * 0.85;
+      this._strokePts(ctx, ptsOff);
+
+      // Жёлтая сердцевина.
+      ctx.globalAlpha = k * 0.65;
+      ctx.strokeStyle = C.yellow_core_color || '#ffffcc';
+      ctx.lineWidth = Math.max(0.3, coreW * 0.3);
+      this._strokePts(ctx, ptsOff);
+
+      ctx.restore();
+
+      // === СЛОЙ 3: случайные короткие разряды (голубые + жёлтые) ===
+      const extraSparks = Math.max(1, Math.floor(C.spark_count ?? 6));
+      for (let i = 0; i < extraSparks; i++) {
+        // Случайная точка на молнии.
+        const idx = 1 + Math.floor(this._hash(seed + i * 13.7) * (pts.length - 1));
+        const p = pts[idx];
+        // Случайное направление.
+        const ang = this._hash(seed + i * 17.3 + 500) * Math.PI * 2;
+        const len = (C.branch_length_px ?? 12) * (0.2 + this._hash(seed + i * 7.1 + 600) * 0.6);
+        // Случайный цвет: голубой или жёлтый.
+        const isYellow = this._hash(seed + i * 23.1 + 700) > 0.5;
+        ctx.globalAlpha = k * (0.15 + this._hash(seed + i * 11.3 + 800) * 0.35);
+        ctx.strokeStyle = isYellow
+          ? (C.yellow_color || '#ffee66')
+          : (C.trail_color || '#8fe8ff');
+        ctx.lineWidth = Math.max(0.3, coreW * (0.3 + this._hash(seed + i * 5.3 + 900) * 0.4));
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + Math.cos(ang) * len, p.y + Math.sin(ang) * len);
+        ctx.stroke();
+      }
     }
   }
 
