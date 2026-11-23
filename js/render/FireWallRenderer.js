@@ -83,9 +83,6 @@ export class FireWallRenderer {
     ctx.save();
     ctx.translate(fl.x, fl.y);
 
-    // --- Дым сегмента (поднимается вверх) ---
-    this._drawSegmentSmoke(ctx, r, t, idx, alpha);
-
     // --- Свечение ---
     const glowR = r * 3.5;
     const glow = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, glowR);
@@ -216,6 +213,17 @@ export class FireWallRenderer {
   }
 
   // === ДЫМ СЕГМЕНТА ===
+  // Вызывается из draw() до отрисовки огня — клубы остаются позади пламени.
+  _drawSmoke(ctx, fl, idx, C, t, alpha) {
+    const baseR = (C.segment_radius_px ?? 14) * (0.7 + hash(idx * 13.7) * 0.6);
+    const r = baseR * alpha;
+    if (r < 1) return;
+    ctx.save();
+    ctx.translate(fl.x, fl.y);
+    this._drawSegmentSmoke(ctx, r, t, idx, alpha);
+    ctx.restore();
+  }
+
   _drawSegmentSmoke(ctx, r, t, idx, alpha) {
     const count = 3;
     ctx.save();
