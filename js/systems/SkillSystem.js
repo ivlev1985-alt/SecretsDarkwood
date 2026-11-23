@@ -11,7 +11,8 @@ export class SkillSystem {
     this.projectiles = [];
     this.enemyShots = [];
     this.areas = []; // { cfg, level, x, y, ttl, tickT, color, weaponId }
-    this.lightningFx = []; // { x1, y1, x2, y2, t, max } — ломаные молний
+    this.lightningFx = []; // { x1, y1, x2, y2, t, max, seed } — ломаные молний
+    this.lightningCfg = {}; // game_config.visuals.lightning_chain, ставит Game
     this.auraTick = 0;
     // true — процедурный FrostRingRenderer взял орбы на себя (ставит Game
     // каждый кадр перед drawOrbits): собственные шары не рисуем.
@@ -319,7 +320,8 @@ export class SkillSystem {
       x1: p.lastX ?? p.ox ?? p.x,
       y1: p.lastY ?? p.oy ?? p.y,
       x2: e.x, y2: e.y,
-      t: 0.22, max: 0.22
+      t: 0.22, max: 0.22,
+      seed: Math.random() * 1e4
     });
     if (this.lightningFx.length > 24) this.lightningFx.shift();
     p.lastX = e.x; p.lastY = e.y;
@@ -332,37 +334,86 @@ export class SkillSystem {
     }
   }
 
-  // Ломаная молния: 6 сегментов со случайным смещением, гаснет за ~0.2с
+  // Ломаная молния между целями: несколько слоёв свечения, рваные ветки.
+  // Параметры — game_config.visuals.lightning_chain.
   drawLightning(ctx) {
+    const C = this.lightningCfg || {};
+    const n = Math.max(3, Math.floor(C.bolt_segments ?? 7));
+    const amp = Math.max(1, C.bolt_amp_px ?? 10);
+    const coreW = Math.max(0.7, C.bolt_width_px ?? 1.6);
+    const glowW = Math.max(coreW, C.bolt_glow_width_px ?? 5.5);
+    const tick = Math.floor(Date.now() * 0.03);
     for (const f of this.lightningFx) {
       const k = Math.max(0, f.t / f.max);
-      const n = 6;
+      const seed = (f.seed || 0) + tick;
+      const pts = this._boltPoints(f, n, amp, seed);
       ctx.save();
-      ctx.globalAlpha = 0.35 + 0.65 * k;
-      ctx.strokeStyle = '#cfe8ff';
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      this._traceBolt(ctx, f, n, 14);
-      ctx.stroke();
-      ctx.strokeStyle = '#ffe94d';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      this._traceBolt(ctx, f, n, 14);
-      ctx.stroke();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Широкое синее свечение.
+      ctx.globalAlpha = k * 0.22;
+      ctx.strokeStyle = C.glow_color || '#2fa8ff';
+      ctx.lineWidth = glowW;
+      this._strokePts(ctx, pts);
+
+      // Основная ветвь.
+      ctx.globalAlpha = k * 0.9;
+      ctx.strokeStyle = C.trail_color || '#8fe8ff';
+      ctx.lineWidth = coreW;
+      this._strokePts(ctx, pts);
+
+      // Белая сердцевина.
+      ctx.globalAlpha = k * 0.8;
+      ctx.strokeStyle = C.core_color || '#f2ffff';
+      ctx.lineWidth = Math.max(0.35, coreW * 0.45);
+      this._strokePts(ctx, pts);
+
+      // Короткие ветки от середины.
+      const branches = Math.max(1, Math.floor((C.spark_count ?? 6) / 2));
+      for (let i = 0; i < branches; i++) {
+        const idx = 1 + ((i * 3 + Math.floor(seed)) % Math.max(1, pts.length - 2));
+        const p = pts[idx];
+        const ang = this._hash(seed + i * 7.7) * Math.PI * 2;
+        const len = (C.branch_length_px ?? 12) * (0.45 + this._hash(seed + i * 3.1) * 0.8);
+        ctx.globalAlpha = k * (0.22 + this._hash(seed + i) * 0.3);
+        ctx.strokeStyle = C.trail_color || '#8fe8ff';
+        ctx.lineWidth = Math.max(0.4, coreW * 0.55);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + Math.cos(ang) * len, p.y + Math.sin(ang) * len);
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }
 
-  _traceBolt(ctx, f, n, amp) {
-    ctx.moveTo(f.x1, f.y1);
+  _hash(n) {
+    const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  _boltPoints(f, n, amp, seed) {
+    const pts = [{ x: f.x1, y: f.y1 }];
     const dx = (f.x2 - f.x1) / n, dy = (f.y2 - f.y1) / n;
     const len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1) || 1;
     const nx = -(f.y2 - f.y1) / len, ny = (f.x2 - f.x1) / len;
     for (let i = 1; i < n; i++) {
-      const off = (Math.random() - 0.5) * 2 * amp;
-      ctx.lineTo(f.x1 + dx * i + nx * off, f.y1 + dy * i + ny * off);
+      const off = (this._hash(seed + i * 1.73) * 2 - 1) * amp * Math.sin(Math.PI * (i / n));
+      pts.push({ x: f.x1 + dx * i + nx * off, y: f.y1 + dy * i + ny * off });
     }
-    ctx.lineTo(f.x2, f.y2);
+    pts.push({ x: f.x2, y: f.y2 });
+    return pts;
+  }
+
+  _strokePts(ctx, pts) {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+      else ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.stroke();
   }
 
   updateProjectiles(dt) {

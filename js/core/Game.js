@@ -24,6 +24,8 @@ import { SkeletonArcherRenderer } from '../render/SkeletonArcherRenderer.js';
 import { TornadoRenderer } from '../render/TornadoRenderer.js';
 import { FireballRenderer } from '../render/FireballRenderer.js';
 import { FrostRingRenderer } from '../render/FrostRingRenderer.js';
+import { MagicProjectileRenderer } from '../render/MagicProjectileRenderer.js';
+import { FireWallRenderer } from '../render/FireWallRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
@@ -67,6 +69,8 @@ export class Game {
     this.player = null;
     this.heroMage = null; // процедурный визуал героя (если спрайт отсутствует)
     this.skeletonArcherRenderer = null; // процедурный визуал скелета-лучника
+    this.magicProjectileRenderer = null; // магический снаряд / нова / молния
+    this.fireWallRenderer = null; // процедурная стена огня
     this.tornadoRenderer = new TornadoRenderer(); // визуал смерча / будущий спрайт
     this._deathPending = false; // короткая death-анимация перед gameover
     this._deathTimer = 0;
@@ -805,7 +809,11 @@ export class Game {
     // Процедурный скелет-лучник: конфиг в visuals.skeleton_archer
     const skelVisual = (g.visuals && g.visuals.skeleton_archer) || {};
     this.skeletonArcherRenderer = new SkeletonArcherRenderer(skelVisual);
-    // Процедурный файербол: конфиг в visuals.fireball
+    // Процедурная магия: конфиги в visuals.magic_bolt / arcane_nova / lightning_chain
+    this.magicProjectileRenderer = new MagicProjectileRenderer(g.visuals || {});
+    this.fireWallRenderer = new FireWallRenderer(g.visuals || {});
+    // Процедурный файербол: конфиг в visuals.fireball. Тот же рендерер
+    // рисует и огненный шар босса (fireball_boss), если спрайта нет.
     const fbVisual = (g.visuals && g.visuals.fireball) || {};
     this.fireballRenderer = new FireballRenderer(fbVisual);
     // Процедурное кольцо холода: конфиг в visuals.frost_ring
@@ -861,6 +869,7 @@ export class Game {
     this.combat = new CombatSystem(g, b);
     this.spawn = new SpawnSystem(b.waves, b.monsters);
     this.skills = new SkillSystem(s.weapons, this.combat, this.audio, this.assets);
+    this.skills.lightningCfg = (g.visuals && g.visuals.lightning_chain) || {};
     const active = (s.weapons || []).filter((w) => w.unlocked).map((w) => w.id);
     this.skills.setActive(active.length ? active : ['magic_bolt']);
     for (const [id, st] of this.skills.weapons) {
@@ -1661,7 +1670,16 @@ export class Game {
         this.bossWarn = { text: ConfigLoader.t(this.config.localization, this.settings.lang, 'boss_warning', { name: b.name || 'BOSS' }), t: 2 };
         if (this.fx) this.fx.play('boss_spawn', b.x, b.y);
         try { this.audio.playSfx('boss_roar.mp3'); } catch (e) {}
-      } else this.enemies.push(raw);
+      } else {
+        // Скелет-лучник рассыпается на кости дольше обычного death-спрайта:
+        // длительность задаётся в game_config.visuals.skeleton_archer.
+        if (this._useSkeleton(raw)) {
+          const sc = (g.visuals && g.visuals.skeleton_archer) || {};
+          raw.deathDuration = (sc.death_duration_ms ?? 1500) / 1000;
+          raw.deathFade = (sc.death_fade_ms ?? 500) / 1000;
+        }
+        this.enemies.push(raw);
+      }
     }
     if (this.bossWarn) {
       this.bossWarn.t -= dt;
@@ -1719,6 +1737,9 @@ export class Game {
       }
       // Холод замедляет: скорость из effectiveSpeed (slowT/slowFactor из Enemy)
       const spd = (typeof e.effectiveSpeed === 'number') ? e.effectiveSpeed : e.speed;
+      // Для процедурных анимаций: идёт ли враг и с какой скоростью.
+      e.visualMoving = (mx * mx + my * my) > 0.0004;
+      e.visualSpeed = spd * Math.hypot(mx, my);
       e.x += mx * spd * dt;
       e.y += my * spd * dt;
       e.applyKnock(dt);
@@ -2225,14 +2246,20 @@ export class Game {
   }
 
   _drawShot(ctx, p, color) {
-    // Процедурный файербол: спрайт fireball.png отсутствует (или mode
-    // 'always') — рисуем огненный шар с хвостом/дымом/искрами и взрыв.
-    if (p.weaponId === 'fireball' && this.fireballRenderer
+    // Процедурный файербол: огненный шар игрока и босса. Спрайт больше
+    // не используется при mode "always" — хвост/дым/искры/взрыв рисуются кодом.
+    if ((p.weaponId === 'fireball' || p.weaponId === 'fireball_boss') && this.fireballRenderer
       && this.fireballRenderer.draw(ctx, p, this.time, this.assets)) {
+      return;
+    }
+    // Магический снаряд / Тайная нова / Цепная молния — полностью процедурно.
+    if (this.magicProjectileRenderer
+      && this.magicProjectileRenderer.draw(ctx, p, this.time, this.assets)) {
       return;
     }
     // Тайная нова: за снарядом тянется слабый шлейф, подчёркивающий спираль
     // и гиперболическую дугу. Рисуется и при наличии спрайта, и без него.
+    // Это резервный путь, если процедурный рендерер выключен в конфиге.
     if (p.nova && !p.exploding && p.trail && p.trail.length > 1) {
       const tr = p.trail;
       ctx.save();
@@ -2302,9 +2329,14 @@ export class Game {
     ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
   }
 
-  // Отрисовка стены огня: огоньки из спрайтшита, появляются от центра к краям,
-  // угасают от краёв к центру.
+  // Отрисовка стены огня: процедурное многослойное пламя (FireWallRenderer),
+  // появляется от центра к краям и угасает от краёв к центру. Спрайт
+  // остаётся доступным, если в game_config.visuals.fire_wall.mode = "auto".
   _drawWall(ctx, a) {
+    if (this.fireWallRenderer
+      && this.fireWallRenderer.draw(ctx, a, this.time, this.assets)) {
+      return;
+    }
     const w = a.wall;
     const img = a.spritePath ? this.assets.get(a.spritePath) : null;
     const f = a.cfg.area_frames;

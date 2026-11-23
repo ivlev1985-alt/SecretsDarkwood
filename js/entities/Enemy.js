@@ -126,8 +126,13 @@ export class Enemy extends Entity {
   // Труп живёт dur (полная анимация, непрозрачный) + fade (плавное исчезновение).
   deathTiming() {
     const a = this.cfg.frames && this.cfg.frames.animations && this.cfg.frames.animations.death;
-    const dur = a ? a.frames / a.fps : 0.4;
-    return { dur, fade: Math.min(0.4, dur * 0.5) };
+    const spriteDur = a ? a.frames / a.fps : 0.4;
+    // Процедурный скелет задаёт свои длительности из game_config.visuals.
+    const dur = this.deathDuration > 0 ? this.deathDuration : spriteDur;
+    const fade = this.deathFade != null
+      ? Math.max(0, this.deathFade)
+      : Math.min(0.4, dur * 0.5);
+    return { dur, fade };
   }
 
   // Возвращает true когда труп можно удалять

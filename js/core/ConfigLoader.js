@@ -80,6 +80,52 @@ export class ConfigLoader {
         }
       }
     }
+    // Визуалы процедурных врагов и магии: режимы и числовые параметры.
+    const v = g.visuals || {};
+    const visualModes = ['missing', 'always', 'never', 'auto'];
+    for (const key of ['skeleton_archer', 'magic_bolt', 'arcane_nova', 'lightning_chain',
+      'fireball', 'fire_wall', 'frost_ring']) {
+      const vb = v[key];
+      if (vb === undefined || vb === null) continue;
+      if (typeof vb !== 'object' || Array.isArray(vb)) {
+        errors.push('game_config.visuals.' + key + ' must be an object');
+        continue;
+      }
+      if (vb.enabled !== undefined && typeof vb.enabled !== 'boolean') {
+        errors.push('game_config.visuals.' + key + '.enabled must be boolean');
+      }
+      if (vb.mode !== undefined && !visualModes.includes(vb.mode)) {
+        errors.push('game_config.visuals.' + key + '.mode must be missing|always|never|auto');
+      }
+      const nonNeg = ['height_px', 'width_px', 'ridge_width_px', 'glow_scale', 'orb_scale',
+        'trail_width_px', 'trail_length', 'trail_alpha', 'pulse_speed', 'halo_scale',
+        'halo_alpha', 'halo_rotation_speed', 'rotation_speed', 'rune_arcs',
+        'rune_radius_scale', 'rune_width_px', 'spark_count', 'spark_orbit_radius_px',
+        'spark_orbit_speed', 'bolt_segments', 'bolt_amp_px', 'bolt_width_px',
+        'bolt_glow_width_px', 'branch_chance', 'branch_length_px', 'flame_tongues',
+        'flicker_speed', 'sway_speed', 'ember_count', 'ember_speed', 'ground_glow_scale',
+        'ground_glow_alpha', 'glow_alpha', 'smoke_alpha', 'impact_radius_scale',
+        'death_duration_ms', 'death_fade_ms', 'bone_alpha', 'cache_fps',
+        'frame_padding_px', 'aim_pre_ms', 'string_pull_px', 'bow_height_px',
+        'bow_hand_x', 'bow_idle_drop_px', 'arrow_length_px',
+        'shoot_flash_radius_px', 'walk_cycles_per_sec', 'walk_bob_px', 'walk_sway_px',
+        'walk_boot_lift_px', 'walk_boot_stride_px', 'idle_breath_px', 'idle_breath_speed',
+        'idle_head_turn_px', 'move_blend', 'death_fall_rad', 'death_slide_px',
+        'death_sink_px', 'boom_life_ms'];
+      for (const k of nonNeg) {
+        if (vb[k] !== undefined && !(vb[k] >= 0)) {
+          errors.push('game_config.visuals.' + key + '.' + k + ' must be >= 0');
+        }
+      }
+      for (const k of ['trail_alpha', 'halo_alpha', 'branch_chance', 'glow_alpha',
+        'smoke_alpha', 'ground_glow_alpha', 'impact_alpha', 'shoot_flash_alpha',
+        'eye_glow_alpha', 'bone_alpha']) {
+        if (vb[k] !== undefined && !(vb[k] >= 0 && vb[k] <= 1)) {
+          errors.push('game_config.visuals.' + key + '.' + k + ' must be 0..1');
+        }
+      }
+    }
+
     if (!g.camera || typeof g.camera.follow_speed !== 'number') errors.push('game_config.camera.follow_speed missing');
 
     for (const m of (b.monsters || [])) {
