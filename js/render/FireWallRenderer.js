@@ -56,7 +56,10 @@ export class FireWallRenderer {
       if (!fl.alive || fl.dead) continue;
       const alpha = this._flameAlpha(fl, w);
       if (alpha <= 0.01) continue;
-      this._drawSegment(ctx, fl, i, C, now, alpha);
+      // Возраст сегмента (сек с момента его появления) — для асинхронного
+      // «прорастания» отдельных языков пламени внутри сегмента.
+      const segAge = ((w.age || 0) - (fl.spawnT || 0) * w.spawnMs) / 1000;
+      this._drawSegment(ctx, fl, i, C, now, alpha, segAge);
     }
 
     // 4. Искры — медленные, хаотичные.
@@ -102,7 +105,7 @@ export class FireWallRenderer {
   }
 
   // === СЕГМЕНТ = 3–6 ВЕРТИКАЛЬНЫХ ХВОСТОВ ===
-  _drawSegment(ctx, fl, idx, C, t, alpha) {
+  _drawSegment(ctx, fl, idx, C, t, alpha, segAge = 0) {
     const segH = C.segment_height_px ?? 100;
     const segW = C.segment_width_px ?? 50;
     const numTrails = 3 + Math.floor(hash(idx * 7.1) * 4); // 3–6
@@ -115,14 +118,25 @@ export class FireWallRenderer {
 
     for (let ti = 0; ti < numTrails; ti++) {
       const tSeed = seed + ti * 11.3;
+      // Асинхронное появление: каждый язык «зажигается» со своей задержкой
+      // (0–0.35 сек после появления сегмента) и разгорается за 0.25 сек.
+      const ignite = hash(tSeed + 9) * 0.35;
+      const grow = clamp01((segAge - ignite) / 0.25);
+      if (grow <= 0) continue;
+      const growEase = grow * grow * (3 - 2 * grow); // smoothstep
       // Случайный размер хвоста: 60–130% от базового.
-      const sizeScale = 0.6 + hash(tSeed + 1) * 0.7;
+      const sizeScale = (0.6 + hash(tSeed + 1) * 0.7) * growEase;
+      // Плавное случайное изменение высоты: две несинхронные гармоники,
+      // размах ~60–130% вокруг базового масштаба.
+      const breathe = 1
+        + Math.sin(t * (0.5 + hash(tSeed + 10) * 0.4) + hash(tSeed + 11) * TAU) * 0.22
+        + Math.sin(t * (0.23 + hash(tSeed + 12) * 0.2) + hash(tSeed + 13) * TAU) * 0.13;
       // Позиция хвоста по ширине сегмента.
       const tx = fl.x + (hash(tSeed + 2) - 0.5) * segW * 0.8;
-      // Вертикальный диапазон: хвост занимает часть сегмента + немного
-      // выходит за его пределы, заполняя пространство между сегментами.
-      const topY = fl.y - segH * (0.15 + hash(tSeed + 3) * 0.35) * sizeScale;
+      // Основание жёстко зафиксировано на земле (fl.y + небольшой спуск);
+      // «дышит» только верхняя точка языка.
       const botY = fl.y + segH * (0.15 + hash(tSeed + 4) * 0.35) * sizeScale;
+      const topY = fl.y - segH * (0.15 + hash(tSeed + 3) * 0.35) * sizeScale * breathe;
       // Рандомная пульсация и покачивание.
       const pulsePhase = hash(tSeed + 5) * TAU;
       const swayPhase = hash(tSeed + 6) * TAU;
@@ -145,15 +159,17 @@ export class FireWallRenderer {
     const pulse = 1 + Math.sin(t * 18 + pulsePhase) * 0.14
       + Math.sin(t * 28 + pulsePhase * 2) * 0.08;
 
-    // Строим точки хвоста.
+    // Строим точки хвоста. k=0 — верхушка языка, k=1 — основание на земле.
     const pts = [];
     for (let i = 0; i <= steps; i++) {
-      const k = i / steps; // 0 = верх, 1 = низ
+      const k = i / steps;
       const y = topY + (botY - topY) * k;
+      // Двигается только верх: профиль движения 0 у основания, 1 у кончика.
+      const move = (1 - k) * (1 - k);
       // Покачивание: синус по k, фаза зависит от времени.
-      const sway = Math.sin(t * 3 + k * 4 + swayPhase) * swayAmp * (0.3 + k * 0.7);
-      // Рваная амплитуда: slot-шум.
-      const jitter = (hash(seed + i * 2.7 + slot * 3.13) - 0.5) * segW * 0.15;
+      const sway = Math.sin(t * 3 + k * 4 + swayPhase) * swayAmp * move;
+      // Рваная амплитуда: slot-шум (тоже только в верхней части).
+      const jitter = (hash(seed + i * 2.7 + slot * 3.13) - 0.5) * segW * 0.15 * move;
       pts.push({ x: x + sway + jitter, y });
     }
 
@@ -164,9 +180,9 @@ export class FireWallRenderer {
         const k = i / steps;
         const a = pts[i - 1], b = pts[i];
         const flick = 0.6 + hash(i * 3.3 + slot * 1.7 + seed) * 0.4;
-        // Профиль: у основания (низ, k=1) — широкая «горящая земля»,
-        // к кончику (верх, k=0) пламя сужается к языку.
-        const prof = 0.35 + 0.65 * Math.pow(k, 1.4);
+        // Профиль: у основания (низ, k=1) — широкая «горящая земля»
+        // (×1.5 к базе), к кончику (верх, k=0) пламя сужается к языку.
+        const prof = (0.35 + 0.65 * Math.pow(k, 1.4)) * (1 + 0.5 * k);
         const w2 = segW * (wide ? 0.55 : 0.25) * prof * pulse * pulseAmp;
         const a2 = (wide ? 0.25 : 0.55) * flick * alpha;
 
