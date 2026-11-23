@@ -115,19 +115,21 @@ export class FireWallRenderer {
 
     for (let ti = 0; ti < numTrails; ti++) {
       const tSeed = seed + ti * 11.3;
+      // Случайный размер хвоста: 60–130% от базового.
+      const sizeScale = 0.6 + hash(tSeed + 1) * 0.7;
       // Позиция хвоста по ширине сегмента.
       const tx = fl.x + (hash(tSeed + 2) - 0.5) * segW * 0.8;
       // Вертикальный диапазон: хвост занимает часть сегмента + немного
       // выходит за его пределы, заполняя пространство между сегментами.
-      const topY = fl.y - segH * (0.15 + hash(tSeed + 3) * 0.35);
-      const botY = fl.y + segH * (0.15 + hash(tSeed + 4) * 0.35);
+      const topY = fl.y - segH * (0.15 + hash(tSeed + 3) * 0.35) * sizeScale;
+      const botY = fl.y + segH * (0.15 + hash(tSeed + 4) * 0.35) * sizeScale;
       // Рандомная пульсация и покачивание.
       const pulsePhase = hash(tSeed + 5) * TAU;
       const swayPhase = hash(tSeed + 6) * TAU;
-      const swayAmp = 4 + hash(tSeed + 7) * 8;
+      const swayAmp = (4 + hash(tSeed + 7) * 8) * sizeScale;
       const pulseAmp = 0.6 + hash(tSeed + 8) * 0.4; // 0.6–1.0
 
-      this._drawVerticalTrail(ctx, tx, topY, botY, segW, t, tSeed,
+      this._drawVerticalTrail(ctx, tx, topY, botY, segW * sizeScale, t, tSeed,
         pulsePhase, swayPhase, swayAmp, pulseAmp, alpha, C);
     }
 
@@ -162,8 +164,9 @@ export class FireWallRenderer {
         const k = i / steps;
         const a = pts[i - 1], b = pts[i];
         const flick = 0.6 + hash(i * 3.3 + slot * 1.7 + seed) * 0.4;
-        // Профиль: середина хвоста толще, кончики тоньше.
-        const prof = Math.sin(k * Math.PI);
+        // Профиль: у основания (низ, k=1) — широкая «горящая земля»,
+        // к кончику (верх, k=0) пламя сужается к языку.
+        const prof = 0.35 + 0.65 * Math.pow(k, 1.4);
         const w2 = segW * (wide ? 0.55 : 0.25) * prof * pulse * pulseAmp;
         const a2 = (wide ? 0.25 : 0.55) * flick * alpha;
 
@@ -190,9 +193,9 @@ export class FireWallRenderer {
     const count = 4;
     ctx.save();
     for (let i = 0; i < count; i++) {
-      const slot = Math.floor(t * 1.0 + i * 2.3 + idx * 7); // медленнее: 1.0 вместо 1.6
+      const slot = Math.floor(t * 0.35 + i * 2.3 + idx * 7); // очень медленный дым
       const seed = i * 29.3 + slot * 1.31 + idx * 23;
-      const phase = (t * 1.0 + i * 2.3 + idx * 7) % 1;
+      const phase = (t * 0.35 + i * 2.3 + idx * 7) % 1;
       const jitter = (hash(seed) - 0.5) * 1.5;
       // Дым поднимается из центра сегмента.
       const sx = fl.x + Math.sin(phase * 2 + seed) * segW * 0.4;
@@ -223,9 +226,9 @@ export class FireWallRenderer {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < count; i++) {
-      const slot = Math.floor(t * 5 + i * 4.1 + idx * 13); // медленнее: 5 вместо 9
+      const slot = Math.floor(t * 1.7 + i * 4.1 + idx * 13); // медленные искры
       const seed = i * 21.7 + slot * 0.71 + idx * 31;
-      const phase = (t * 5 + i * 4.1 + idx * 13) % 1;
+      const phase = (t * 1.7 + i * 4.1 + idx * 13) % 1;
       // Вектор: вверх, но плавно «гуляет» ±15° по/против часовой.
       const angJitter = Math.sin(phase * 6 + seed) * (Math.PI / 12); // ±15°
       const ang = -Math.PI / 2 + angJitter;
