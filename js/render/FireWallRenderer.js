@@ -1,13 +1,15 @@
-// Процедурная «Стена огня»: вместо спрайта firewall.png рисуем
-// многослойное пламя с языками, угольной полосой, дымом и искрами.
+// Процедурная «Стена огня» — стиль файрбола.
+//
+// Каждый из 7 сегментов стены рисуется как мини-файрбол: ядро с пульсацией,
+// огненная оболочка, «живые» радиальные языки, дым и искры. Сегменты
+// соединены огненными хвостами с тем же slot-шумом и рваной амплитудой,
+// что и у летящего снаряда.
 //
 // Режимы (game_config.visuals.fire_wall.mode):
 //   "always"  — всегда процедурно (текущая настройка);
 //   "auto"    — спрайт, если загружен, иначе процедурно;
 //   "missing" — процедурно только без спрайта;
 //   "never"   — старый путь Game (спрайт/кружки).
-//
-// Все параметры — в game_config.visuals.fire_wall.
 
 const TAU = Math.PI * 2;
 
@@ -16,7 +18,6 @@ function hash(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
 }
-function smoothstep(t) { t = clamp01(t); return t * t * (3 - 2 * t); }
 
 export class FireWallRenderer {
   constructor(visuals = {}) {
@@ -36,192 +37,241 @@ export class FireWallRenderer {
 
     const w = a.wall;
     const now = time || 0;
-    const spawnMs = Math.max(1, w.spawnMs || 100);
 
-    // Угольная полоса по линии стены — связывает отдельные огоньки.
-    this._drawRidge(ctx, a, C, now);
-
-    // Сначала дым (позади пламени), затем языки огня от краёв к центру.
+    // 1. Дым — позади всего (source-over).
     for (let i = 0; i < w.flames.length; i++) {
       const fl = w.flames[i];
       if (!fl.alive || fl.dead) continue;
-      const alpha = this._flameAlpha(fl, w, spawnMs);
+      const alpha = this._flameAlpha(fl, w);
       if (alpha <= 0.01) continue;
       this._drawSmoke(ctx, fl, i, C, now, alpha);
     }
 
+    // 2. Хвосты-связки между сегментами (lighter).
+    this._drawWallTrails(ctx, w, C, now);
+
+    // 3. Ядра сегментов (файрбол-стиль).
     for (let i = 0; i < w.flames.length; i++) {
       const fl = w.flames[i];
       if (!fl.alive || fl.dead) continue;
-      const alpha = this._flameAlpha(fl, w, spawnMs);
+      const alpha = this._flameAlpha(fl, w);
       if (alpha <= 0.01) continue;
-      this._drawFlame(ctx, fl, i, C, now, alpha);
+      this._drawSegment(ctx, fl, i, C, now, alpha);
     }
 
     return true;
   }
 
-  _flameAlpha(fl, w, spawnMs) {
+  _flameAlpha(fl, w) {
     let alpha = 1;
     if (fl.dying && fl.dieT !== undefined) {
-      alpha = Math.max(0, 1 - fl.dieT / spawnMs);
+      alpha = Math.max(0, 1 - fl.dieT / w.spawnMs);
     }
-    // Появление: центр раньше краёв.
     const ageMs = (w.age || 0) * 1000;
-    const born = ageMs - (fl.spawnT || 0) * spawnMs;
-    if (born < 120) alpha *= smoothstep(born / 120);
+    const born = ageMs - (fl.spawnT || 0) * w.spawnMs;
+    if (born < 120) alpha *= born / 120;
     return clamp01(alpha);
   }
 
-  _drawRidge(ctx, a, C, t) {
-    const w = a.wall;
-    if (!w || !(w.totalLen > 1)) return;
-    const x1 = a.x - Math.cos(w.angle) * w.halfLen;
-    const y1 = a.y - Math.sin(w.angle) * w.halfLen;
-    const x2 = a.x + Math.cos(w.angle) * w.halfLen;
-    const y2 = a.y + Math.sin(w.angle) * w.halfLen;
-    const flick = 0.85 + 0.15 * Math.sin(t * (C.flicker_speed ?? 12) * 0.5);
+  // === МИНИ-ФАЙРБОЛ (сегмент стены) ===
+
+  _drawSegment(ctx, fl, idx, C, t, alpha) {
+    const baseR = (C.segment_radius_px ?? 14) * (0.7 + hash(idx * 13.7) * 0.6);
+    const r = baseR * alpha;
+    if (r < 1) return;
+
+    ctx.save();
+    ctx.translate(fl.x, fl.y);
+
+    // --- Дым сегмента (поднимается вверх) ---
+    this._drawSegmentSmoke(ctx, r, t, idx, alpha);
+
+    // --- Свечение ---
+    const glowR = r * 3.5;
+    const glow = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, glowR);
+    glow.addColorStop(0, `rgba(255,140,0,${0.35 * alpha})`);
+    glow.addColorStop(0.5, `rgba(255,60,0,${0.12 * alpha})`);
+    glow.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, glowR, 0, TAU);
+    ctx.fill();
+
+    // --- Ядро ---
+    const coreR = r * 0.55;
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR);
+    core.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`);
+    core.addColorStop(0.3, `rgba(255,244,204,${0.9 * alpha})`);
+    core.addColorStop(0.7, `rgba(255,204,0,${0.85 * alpha})`);
+    core.addColorStop(1, `rgba(255,102,0,${0.7 * alpha})`);
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR, 0, TAU);
+    ctx.fill();
+
+    // --- Огненная оболочка (пульсирует) ---
+    const pulse = 1 + Math.sin(t * 18 + idx) * 0.08 + Math.sin(t * 27 + idx * 2) * 0.04;
+    const shellR = r * pulse;
+    const shell = ctx.createRadialGradient(0, 0, coreR * 0.8, 0, 0, shellR);
+    shell.addColorStop(0, 'rgba(255,100,0,0)');
+    shell.addColorStop(0.4, `rgba(255,80,0,${0.6 * alpha})`);
+    shell.addColorStop(0.7, `rgba(255,40,0,${0.8 * alpha})`);
+    shell.addColorStop(1, 'rgba(200,20,0,0)');
+    ctx.fillStyle = shell;
+    ctx.beginPath();
+    ctx.arc(0, 0, shellR, 0, TAU);
+    ctx.fill();
+
+    // --- «Живые» языки пламени (радиальные линии) ---
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    const flameCount = 8;
+    for (let i = 0; i < flameCount; i++) {
+      const ang = (i / flameCount) * TAU + t * 2.5 + idx;
+      const len = r * (0.35 + hash(i + t * 3 + idx) * 0.35);
+      const x1 = Math.cos(ang) * coreR * 0.9;
+      const y1 = Math.sin(ang) * coreR * 0.9;
+      const x2 = Math.cos(ang) * (coreR + len);
+      const y2 = Math.sin(ang) * (coreR + len);
+      const a2 = (0.4 + hash(i + t * 5 + idx) * 0.4) * alpha;
+      ctx.strokeStyle = `rgba(255,${80 + Math.floor(hash(i) * 60)},0,${a2})`;
+      ctx.lineWidth = 1.5 + hash(i + t * 2 + idx) * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    // --- Искры (слетают назад — вверх по Y) ---
+    this._drawSegmentSparks(ctx, r, t, idx, alpha);
+
+    ctx.restore();
+  }
+
+  // === ХВОСТЫ-СВЯЗКИ МЕЖДУ СЕГМЕНТАМИ ===
+  // Тот же паттерн, что в FireballRenderer._drawTrail: slot-шум, рваная
+  // амплитуда, профиль k² (максимум у «головы» — следующего сегмента).
+
+  _drawWallTrails(ctx, w, C, t) {
+    const flames = w.flames;
+    const n = flames.length;
+    if (n < 2) return;
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    // Широкое тёплое свечение по земле.
-    ctx.globalAlpha = (C.ground_glow_alpha ?? 0.30) * flick;
-    ctx.strokeStyle = C.ground_glow_color || '#ff7a1a';
-    ctx.lineWidth = (C.ground_glow_scale ?? 1.5) * 34;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    const slot = Math.floor(t * 14);
+    const pulse = 1 + Math.sin(t * 22) * 0.14 + Math.sin(t * 35 + 1.7) * 0.08;
 
-    // Угольная подложка.
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 0.55;
-    ctx.strokeStyle = C.ground_scorch_color || '#1a0d08';
-    ctx.lineWidth = Math.max(8, C.ridge_width_px ?? 26);
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-
-    // Раскалённая середина.
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.35 * flick;
-    ctx.strokeStyle = C.mid_color || '#ff5a00';
-    ctx.lineWidth = Math.max(2, (C.ridge_width_px ?? 26) * 0.25);
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    ctx.restore();
-  }
-
-  _drawSmoke(ctx, fl, index, C, t, alpha) {
-    const h = C.height_px ?? 94;
-    const w = C.width_px ?? 44;
-    const seed = index * 13.7 + fl.spawnT * 7.1;
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
-    for (let i = 0; i < 2; i++) {
-      const ph = t * (0.75 + hash(seed + i) * 0.45) + hash(seed + i * 2.3) * TAU;
-      const rise = (0.35 + 0.65 * hash(seed + i * 4.1));
-      const y = fl.y - h * rise;
-      const x = fl.x + Math.sin(ph) * w * 0.45 + (i - 0.5) * w * 0.35;
-      const rr = w * (0.45 + 0.32 * hash(seed + i * 5.7));
-      ctx.globalAlpha = alpha * (C.smoke_alpha ?? 0.20) * (0.45 + 0.55 * hash(seed + i + Math.floor(t)));
-      ctx.fillStyle = C.smoke_color || '#3a2b24';
-      ctx.beginPath();
-      ctx.ellipse(x, y, rr, rr * 0.68, Math.sin(ph) * 0.25, 0, TAU);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  _drawFlame(ctx, fl, index, C, t, alpha) {
-    const h = C.height_px ?? 94;
-    const w = C.width_px ?? 44;
-    const seed = index * 19.3 + fl.spawnT * 5.7;
-    const flick = 0.86 + 0.14 * Math.sin(t * (C.flicker_speed ?? 12) + seed * 1.7);
-    const sway = Math.sin(t * (C.sway_speed ?? 5) + seed) * w * 0.11;
-    const height = h * flick;
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = alpha;
-
-    // Тёплое пятно у основания.
-    const gr = ctx.createRadialGradient(fl.x, fl.y, 0, fl.x, fl.y, w * (C.ground_glow_scale ?? 1.5));
-    gr.addColorStop(0, C.ground_glow_color || '#ff7a1a');
-    gr.addColorStop(0.35, C.glow_color || '#ff6a00');
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.globalAlpha = alpha * (C.glow_alpha ?? 0.45);
-    ctx.fillStyle = gr;
-    ctx.beginPath();
-    ctx.ellipse(fl.x, fl.y, w * (C.ground_glow_scale ?? 1.5), w * 0.62, 0, 0, TAU);
-    ctx.fill();
-
-    // Языки пламени: внешний, средний и горячий.
-    const layers = [
-      { color: C.base_color || '#7a1500', scale: 1.00, alpha: 0.78, sway: 1.0 },
-      { color: C.mid_color || '#ff5a00', scale: 0.73, alpha: 0.85, sway: 1.35 },
-      { color: C.hot_color || '#ffc23a', scale: 0.46, alpha: 0.9, sway: 1.7 }
-    ];
-    for (let li = 0; li < layers.length; li++) {
-      const L = layers[li];
-      ctx.globalAlpha = alpha * L.alpha;
-      this._flameShape(ctx, fl.x, fl.y, w * L.scale, height * (0.72 + L.scale * 0.28),
-        sway * L.sway, seed + li * 3.1, L.color, Math.max(1, (C.flame_tongues ?? 4) - li));
-    }
-
-    // Белое ядро у основания.
-    ctx.globalAlpha = alpha * 0.75;
-    const core = ctx.createRadialGradient(fl.x, fl.y - height * 0.12, 0, fl.x, fl.y - height * 0.12, w * 0.32);
-    core.addColorStop(0, C.core_color || '#fff3b0');
-    core.addColorStop(0.5, C.hot_color || '#ffc23a');
-    core.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.ellipse(fl.x, fl.y - height * 0.12, w * 0.32, height * 0.22, 0, 0, TAU);
-    ctx.fill();
-
-    // Искры, поднимающиеся вверх.
-    const n = Math.max(0, Math.floor(C.ember_count ?? 4));
+    // Считаем точки с рваным извиванием.
+    const pts = new Array(n);
     for (let i = 0; i < n; i++) {
-      const ph = (t * (C.ember_speed ?? 22) / 30 + hash(seed + i * 7.7)) % 1;
-      const ey = fl.y - ph * height * 1.05;
-      const ex = fl.x + Math.sin(ph * 6.2 + seed + i) * w * (0.22 + 0.3 * hash(seed + i));
-      const s = Math.max(0.5, w * 0.035 * (0.5 + hash(seed + i * 2.1)));
-      ctx.globalAlpha = alpha * (1 - ph) * 0.85;
-      ctx.fillStyle = i % 2 ? (C.ember_color || '#ffb347') : (C.core_color || '#fff3b0');
+      const fl = flames[i];
+      if (!fl.alive || fl.dead) { pts[i] = null; continue; }
+      const k = i / (n - 1);
+      // Нормаль к направлению хвоста.
+      const a = flames[Math.max(0, i - 1)];
+      const b = flames[Math.min(n - 1, i + 1)];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      const amp = 0.35 + hash(i * 7.7 + slot * 3.13) * 0.65;
+      const prof = k * k;
+      const wave = Math.sin(t * 13 - k * 5.5 + hash(slot + i) * TAU)
+        * prof * amp * 14 * 0.4;
+      pts[i] = { x: fl.x + nx * wave, y: fl.y + ny * wave };
+    }
+
+    // Рисуем сегменты хвоста.
+    for (let i = 1; i < n; i++) {
+      const a = pts[i - 1], b = pts[i];
+      if (!a || !b) continue;
+      const k = i / (n - 1);
+      if (k < 0.3) continue;
+      const f = (k - 0.3) / 0.7;
+      const flick = 0.65 + hash(i * 3.3 + slot * 1.7) * 0.35;
+
+      // Тёмный подложечный слой.
+      ctx.globalAlpha = (0.2 + f * 0.4) * flick;
+      ctx.strokeStyle = '#ff4400';
+      ctx.lineWidth = 14 * (0.3 + f * 0.85) * pulse;
       ctx.beginPath();
-      ctx.arc(ex, ey, s, 0, TAU);
-      ctx.fill();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+
+      // Яркая сердцевина.
+      ctx.globalAlpha = (0.25 + f * 0.55) * flick;
+      ctx.strokeStyle = f > 0.6 ? '#ffcc44' : '#ff8800';
+      ctx.lineWidth = 14 * (0.12 + f * 0.35) * pulse;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
     }
 
     ctx.restore();
   }
 
-  // Один язык пламени — волнистый контур, сужающийся кверху.
-  _flameShape(ctx, x, y, w, h, sway, seed, color, tongues) {
-    const n = Math.max(3, Math.floor(tongues));
-    ctx.fillStyle = color;
-    for (let t = 0; t < n; t++) {
-      const off = (t - (n - 1) / 2) * w * 0.42;
-      const localH = h * (0.62 + hash(seed + t * 2.3) * 0.48);
-      const side = (t - (n - 1) / 2) * w * 0.22;
-      const tipX = x + off + sway + side;
-      const tipY = y - localH;
-      const baseW = w * (0.70 - Math.abs(t - (n - 1) / 2) * 0.12);
-      const ph = hash(seed + t * 4.1) * TAU;
+  // === ДЫМ СЕГМЕНТА ===
+  _drawSegmentSmoke(ctx, r, t, idx, alpha) {
+    const count = 3;
+    ctx.save();
+    for (let i = 0; i < count; i++) {
+      const slot = Math.floor(t * 1.6 + i * 1.9 + idx * 5);
+      const seed = i * 23.7 + slot * 1.31 + idx * 17;
+      const phase = (t * 1.6 + i * 1.9 + idx * 5) % 1;
+      const jitter = (hash(seed) - 0.5) * 1.2;
+      const dist = r * (1.5 + phase * 4.5);
+      const sx = Math.sin(phase * 3 + seed) * r * 0.5;
+      const sy = -phase * r * 5; // дым поднимается вверх
+      const size = r * (0.35 + phase * 0.9);
+      const a2 = (1 - phase) * 0.45 * Math.min(1, phase * 10) * alpha;
 
-      ctx.beginPath();
-      ctx.moveTo(x + off - baseW * 0.5, y);
-      // Левая сторона языка с волной.
-      ctx.bezierCurveTo(
-        x + off - baseW * 0.62, y - localH * 0.28,
-        tipX - baseW * 0.28 + Math.sin(ph) * w * 0.08, y - localH * 0.62,
-        tipX, tipY
-      );
-      // Правая сторона.
-      ctx.bezierCurveTo(
-        tipX + baseW * 0.24 + Math.cos(ph) * w * 0.08, y - localH * 0.58,
-        x + off + baseW * 0.58, y - localH * 0.24,
-        x + off + baseW * 0.5, y
-      );
-      ctx.closePath();
-      ctx.fill();
+      if (size > 2 && a2 > 0.02) {
+        ctx.globalAlpha = a2;
+        const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, size);
+        sg.addColorStop(0, '#8a7a66');
+        sg.addColorStop(0.55, '#5a4c3e');
+        sg.addColorStop(1, 'rgba(40,30,22,0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.arc(sx, sy, size, 0, TAU);
+        ctx.fill();
+      }
     }
+    ctx.restore();
+  }
+
+  // === ИСКРЫ СЕГМЕНТА ===
+  _drawSegmentSparks(ctx, r, t, idx, alpha) {
+    const count = 5;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < count; i++) {
+      const slot = Math.floor(t * 9 + i * 3.7 + idx * 11);
+      const seed = i * 17.3 + slot * 0.71;
+      const phase = (t * 9 + i * 3.7 + idx * 11) % 1;
+      const jitter = (hash(seed) - 0.5) * 1.6;
+      // Направление: вверх + боковой разброс.
+      const dx = Math.cos(jitter) * 0.6;
+      const dy = -1 + Math.sin(jitter) * 0.4;
+      const dist = r * (0.6 + phase * 3.2);
+      const sx = dx * dist + Math.sin(phase * 9 + seed) * r * 0.3;
+      const sy = dy * dist + Math.cos(phase * 7 + seed) * r * 0.3;
+      const size = r * 0.16 * (1 - phase * 0.7);
+      const a2 = (1 - phase) * 0.9 * alpha;
+
+      if (size > 0.3 && a2 > 0.05) {
+        ctx.globalAlpha = a2;
+        ctx.fillStyle = phase < 0.35 ? '#ffdd44' : '#ff6600';
+        ctx.beginPath();
+        ctx.arc(sx, sy, size, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 }
