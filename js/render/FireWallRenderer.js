@@ -202,22 +202,27 @@ export class FireWallRenderer {
     }
   }
 
-  // === ДЫМ (медленнее, чем у файрбола) ===
+  // === ДЫМ (медленнее, в 2 раза меньше) ===
   _drawSmoke(ctx, fl, idx, C, t, alpha) {
     const segH = C.segment_height_px ?? 100;
     const segW = C.segment_width_px ?? 50;
-    const count = 4;
+    const count = 2; // было 4, уменьшили в 2 раза
     ctx.save();
     for (let i = 0; i < count; i++) {
-      const slot = Math.floor(t * 0.35 + i * 2.3 + idx * 7); // очень медленный дым
-      const seed = i * 29.3 + slot * 1.31 + idx * 23;
-      const phase = (t * 0.35 + i * 2.3 + idx * 7) % 1;
-      const jitter = (hash(seed) - 0.5) * 1.5;
-      // Дым поднимается из центра сегмента.
-      const sx = fl.x + Math.sin(phase * 2 + seed) * segW * 0.4;
-      const sy = fl.y - segH * 0.2 - phase * segH * 1.8; // поднимается выше
-      const size = segW * (0.4 + phase * 1.2);
-      const a2 = (1 - phase) * 0.35 * Math.min(1, phase * 8) * alpha;
+      // Случайная фаза: каждый клуб появляется в случайный момент,
+      // не привязан к единому таймеру.
+      const seed = idx * 47.3 + i * 31.7;
+      const phaseShift = hash(seed + 99) * 3; // случайный сдвиг 0–3 сек
+      const slot = Math.floor(t * 0.35 + i * 2.3 + phaseShift);
+      const phase = (t * 0.35 + i * 2.3 + phaseShift) % 1;
+      // Случайное направление: клубы поднимаются не строго вверх,
+      // а с рандомным сносом по X и Y.
+      const driftX = (hash(seed + 1) - 0.5) * segW * 1.2;
+      const driftY = (hash(seed + 2) - 0.5) * segH * 0.3;
+      const sx = fl.x + driftX + Math.sin(phase * 3 + seed) * segW * 0.5;
+      const sy = fl.y - segH * 0.2 - phase * segH * (1.2 + hash(seed + 3) * 0.8) + driftY;
+      const size = segW * (0.35 + phase * 1.0);
+      const a2 = (1 - phase) * 0.3 * Math.min(1, phase * 6) * alpha;
 
       if (size > 3 && a2 > 0.02) {
         ctx.globalAlpha = a2;
@@ -242,18 +247,21 @@ export class FireWallRenderer {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < count; i++) {
-      const slot = Math.floor(t * 1.7 + i * 4.1 + idx * 13); // медленные искры
+      // Замедлили в 1.5 раза: 1.7 / 1.5 ≈ 1.13
+      const slot = Math.floor(t * 1.13 + i * 4.1 + idx * 13);
       const seed = i * 21.7 + slot * 0.71 + idx * 31;
-      const phase = (t * 1.7 + i * 4.1 + idx * 13) % 1;
+      const phase = (t * 1.13 + i * 4.1 + idx * 13) % 1;
       // Вектор: вверх, но плавно «гуляет» ±15° по/против часовой.
-      const angJitter = Math.sin(phase * 6 + seed) * (Math.PI / 12); // ±15°
+      const angJitter = Math.sin(phase * 6 + seed) * (Math.PI / 12);
       const ang = -Math.PI / 2 + angJitter;
       // Полёт вверх по хаотичной синусоиде: боковое дрейфование +
       // синусоидальное покачивание вдоль траектории.
       const rise = phase * segH * 1.5;
       const drift = Math.sin(angJitter) * rise; // боковой снос от угла
-      const wobble = Math.sin(phase * 9 + seed * TAU) * segW * 0.18 * phase;
-      const sx = fl.x + (hash(seed + 9) - 0.5) * segW * 0.6 + drift + wobble;
+      // Усилили хаотичность: добавили второй слой синусоиды с другой фазой.
+      const wobble1 = Math.sin(phase * 9 + seed * TAU) * segW * 0.18 * phase;
+      const wobble2 = Math.sin(phase * 14 + seed * 0.7 + idx * 5) * segW * 0.12 * phase;
+      const sx = fl.x + (hash(seed + 9) - 0.5) * segW * 0.6 + drift + wobble1 + wobble2;
       const sy = fl.y - segH * 0.2 - rise * Math.cos(angJitter);
       const size = segW * 0.08 * (1 - phase * 0.6);
       const a2 = (1 - phase) * 0.7 * alpha;
