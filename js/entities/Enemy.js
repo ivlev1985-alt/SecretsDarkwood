@@ -61,6 +61,20 @@ export class Enemy extends Entity {
     return amount;
   }
 
+  // Мгновенная смерть от «Армагеддона»: без hitFlash (иначе на каждом мобе
+  // создаётся offscreen-canvas и просадка FPS на мобилках).
+  killInstantly() {
+    if (!this.alive || this.deathT > 0) return false;
+    this.hp = 0;
+    this.hitFlash = 0;
+    this.burnT = 0;
+    this.slowT = 0;
+    this.deathT = 0.0001;
+    this.shootT = 0;
+    try { this.setAnim('death'); } catch (e) {}
+    return true;
+  }
+
   // Холод: factor 0..1 (множитель скорости), durationSec — сек. Резист снижает
   // и силу, и длительность. Сильнейший эффект побеждает, слабый лишь продлевает.
   applySlow(factor, durationSec) {

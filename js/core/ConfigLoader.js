@@ -233,6 +233,34 @@ export class ConfigLoader {
     if (b.loot && b.loot.fade_out_ms !== undefined && !(b.loot.fade_out_ms >= 0)) {
       errors.push('loot.fade_out_ms bad');
     }
+
+    // apocalypse: огненный дождь при подборе бомбы
+    const ap = b.apocalypse;
+    if (ap) {
+      for (const k of ['duration_ms', 'spawn_window_ms', 'meteor_count',
+        'max_active_meteors', 'fall_time_min_ms', 'fall_time_max_ms',
+        'impact_radius', 'impact_ring_max_radius', 'impact_ring_life_ms',
+        'particles_per_impact', 'particle_budget', 'particle_life_min_ms', 'particle_life_max_ms',
+        'particle_speed_min', 'particle_speed_max', 'particle_gravity',
+        'particle_size', 'meteor_glow_size', 'meteor_trail_length',
+        'shake_magnitude', 'shake_duration_ms', 'impact_shake',
+        'overlay_alpha', 'flash_alpha', 'flash_decay_ms']) {
+        if (!(ap[k] >= 0)) errors.push('apocalypse.' + k + ' bad');
+      }
+      if (!(ap.particle_budget >= 16)) errors.push('apocalypse.particle_budget must be >= 16');
+      if (!(ap.duration_ms > 0)) errors.push('apocalypse.duration_ms must be > 0');
+      if (!(ap.spawn_window_ms <= ap.duration_ms)) errors.push('apocalypse.spawn_window_ms must be <= duration_ms');
+      if (!(ap.meteor_count >= 1)) errors.push('apocalypse.meteor_count must be >= 1');
+      if (!(ap.max_active_meteors >= 1)) errors.push('apocalypse.max_active_meteors must be >= 1');
+      if (!(ap.fall_time_max_ms >= ap.fall_time_min_ms)) errors.push('apocalypse.fall_time_max_ms bad');
+      if (!(ap.particle_life_max_ms >= ap.particle_life_min_ms)) errors.push('apocalypse.particle_life_max_ms bad');
+      if (!(ap.particle_speed_max >= ap.particle_speed_min)) errors.push('apocalypse.particle_speed_max bad');
+      if (!(ap.impact_ring_max_radius >= ap.impact_radius)) errors.push('apocalypse.impact_ring_max_radius must be >= impact_radius');
+      if (!(ap.overlay_alpha >= 0 && ap.overlay_alpha <= 1)) errors.push('apocalypse.overlay_alpha must be 0..1');
+      if (!(ap.flash_alpha >= 0 && ap.flash_alpha <= 1)) errors.push('apocalypse.flash_alpha must be 0..1');
+      if (!ap.colors || typeof ap.colors !== 'object') errors.push('apocalypse.colors missing');
+    }
+
     if (b.chests && b.chests.start_chest) {
       const sc = b.chests.start_chest;
       if (sc.enabled !== undefined && typeof sc.enabled !== 'boolean') {

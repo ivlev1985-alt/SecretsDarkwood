@@ -436,6 +436,40 @@
       "bomb": { "sprite": "items/bomb.png", "frame_width": 16, "frame_height": 16, "columns": 1, "rows": 1, "frames": 1, "draw_size": 20 }
     }
   },
+  "apocalypse": {
+    "duration_ms": 3000,
+    "spawn_window_ms": 2400,
+    "meteor_count": 30,
+    "max_active_meteors": 12,
+    "fall_time_min_ms": 450,
+    "fall_time_max_ms": 600,
+    "impact_radius": 130,
+    "impact_ring_max_radius": 140,
+    "impact_ring_life_ms": 450,
+    "particles_per_impact": 6,
+    "particle_budget": 120,
+    "particle_life_min_ms": 260,
+    "particle_life_max_ms": 620,
+    "particle_speed_min": 80,
+    "particle_speed_max": 240,
+    "particle_gravity": 260,
+    "particle_size": 3,
+    "meteor_glow_size": 46,
+    "meteor_trail_length": 78,
+    "shake_magnitude": 5.5,
+    "shake_duration_ms": 3000,
+    "impact_shake": 2.2,
+    "overlay_alpha": 0.10,
+    "flash_alpha": 0.22,
+    "flash_decay_ms": 450,
+    "colors": {
+      "core": "#fff6c0",
+      "hot": "#ffd24a",
+      "flame": "#ff7a00",
+      "deep": "#ff3b00",
+      "ring": "#ffb347"
+    }
+  },
   "health_ui": {
     "potion_fly_speed": 900,
     "potion_fly_min_ms": 220,

@@ -31,6 +31,7 @@ import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
 import { EffectSystem } from '../systems/EffectSystem.js';
 import { ParticleSystem } from '../systems/ParticleSystem.js';
+import { ApocalypseSystem } from '../systems/ApocalypseSystem.js';
 import { MainMenu } from '../ui/MainMenu.js';
 import { HUD } from '../ui/HUD.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
@@ -827,6 +828,8 @@ export class Game {
     this.fx = new EffectSystem(this.config.effects_config, this.assets);
     const stFx = (b.status_effects || {});
     this.particles = new ParticleSystem(stFx.particle_budget || 300);
+    // Полноэкранный огненный дождь при подборе бомбы (все параметры — в balance).
+    this.apocalypse = new ApocalypseSystem(b.apocalypse || {});
     // состояние UI аптечки/питомцев на новый забег
     this.hpDisplay = this.player.hp;
     this.potionFlyers = [];
@@ -933,7 +936,7 @@ export class Game {
     this.camera.snap(0, 0);
   }
 
-  _onKill(e, weaponId) {
+  _onKill(e, weaponId, skipFx = false) {
     // Босс при смерти сбрасывает рывок/залп (иначе тик по мёртвому)
     if (e && e.isBoss) {
       e.dashState = 'idle'; e.dashT = 0;
@@ -941,12 +944,28 @@ export class Game {
     }
     for (const p of this.loot.dropFor(e)) this.pickups.push(p);
     // эффект смерти по hit_effect оружия (дефолт — искра)
+    if (skipFx) return;
     let fxId = 'hit_spark';
     if (weaponId) {
       const st = this.skills.weapons.get(weaponId);
       if (st && st.cfg.hit_effect) fxId = st.cfg.hit_effect;
     }
     if (this.fx) this.fx.play(fxId, e.x, e.y);
+  }
+
+  // Убийство обычного моба Армагеддоном: без hitFlash и без отдельного
+  // hit_spark на каждого (эффект уже даёт взрыв метеора). Босс не вызывается.
+  _apocalypseKill(e) {
+    if (!e || !e.alive || e.deathT > 0 || e.isBoss) return false;
+    if (typeof e.killInstantly === 'function') e.killInstantly();
+    else {
+      e.hp = 0;
+      e.deathT = 0.0001;
+      try { e.setAnim('death'); } catch (err) {}
+    }
+    this.combat.addKill(null);
+    this._onKill(e, null, true);
+    return true;
   }
 
   // --- Логика боссов: стрельба / рывок + удар / залп ---
@@ -1394,13 +1413,9 @@ export class Game {
     } else if (p.kind === 'magnet') {
       for (const o of this.pickups) o.magnetized = true;
     } else if (p.kind === 'bomb') {
-      for (const e of this.enemies) {
-        if (!e.alive || e.deathT > 0) continue;
-        const was = e.hp;
-        e.takeDamage(150, 0, 0);
-        if (e.hp <= 0 && was > 0) { this.combat.addKill(null); this._onKill(e, null); }
-      }
-      this.combat.pushText(this.player.x, this.player.y - 30, 'BOOM', '#ff8800');
+      // Не мгновенный урон по всем, а 3-секундный огненный дождь.
+      if (this.apocalypse) this.apocalypse.start(this);
+      try { this.audio.playSfx('explosion.mp3'); } catch (e) {}
     }
   }
 
@@ -1541,6 +1556,9 @@ export class Game {
   // (если игрок погиб именно в этом кадре от контактного урона).
   _beginDeathAnimation() {
     if (!this.player || this.player.alive || this._deathPending || this._dying) return false;
+    // Не оставляем огненный дождь и тряску поверх падения мага.
+    if (this.apocalypse) this.apocalypse.clear();
+    if (this.camera) this.camera.resetShake();
     this.player.startDeath();
     this._deathPending = true;
     this._deathTimer = this.player.deathDuration ?? 1.1;
@@ -1617,6 +1635,7 @@ export class Game {
   }
 
   update(dt) {
+    const g = this.config.game_config;
     // Пауза мира с живой анимацией цифр: levelup, инвентарь, модалка питомца
     if (this.states.is('upgrade') || (this.uiInventory && this.states.is('playing'))
       || this.uiPetSwap || this.uiItemReward) {
@@ -1630,6 +1649,7 @@ export class Game {
       return;
     }
     this.time += dt;
+    if (this.camera) this.camera.updateShake(dt);
     // Смерть: короткая кинематическая пауза (падение мага + душа), затем gameover.
     if (!this.player.alive) {
       this._beginDeathAnimation();
@@ -1784,6 +1804,8 @@ export class Game {
       }
     }
     if (this.particles) this.particles.update(dt);
+    // Огненный дождь: взрывы убивают обычных мобов в радиусе (босс неуязвим).
+    if (this.apocalypse) this.apocalypse.update(dt, this);
     this.combat.enemyProjectilesVsPlayer(this.skills.enemyShots, this.player);
     this.combat.separate(this.enemies);
     // Контактный урон: рывок босса бьёт сильнее (contact_mul из dash-конфига)
@@ -2099,6 +2121,7 @@ export class Game {
       this.skills.drawLightning(ctx);
       if (this.fx) this.fx.draw(ctx);
       if (this.particles) this.particles.draw(ctx);
+      if (this.apocalypse) this.apocalypse.draw(ctx, this);
       ctx.textAlign = 'center';
       for (const t of this.combat.texts) {
         ctx.globalAlpha = 1 - t.life / t.maxLife;
@@ -2107,6 +2130,9 @@ export class Game {
       }
       ctx.globalAlpha = 1;
       ctx.restore();
+
+      // Красный тинт/вспышка Армагеддона — поверх мира, но под HUD.
+      if (this.apocalypse) this.apocalypse.drawOverlay(ctx, this, W, H);
 
       // HUD только в игре
       if (st === 'playing' || st === 'paused' || st === 'upgrade') {
