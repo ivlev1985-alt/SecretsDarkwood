@@ -24,6 +24,7 @@ import { SkeletonArcherRenderer } from '../render/SkeletonArcherRenderer.js';
 import { TornadoRenderer } from '../render/TornadoRenderer.js';
 import { FireWallRenderer } from '../render/FireWallRenderer.js';
 import { FireballRenderer } from '../render/FireballRenderer.js';
+import { MagicProjectileRenderer } from '../render/MagicProjectileRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
