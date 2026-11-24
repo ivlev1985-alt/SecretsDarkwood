@@ -149,10 +149,10 @@
       "slow_duration_ms": 2000,
       "slow_factor_per_level": -0.05,
       "slow_duration_per_level_ms": 250,
-      "orbit_period_sec": 4,
-      "orbit_far_period_sec": 3.5,
-      "orbit_near_direction": 1,
-      "orbit_far_direction": -1,
+      "cooldown_ms": 2000,
+      "burst_duration_sec": 2,
+      "burst_min_gap_sec": 0.2,
+      "shard_levels": [2, 3, 4, 5, 6],
       "orbit_near_radius": 70,
       "orbit_far_radius": 120,
       "orb_radius": 10,
@@ -169,13 +169,6 @@
         }
       },
       "orb_draw_size": 24,
-      "orbit_levels": [
-        { "near": 2, "far": 0 },
-        { "near": 2, "far": 1 },
-        { "near": 2, "far": 2 },
-        { "near": 3, "far": 2 },
-        { "near": 3, "far": 3 }
-      ],
       "sfx_hit": "hit.mp3",
       "hit_effect": "hit_spark",
       "upgradeable": true,

@@ -14,12 +14,12 @@ export class SkillSystem {
     this.lightningFx = []; // { x1, y1, x2, y2, t, max, seed } — ломаные молний
     this.lightningCfg = {}; // game_config.visuals.lightning_chain, ставит Game
     this.auraTick = 0;
-    // true — процедурный FrostRingRenderer взял орбы на себя (ставит Game
-    // каждый кадр перед drawOrbits): собственные шары не рисуем.
-    this.orbitsHandled = false;
     this.clock = 0; // общее время для кулдаунов попаданий орбитальных шаров
     this._orbHitAt = new WeakMap(); // enemy -> время последнего попадания шаром
     this.pool = new Pool(() => new Projectile(), 128);
+    // ледяные кристаллы frost_ring
+    this.shards = [];
+    this._shardSeq = 0;
     for (const w of weaponsCfg) {
       this.weapons.set(w.id, { cfg: w, level: 0, active: false, cd: Math.random() * 0.5 });
     }
@@ -63,7 +63,6 @@ export class SkillSystem {
 
   weaponCooldown(st, player) {
     const c = st.cfg;
-    if (c.type === 'orbit') return 0; // пассивная магия — без перезарядки
     const red = (c.cooldown_reduction_per_level || 0) * (st.level - 1);
     const cd = (c.cooldown_ms / 1000) * (1 - Math.min(0.7, red));
     return player ? cd / (player.attackSpeedMul || 1) : cd;
@@ -187,8 +186,6 @@ export class SkillSystem {
 
     for (const st of this.weapons.values()) {
       if (st.active === false) continue;
-      // орбитальная пассивка не кастуется по КД — считается каждый кадр ниже
-      if (st.cfg.type === 'orbit') { st.waiting = false; continue; }
       st.cd -= dt;
       if (st.cd > 0) continue;
       const c = st.cfg;
@@ -208,17 +205,18 @@ export class SkillSystem {
       if (c.type === 'to_target') fired = this._fireToTarget(st, ctx);
       else if (c.type === 'around_player') this._fireAura(st, ctx);
       else if (c.type === 'area') fired = this._fireArea(st, ctx);
+      else if (c.type === 'orbit') fired = this._fireFrostRing(st, ctx);
       // Полный КД только если каст реально произошёл; иначе — короткий ретрай,
       // чтобы индикатор перезарядки не крутился впустую без цели.
       st.waiting = !fired; // HUD: ждём цель — иконка не "перезаряжается"
       st.cd = fired ? this.weaponCooldown(st, player) : 0.25;
-      // Визуальный каст героя (поднимает посох). Орбитальная пассивка не кастуется.
+      // Визуальный каст героя (поднимает посох).
       // st.lastCrit проставляется в _fireToTarget — золотая вспышка при крит-касте.
-      if (fired && c.type !== 'orbit' && typeof ctx.onCast === 'function') ctx.onCast(st, !!st.lastCrit);
+      if (fired && typeof ctx.onCast === 'function') ctx.onCast(st, !!st.lastCrit);
     }
 
-    // орбитальная пассивная магия (Кольцо холода): позиции шаров + урон касанием
-    this._updateOrbits(dt, ctx);
+    // ледяные кристаллы «Кольца холода»: полёт по спирали + урон касанием
+    this._updateShards(dt, ctx);
 
     // аура-ти idle не нужен; урон ауры — тиком
     this.auraTick -= dt;
@@ -689,168 +687,333 @@ export class SkillSystem {
     this.auraFlash = 0.2;
   }
 
-  // Пассивная орбитальная магия («Кольцо холода»): ледяные шары летают вокруг
-  // игрока на ближней/дальней орбите. Количество шаров по уровням — из
-  // skills_config.orbit_levels; радиусы, период, размер и КД попадания — тоже.
-  _updateOrbits(dt, ctx) {
+  // Активный каст «Кольца холода»: планируем серию из N ледяных кристаллов.
+  // Вылет асинхронный: N кристаллов растянуты на burst_duration_sec,
+  // минимальный шаг 0.2 сек, остальное время распределяется случайно.
+  // Возвращает true — каст состоялся (кристаллы летят без цели, поэтому
+  // живые враги не обязательны).
+  _fireFrostRing(st, ctx) {
+    const c = st.cfg, { player } = ctx;
+    const lvls = c.shard_levels || [];
+    const n = Math.max(1, Math.min(6,
+      (lvls[Math.min(st.level, lvls.length) - 1] ?? lvls[lvls.length - 1] ?? 2) | 0));
+    const burstDur = c.burst_duration_sec ?? 2;
+    const minGap = c.burst_min_gap_sec ?? 0.2;
+    // Моменты вылета: minGap + случайная доля остатка (сумма <= burstDur).
+    const extra = Math.max(0, burstDur - minGap * (n - 1));
+    const times = [];
+    let t = 0;
+    for (let i = 0; i < n; i++) {
+      times.push(t);
+      if (i < n - 1) t += minGap + Math.random() * extra / (n - 1);
+    }
+    st.burst = { times, idx: 0, t: 0 };
+    void player;
+    return true;
+  }
+
+  // Спавн одного кристалла: архимедова спираль вокруг «якоря», который
+  // с лагом тянется за игроком — орбита растягивается при движении,
+  // а не следует за магом жёстко.
+  _spawnShard(st, ctx) {
+    const c = st.cfg, { player } = ctx;
+    const nearR = c.orbit_near_radius ?? 70;
+    const farR = c.orbit_far_radius ?? 120;
+    const rndR = () => nearR + Math.random() * (farR - nearR);
+    const TAU = Math.PI * 2;
+    const s = {
+      id: ++this._shardSeq,
+      weaponId: c.id,
+      // якорь спирали: стартует у игрока, потом догоняет его с лагом
+      ax: player.x, ay: player.y,
+      lag: 2.5 + Math.random() * 1.5, // 1/сек — насколько быстро тянется
+      a0: Math.random() * TAU,
+      dir: Math.random() < 0.5 ? -1 : 1,
+      turns: 0.6 + Math.random() * 0.9, // оборотов спирали за полёт
+      r0: rndR(), r1: rndR(),          // старт/финиш радиуса (в зазоре орбит)
+      t: 0,
+      dur: 1.3 + Math.random() * 0.5,  // время полёта
+      r: c.orb_radius ?? 10,           // базовый размер (тает до 0)
+      curR: c.orb_radius ?? 10,
+      k: 0,
+      spin: Math.random() * TAU,
+      spinSpeed: (0.5 + Math.random()) * (Math.random() < 0.5 ? -1 : 1) * Math.PI,
+      wobbleAmp: 4 + Math.random() * 8,
+      wobbleFreq: 2 + Math.random() * 3,
+      wobblePhase: Math.random() * TAU,
+      x: 0, y: 0, vx: 0, vy: 0,
+      trail: [],
+      hit: new Set() // враги, которых этот кристалл уже задел
+    };
+    // стартовая позиция — чтобы первый кадр не был в (0,0)
+    this._shardPos(s, 0, s);
+    s.trail.push({ x: s.x, y: s.y, r: s.curR });
+    this.shards.push(s);
+  }
+
+  // Позиция кристалла на спирали в фазе k (0..1): архимедова — радиус и
+  // угол линейны по времени, плюс лёгкий волновой «ледяной» снос.
+  _shardPos(s, k, out) {
+    const R = s.r0 + (s.r1 - s.r0) * k
+      + Math.sin(k * s.wobbleFreq * Math.PI + s.wobblePhase) * s.wobbleAmp * (0.4 + 0.6 * (1 - k));
+    const a = s.a0 + s.dir * s.turns * Math.PI * 2 * k;
+    out.x = s.ax + Math.cos(a) * R;
+    out.y = s.ay + Math.sin(a) * R;
+    out.angle = a;
+    out.radius = R;
+  }
+
+  // Тик кристаллов: лаг якоря за игроком, движение по спирали, «таяние»,
+  // шлейф, урон/заморозка всем встречным (каждый враг — один раз за кристалл).
+  _updateShards(dt, ctx) {
     const { player, enemies, onKill } = ctx;
+    // очереди на вылет
     for (const st of this.weapons.values()) {
-      if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
-      const c = st.cfg;
-      // Разные орбиты: свой период и направление. В canvas Y направлен вниз,
-      // поэтому +1 — по часовой стрелке, -1 — против.
-      const nearPeriod = c.orbit_period_sec || 4;
-      const farPeriod = c.orbit_far_period_sec || nearPeriod;
-      const nearDir = c.orbit_near_direction ?? 1;
-      const farDir = c.orbit_far_direction ?? -1;
-      st.orbitAngle = (st.orbitAngle || 0) + (Math.PI * 2 / nearPeriod) * nearDir * dt;
-      st.orbitFarAngle = (st.orbitFarAngle || 0) + (Math.PI * 2 / farPeriod) * farDir * dt;
-      // Собственное вращение каждого шара вокруг своей оси (rad/s из spinSpeed)
-      if (st.orbSpin) for (let i = 0; i < st.orbSpin.length; i++) {
-        const sp = (st.orbSprites && st.orbSprites[i]) || null;
-        st.orbSpin[i] = (st.orbSpin[i] || 0) + (sp ? sp.spinSpeed * Math.PI * 2 : 0) * dt;
+      if (!st.burst || st.active === false || !(st.level > 0)) continue;
+      st.burst.t += dt;
+      while (st.burst.idx < st.burst.times.length && st.burst.t >= st.burst.times[st.burst.idx]) {
+        this._spawnShard(st, ctx);
+        st.burst.idx++;
       }
-      const lvls = c.orbit_levels || [];
-      const cnt = lvls[Math.min(st.level, lvls.length) - 1] || lvls[lvls.length - 1] || { near: 2, far: 0 };
-      const nearN = Math.max(0, cnt.near | 0);
-      const farN = Math.max(0, cnt.far | 0);
-      const nearR = c.orbit_near_radius ?? 70;
-      const farR = c.orbit_far_radius ?? 120;
-      const orbR = c.orb_radius ?? 10;
-      const a0 = st.orbitAngle;
-      const a0Far = st.orbitFarAngle;
-      // Для процедурного рендера осколков у каждого шара храним параметры
-      // его орбиты: центр, радиус, угол, направление и угол собственного
-      // вращения (вокруг своей оси).
-      const mkOrb = (a, R, far, dir) => ({
-        x: player.x + Math.cos(a) * R, y: player.y + Math.sin(a) * R,
-        r: orbR, far,
-        cx: player.x, cy: player.y, orbitR: R, angle: a, dir,
-        spin: (st.orbSpin && st.orbSpin[orbs.length]) || 0
-      });
-      const orbs = [];
-      for (let i = 0; i < nearN; i++) {
-        const a = a0 + (Math.PI * 2 * i) / nearN;
-        orbs.push(mkOrb(a, nearR, false, nearDir));
-      }
-      // Дальняя орбита смещена на полшага, чтобы шары чередовались с ближними.
-      // Если на дальней орбите всего один шар — берём полшага ближней,
-      // иначе он встал бы ровно за ближним шаром.
-      const farOffset = farN > 1
-        ? Math.PI / farN
-        : (nearN > 1 ? Math.PI / nearN : 0);
-      for (let i = 0; i < farN; i++) {
-        const a = a0Far + farOffset + (Math.PI * 2 * i) / farN;
-        orbs.push(mkOrb(a, farR, true, farDir));
-      }
-      st.orbs = orbs;
-      this._syncOrbSprites(st, orbs.length);
-      // синхронизировали список орбов — обновляем углы собственного вращения
-      for (let i = 0; i < orbs.length; i++) orbs[i].spin = (st.orbSpin && st.orbSpin[i]) || 0;
-      st.player = player; // процедурному рендеру нужен центр кольца
-      if (!enemies || !enemies.length) continue;
+      if (st.burst.idx >= st.burst.times.length) st.burst = null;
+    }
+    if (!this.shards.length) return;
+
+    // параметры оружия берём один раз (frost_ring — единственный orbit-скилл)
+    let st = null;
+    for (const w of this.weapons.values()) {
+      if (w.cfg.type === 'orbit' && w.active !== false && w.level > 0) { st = w; break; }
+    }
+
+    for (let i = this.shards.length - 1; i >= 0; i--) {
+      const s = this.shards[i];
+      // якорь тянется к игроку с экспоненциальным лагом: кристаллы
+      // «растягиваются» в сторону движения, а не телепортируются за магом
+      const f = Math.min(1, s.lag * dt);
+      s.ax += (player.x - s.ax) * f;
+      s.ay += (player.y - s.ay) * f;
+      const px0 = s.x, py0 = s.y;
+      s.t += dt;
+      const k = Math.min(1, s.t / s.dur);
+      this._shardPos(s, k, s);
+      s.vx = (s.x - px0) / Math.max(dt, 0.001);
+      s.vy = (s.y - py0) / Math.max(dt, 0.001);
+      // таяние: размер линейно к нулю, прозрачность растёт (в рендере)
+      s.curR = Math.max(0.5, s.r * (1 - k));
+      s.k = k;
+      s.spin += s.spinSpeed * dt;
+      // шлейф: точка на каждый кадр, кольцевой лимит
+      s.trail.push({ x: s.x, y: s.y, r: s.curR });
+      if (s.trail.length > 14) s.trail.shift();
+      if (k >= 1) { this.shards.splice(i, 1); continue; }
+      if (!enemies || !enemies.length || !st) continue;
 
       const slow = this.weaponSlow(st);
       const dmg = this.weaponDamage(st, player);
-      const hitCd = (c.orb_hit_cooldown_ms ?? 600) / 1000;
-      for (const o of orbs) {
-        for (const e of enemies) {
-          if (!e.alive || e.deathT > 0) continue;
-          const dx = e.x - o.x, dy = e.y - o.y;
-          const rr = orbR + (e.radius || 0);
-          if (dx * dx + dy * dy > rr * rr) continue;
-          const last = this._orbHitAt.get(e);
-          if (last !== undefined && this.clock - last < hitCd) continue;
-          this._orbHitAt.set(e, this.clock);
-          const was = e.hp;
-          const res = this.combat.rollDamage(dmg);
-          const d = Math.hypot(dx, dy) || 1;
-          e.takeDamage(res.damage, (dx / d) * 60, (dy / d) * 60);
-          if (slow) e.applySlow(slow.factor, slow.duration);
-          if (res.crit) this.combat.pushText(e.x, e.y - 20, Math.round(res.damage) + '!');
-          if (e.hp <= 0 && was > 0) {
-            this.combat.addKill(c.id);
-            if (onKill) onKill(e, c.id);
-          }
+      for (const e of enemies) {
+        if (!e.alive || e.deathT > 0 || s.hit.has(e)) continue;
+        const dx = e.x - s.x, dy = e.y - s.y;
+        const rr = s.curR + (e.radius || 0);
+        if (dx * dx + dy * dy > rr * rr) continue;
+        s.hit.add(e);
+        const was = e.hp;
+        const res = this.combat.rollDamage(dmg);
+        const d = Math.hypot(dx, dy) || 1;
+        e.takeDamage(res.damage, (dx / d) * 60, (dy / d) * 60);
+        if (slow) e.applySlow(slow.factor, slow.duration);
+        if (res.crit) this.combat.pushText(e.x, e.y - 20, Math.round(res.damage) + '!');
+        if (e.hp <= 0 && was > 0) {
+          this.combat.addKill(st.cfg.id);
+          if (onKill) onKill(e, st.cfg.id);
         }
       }
     }
   }
 
-  // Стабильное назначение кадра и вращения каждому шару:
-  // при росте числа орбов существующие сохраняют свой кадр (без повторов),
-  // новым выдаются свободные кадры спрайтшита случайно.
-  _syncOrbSprites(st, count) {
-    if (!st.orbSprites) { st.orbSprites = []; st.orbSpin = []; }
-    const total = (st.cfg.orb_frames && st.cfg.orb_frames.animations.idle.frames) || 6;
-    while (st.orbSprites.length > count) { st.orbSprites.pop(); st.orbSpin.pop(); }
-    while (st.orbSprites.length < count) {
-      const used = new Set(st.orbSprites.map((s) => s.frame));
-      const free = [];
-      for (let i = 0; i < total; i++) if (!used.has(i)) free.push(i);
-      const frame = free.length ? free[Math.floor(Math.random() * free.length)] : Math.floor(Math.random() * total);
-      // 0.5..1.5 об/с с шагом 0.1 (k = 5..15), случайное направление
-      const k = 5 + Math.floor(Math.random() * 11);
-      const dir = Math.random() < 0.5 ? -1 : 1;
-      st.orbSprites.push({ frame, spinSpeed: (k / 10) * dir });
-      st.orbSpin.push(Math.random() * Math.PI * 2); // стартовый угол
+  // === ОТРИСОВКА ЛЕДЯНЫХ КРИСТАЛЛОВ (shards) ===
+  drawShards(ctx) {
+    if (!this.shards.length) return;
+    const TAU = Math.PI * 2;
+    for (let si = 0; si < this.shards.length; si++) {
+      const s = this.shards[si];
+      if (s.k >= 1) continue;
+
+      const r = s.curR || 10;
+      const spin = s.spin || 0;
+      const col = '#9fe8ff';
+      const core = '#eaffff';
+      const deep = '#2a7fff';
+
+      // Прозрачность: 10% в начале → 50% в конце (тает)
+      const alpha = 0.1 + 0.4 * s.k;
+
+      // --- Морозный шлейф (trail) ---
+      if (s.trail && s.trail.length > 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let ti = 1; ti < s.trail.length; ti++) {
+          const p0 = s.trail[ti - 1];
+          const p1 = s.trail[ti];
+          const tk = ti / s.trail.length;
+          const trailAlpha = alpha * (1 - tk * 0.7);
+          const trailR = r * (0.3 + 0.7 * (1 - tk));
+          ctx.globalAlpha = trailAlpha * 0.6;
+          ctx.strokeStyle = '#b0e0ff';
+          ctx.lineWidth = trailR * 0.8;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
+          // Ядро шлейфа
+          ctx.globalAlpha = trailAlpha * 0.3;
+          ctx.strokeStyle = core;
+          ctx.lineWidth = trailR * 0.3;
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // --- Ледяной пар (vapor) ---
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const vaporCount = 3;
+      for (let vi = 0; vi < vaporCount; vi++) {
+        const phase = ((s.k * 3 + vi * 0.33) % 1);
+        if (phase > 0.8) continue;
+        const drift = Math.sin(s.spin + vi * 2.1) * r * 0.5;
+        const rise = phase * r * 2;
+        const vx = s.x + drift + Math.sin(s.spin * 1.7 + vi) * r * 0.3;
+        const vy = s.y - rise;
+        const vaporR = r * (0.4 + phase * 0.8);
+        const vaporAlpha = alpha * 0.25 * (1 - phase);
+        if (vaporAlpha < 0.01) continue;
+        ctx.globalAlpha = vaporAlpha;
+        const vg = ctx.createRadialGradient(vx, vy, 0, vx, vy, vaporR);
+        vg.addColorStop(0, 'rgba(235,250,255,0.8)');
+        vg.addColorStop(0.6, 'rgba(190,230,255,0.3)');
+        vg.addColorStop(1, 'rgba(160,210,255,0)');
+        ctx.fillStyle = vg;
+        ctx.beginPath();
+        ctx.arc(vx, vy, vaporR, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // --- Частицы (sparks) во все стороны ---
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const sparkCount = 4;
+      for (let spi = 0; spi < sparkCount; spi++) {
+        const sparkPhase = ((s.k * 4 + spi * 0.25 + si * 0.1) % 1);
+        if (sparkPhase > 0.6) continue;
+        const angle = (spi / sparkCount) * TAU + s.spin * 0.5;
+        const dist = sparkPhase * r * 3;
+        const sx = s.x + Math.cos(angle) * dist;
+        const sy = s.y + Math.sin(angle) * dist;
+        const sparkR = r * 0.15 * (1 - sparkPhase);
+        const sparkAlpha = alpha * 0.7 * (1 - sparkPhase);
+        if (sparkAlpha < 0.01 || sparkR < 0.5) continue;
+        ctx.globalAlpha = sparkAlpha;
+        ctx.fillStyle = sparkPhase < 0.3 ? '#ffffff' : '#a0d8ff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, sparkR, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // --- Кристалл ---
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(spin);
+
+      // Свечение
+      const glowR = r * 2.5;
+      const glow = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, glowR);
+      glow.addColorStop(0, `rgba(160,230,255,${alpha * 0.35})`);
+      glow.addColorStop(0.5, `rgba(60,160,255,${alpha * 0.12})`);
+      glow.addColorStop(1, 'rgba(20,80,255,0)');
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, glowR, 0, TAU);
+      ctx.fill();
+
+      // Тело кристалла (шестиугольник с шумом)
+      const verts = 5 + (si % 3); // 5-7 вершин
+      ctx.globalAlpha = alpha * 0.95;
+      const bodyGrad = ctx.createLinearGradient(-r, -r, r, r);
+      bodyGrad.addColorStop(0, core);
+      bodyGrad.addColorStop(0.45, col);
+      bodyGrad.addColorStop(1, deep);
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      for (let vi = 0; vi < verts; vi++) {
+        const ang = (vi / verts) * TAU - Math.PI / 2;
+        const noise = 1 + Math.sin(si * 3.7 + vi * 2.3) * 0.2;
+        const px = Math.cos(ang) * r * noise;
+        const py = Math.sin(ang) * r * noise;
+        vi === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Бликовая грань
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      const hlVerts = 3 + (si % 2);
+      for (let vi = 0; vi < hlVerts; vi++) {
+        const ang = (vi / hlVerts) * TAU + si * 0.5;
+        const hr = 0.3 + Math.sin(si * 5.1 + vi) * 0.15;
+        vi === 0 ? ctx.moveTo(Math.cos(ang) * r * hr, Math.sin(ang) * r * hr)
+                  : ctx.lineTo(Math.cos(ang) * r * hr, Math.sin(ang) * r * hr);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Рёбра (иней)
+      ctx.globalAlpha = alpha * 0.7;
+      ctx.strokeStyle = core;
+      ctx.lineWidth = Math.max(1, r * 0.08);
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let vi = 0; vi < verts; vi++) {
+        const ang = (vi / verts) * TAU - Math.PI / 2;
+        const noise = 1 + Math.sin(si * 3.7 + vi * 2.3) * 0.2;
+        const px = Math.cos(ang) * r * noise;
+        const py = Math.sin(ang) * r * noise;
+        vi === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      // Искрящийся блик
+      const tw = 0.5 + 0.5 * Math.sin(this.clock * 7 + si * 2.3);
+      ctx.globalAlpha = alpha * (0.3 + 0.5 * tw);
+      ctx.fillStyle = '#ffffff';
+      const jumpIdx = Math.floor(this.clock * 3 + si) % verts;
+      const jumpAng = (jumpIdx / verts) * TAU - Math.PI / 2;
+      const bx = Math.cos(jumpAng) * r * 0.6;
+      const by = Math.sin(jumpAng) * r * 0.6;
+      const bs = r * (0.18 + 0.1 * tw);
+      ctx.beginPath();
+      ctx.moveTo(bx, by - bs);
+      ctx.lineTo(bx + bs * 0.3, by - bs * 0.3);
+      ctx.lineTo(bx + bs, by);
+      ctx.lineTo(bx + bs * 0.3, by + bs * 0.3);
+      ctx.lineTo(bx, by + bs);
+      ctx.lineTo(bx - bs * 0.3, by + bs * 0.3);
+      ctx.lineTo(bx - bs, by);
+      ctx.lineTo(bx - bs * 0.3, by - bs * 0.3);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
     }
-  }
-
-  // Отрисовка ледяных шаров: спрайт из атласа (кадр + вращение),
-  // программные осколки (FrostRingRenderer) или заглушка — если арта нет.
-  drawOrbits(ctx) {
-    if (this.orbitsHandled) return; // процедурный рендерер уже нарисовал
-    for (const st of this.weapons.values()) {
-      if (st.active === false || st.cfg.type !== 'orbit' || !(st.level > 0)) continue;
-      if (!st.orbs) continue;
-      const c = st.cfg;
-      // assets может не прийти (старый кэш модуля Game.js) — не роняем игровой цикл
-      const img = (c.orb_sprite && this.assets) ? this.assets.get(c.orb_sprite) : null;
-      const f = c.orb_frames;
-      const useArt = img && img.tagName === 'IMG' && f && st.orbSprites;
-      st.orbs.forEach((o, i) => {
-        if (useArt) this._drawOrbSprite(ctx, img, f, o, st.orbSprites[i], st.orbSpin[i], c);
-        else this._drawOrb(ctx, o, c);
-      });
-    }
-  }
-
-  _drawOrbSprite(ctx, img, f, o, sp, angle, c) {
-    const size = c.orb_draw_size || (o.r || 10) * 4;
-    const col = sp.frame % f.columns;
-    const row = Math.floor(sp.frame / f.columns);
-    ctx.save();
-    ctx.translate(o.x, o.y);
-    ctx.rotate(angle || 0);
-    ctx.drawImage(img, col * f.frame_width, row * f.frame_height, f.frame_width, f.frame_height,
-      -size / 2, -size / 2, size, size);
-    ctx.restore();
-  }
-
-  _drawOrb(ctx, o, c) {
-    const col = c.orb_color || '#00ccff';
-    const core = c.orb_color_core || '#eaffff';
-    const r = o.r || 10;
-    ctx.save();
-    // мягкое свечение
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(o.x, o.y, r * 1.9, 0, Math.PI * 2); ctx.fill();
-    // тело шара
-    ctx.globalAlpha = o.far ? 0.8 : 0.95;
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, Math.PI * 2); ctx.fill();
-    // блик
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = core;
-    ctx.beginPath(); ctx.arc(o.x - r * 0.28, o.y - r * 0.28, r * 0.42, 0, Math.PI * 2); ctx.fill();
-    // ледяная кромка
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = core;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
   }
 
   _fireArea(st, ctx) {

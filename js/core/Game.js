@@ -22,10 +22,8 @@ import { Pet } from '../entities/Pet.js';
 import { HeroMageRenderer } from '../render/HeroMageRenderer.js';
 import { SkeletonArcherRenderer } from '../render/SkeletonArcherRenderer.js';
 import { TornadoRenderer } from '../render/TornadoRenderer.js';
-import { FireballRenderer } from '../render/FireballRenderer.js';
-import { FrostRingRenderer } from '../render/FrostRingRenderer.js';
-import { MagicProjectileRenderer } from '../render/MagicProjectileRenderer.js';
 import { FireWallRenderer } from '../render/FireWallRenderer.js';
+import { FireballRenderer } from '../render/FireballRenderer.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { DailyBonusSystem } from '../systems/DailyBonusSystem.js';
@@ -817,9 +815,6 @@ export class Game {
     // рисует и огненный шар босса (fireball_boss), если спрайта нет.
     const fbVisual = (g.visuals && g.visuals.fireball) || {};
     this.fireballRenderer = new FireballRenderer(fbVisual);
-    // Процедурное кольцо холода: конфиг в visuals.frost_ring
-    const frVisual = (g.visuals && g.visuals.frost_ring) || {};
-    this.frostRingRenderer = new FrostRingRenderer(frVisual);
     this._deathPending = false;
     this._deathTimer = 0;
     this.enemies = [];
@@ -2044,9 +2039,8 @@ export class Game {
           this.player.draw(ctx, this.assets, g.hero.sprite, r.sw, r.sh, g.visuals.global_sprite_scale || 1, '#888');
         }
       }
-      // орбитальная пассивная магия: ледяные шары вокруг игрока
-      this.skills.orbitsHandled = !!(this.frostRingRenderer && this.frostRingRenderer.draw(ctx, this.skills.weapons, this.time, this.assets));
-      this.skills.drawOrbits(ctx);
+      // активный каст frost_ring: ледяные кристаллы по спирали
+      this.skills.drawShards(ctx);
       // питомец (монстры его не бьют — коллизий с ним нет)
       if (this.pet) {
         const pet = this.pet;
