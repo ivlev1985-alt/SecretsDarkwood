@@ -278,15 +278,13 @@ export class FireballRenderer {
 
   _drawExplosion(ctx, p, t) {
     const r = p.radius || 12;
-    // Визуал привязан к РЕАЛЬНОМУ радиусу сплэша (CombatSystem использует
-    // p.explosionR для урона): все фазы умещаются внутри него, чтобы игрок
-    // видел честную зону поражения.
-    const eR = Math.max(10, p.explosionR || 100) * 0.85;
     // Взрыв по спрайтовой анимации был ~0.4 сек — слишком быстро, чтобы
     // считаться. Растягиваем жизнь один раз при входе в фазу взрыва.
     if (!p._fbBoomScaled) {
       p._fbBoomScaled = true;
       p.maxLife = Math.max(p.maxLife || 0.4, (this.cfg.boom_life_ms ?? 900) / 1000);
+      // Ширина ударной волны случайна: 100–150px (высота вдвое меньше — эллипс).
+      p._fbRingW = 100 + Math.random() * 50;
     }
     const maxLife = p.maxLife || 0.9;
     const life = p.life || 0;
@@ -294,18 +292,27 @@ export class FireballRenderer {
 
     ctx.save();
 
+    // Ударная волна — эллипс «на земле» (вид сбоку): ширина 100–150px
+    // (задана случайно при входе во взрыв), высота вдвое меньше ширины.
+    const ringW = p._fbRingW || 125;
+    const ringAspect = 0.5;
+
     // Фаза 0–0.12: первичная белая вспышка.
     if (k < 0.12) {
       const flashK = k / 0.12;
-      const flashR = eR * (0.25 + flashK * 0.55);
-      const flash = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, flashR);
+      const flashR = ringW * (0.25 + flashK * 0.55);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.scale(1, ringAspect);
+      const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, flashR);
       flash.addColorStop(0, `rgba(255,255,200,${1 - flashK})`);
       flash.addColorStop(0.3, `rgba(255,200,50,${(1 - flashK) * 0.7})`);
       flash.addColorStop(1, 'rgba(255,100,0,0)');
       ctx.fillStyle = flash;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, flashR, 0, TAU);
+      ctx.arc(0, 0, flashR, 0, TAU);
       ctx.fill();
+      ctx.restore();
     }
 
     // Вторичные вспышки: 3 «хлопка» в разные моменты, в разных точках
@@ -319,49 +326,56 @@ export class FireballRenderer {
       if (k < fl.at || k > fl.at + fl.dur) continue;
       const fk = (k - fl.at) / fl.dur;          // 0..1 внутри вспышки
       const a = Math.sin(Math.PI * fk);          // плавный пик
-      const fx = p.x + Math.cos(fl.ang + fk * 1.5) * eR * fl.dist;
-      const fy = p.y + Math.sin(fl.ang + fk * 1.5) * eR * fl.dist * 0.8;
-      const fr = eR * (0.12 + fk * 0.2);
-      const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+      const fx = p.x + Math.cos(fl.ang + fk * 1.5) * ringW * fl.dist;
+      const fy = p.y + Math.sin(fl.ang + fk * 1.5) * ringW * fl.dist * ringAspect;
+      const fr = ringW * (0.12 + fk * 0.2);
+      ctx.save();
+      ctx.translate(fx, fy);
+      ctx.scale(1, ringAspect);
+      const fg = ctx.createRadialGradient(0, 0, 0, 0, 0, fr);
       fg.addColorStop(0, `rgba(${fl.hue},${a * 0.85})`);
       fg.addColorStop(0.5, `rgba(255,90,20,${a * 0.4})`);
       fg.addColorStop(1, 'rgba(255,60,0,0)');
       ctx.fillStyle = fg;
       ctx.beginPath();
-      ctx.arc(fx, fy, fr, 0, TAU);
+      ctx.arc(0, 0, fr, 0, TAU);
       ctx.fill();
+      ctx.restore();
     }
 
     // Фаза 0.05–0.75: расширяющееся огненное кольцо (медленнее).
+    // Эллипс: ширина = ringW (100–150px), высота вдвое меньше.
     if (k > 0.05 && k < 0.75) {
       const ringK = clamp01((k - 0.05) / 0.7);
       const ease = 1 - Math.pow(1 - ringK, 1.6); // выбег: старт резче, дальше замедление
-      const ringR = eR * ease;
+      const ringR = ringW * ease;
+      const ringRy = ringR * ringAspect;
       const ringAlpha = (1 - ringK) * 0.7;
 
       // Внешнее кольцо огня.
       ctx.lineWidth = r * 2 * (1 - ringK * 0.5);
       ctx.strokeStyle = `rgba(255,80,0,${ringAlpha})`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, ringR, 0, TAU);
+      ctx.ellipse(p.x, p.y, ringR, ringRy, 0, 0, TAU);
       ctx.stroke();
 
       // Внутреннее кольцо (горячее).
       ctx.lineWidth = r * 1.2 * (1 - ringK * 0.3);
       ctx.strokeStyle = `rgba(255,180,0,${ringAlpha * 0.8})`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, ringR * 0.85, 0, TAU);
+      ctx.ellipse(p.x, p.y, ringR * 0.85, ringRy * 0.85, 0, 0, TAU);
       ctx.stroke();
 
       // Ядро кольца (белое).
       ctx.lineWidth = r * 0.5 * (1 - ringK * 0.2);
       ctx.strokeStyle = `rgba(255,255,150,${ringAlpha * 0.5})`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, ringR * 0.7, 0, TAU);
+      ctx.ellipse(p.x, p.y, ringR * 0.7, ringRy * 0.7, 0, 0, TAU);
       ctx.stroke();
     }
 
     // Фаза 0.1–0.9: разлетающиеся частицы (искры). Медленнее и дольше.
+    // Разлёт — по тому же эллипсу (высота вдвое меньше ширины).
     if (k > 0.1 && k < 0.9) {
       const partK = clamp01((k - 0.1) / 0.8);
       const ease = 1 - Math.pow(1 - partK, 1.8); // замедление к концу
@@ -369,10 +383,10 @@ export class FireballRenderer {
       for (let i = 0; i < partCount; i++) {
         const seed = i * 31.7;
         const baseAng = (i / partCount) * TAU + hash(seed + 99) * 0.5;
-        const speed = 0.5 + hash(seed + 77) * 0.5; // 0.5..1.0 — не вылетают за eR
-        const dist = eR * ease * speed;
+        const speed = 0.5 + hash(seed + 77) * 0.5; // 0.5..1.0 — не вылетают за ringW
+        const dist = ringW * ease * speed;
         const px = p.x + Math.cos(baseAng) * dist;
-        const py = p.y + Math.sin(baseAng) * dist;
+        const py = p.y + Math.sin(baseAng) * dist * ringAspect;
         const size = r * 0.3 * (1 - partK * 0.7);
         const alpha = (1 - partK) * 0.8;
 
@@ -393,9 +407,9 @@ export class FireballRenderer {
       for (let i = 0; i < smokeCount; i++) {
         const seed = i * 41.3;
         const ang = (i / smokeCount) * TAU + hash(seed) * 0.8;
-        const dist = eR * smokeK * (0.4 + hash(seed + 1) * 0.5);
+        const dist = ringW * smokeK * (0.4 + hash(seed + 1) * 0.5);
         const sx = p.x + Math.cos(ang) * dist;
-        const sy = p.y + Math.sin(ang) * dist - smokeK * 20;
+        const sy = p.y + Math.sin(ang) * dist * ringAspect - smokeK * 20;
         const size = r * (1 + smokeK * 3);
         const alpha = (1 - smokeK) * 0.3;
 
@@ -416,15 +430,19 @@ export class FireballRenderer {
     // Фаза 0.5–1.0: тёмное ядро (остывающий пепел).
     if (k > 0.5 && k < 1.0) {
       const ashK = clamp01((k - 0.5) / 0.5);
-      const ashR = eR * (0.3 + ashK * 0.5);
+      const ashR = ringW * (0.3 + ashK * 0.5);
       const ashAlpha = (1 - ashK) * 0.2;
-      const ash = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, ashR);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.scale(1, ringAspect);
+      const ash = ctx.createRadialGradient(0, 0, 0, 0, 0, ashR);
       ash.addColorStop(0, `rgba(80,60,40,${ashAlpha})`);
       ash.addColorStop(1, 'rgba(40,30,20,0)');
       ctx.fillStyle = ash;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, ashR, 0, TAU);
+      ctx.arc(0, 0, ashR, 0, TAU);
       ctx.fill();
+      ctx.restore();
     }
 
     ctx.restore();

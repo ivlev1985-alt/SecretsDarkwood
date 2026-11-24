@@ -86,7 +86,7 @@ export class ApocalypseSystem {
     }
     this.impacts = [];
     for (let i = 0; i < 20; i++) {
-      this.impacts.push({ active: false, x: 0, y: 0, t: 0, life: 1, maxR: 1 });
+      this.impacts.push({ active: false, x: 0, y: 0, t: 0, life: 1, maxR: 1, aspect: 0.5 });
     }
     this.particles = [];
     for (let i = 0; i < this.particleBudget; i++) {
@@ -214,7 +214,10 @@ export class ApocalypseSystem {
     this.impactCursor = (this.impactCursor + 1) % this.impacts.length;
     im.active = true;
     im.x = x; im.y = y;
-    im.t = 0; im.life = this.ringLife; im.maxR = this.ringMax;
+    im.t = 0; im.life = this.ringLife;
+    // Ударная волна — эллипс (вид сбоку): ширина 100–150px, высота вдвое меньше.
+    im.maxR = 100 + Math.random() * 50;
+    im.aspect = 0.5;
 
     // Геймплей: умирают все обычные монстры в радиусе. Босс не получает урон.
     if (game && game.enemies) {
@@ -352,26 +355,29 @@ export class ApocalypseSystem {
   _drawImpact(ctx, im) {
     const k = Math.min(1, im.t / im.life);
     const e = 1 - (1 - k) * (1 - k);
-    const r = im.maxR * e;
-    const s = im.maxR * 2 * (0.6 + 0.8 * e);
+    // Эллипс «на земле» (вид сбоку): ry = rx * aspect.
+    const rx = im.maxR * e;
+    const ry = rx * (im.aspect ?? 0.5);
 
     if (this.glow) {
+      const gw = im.maxR * 2 * (0.6 + 0.8 * e);
       ctx.globalAlpha = (1 - k) * 0.85;
-      ctx.drawImage(this.glow, im.x - s / 2, im.y - s / 2, s, s);
+      ctx.drawImage(this.glow, im.x - gw / 2, im.y - gw * (im.aspect ?? 0.5) / 2,
+        gw, gw * (im.aspect ?? 0.5));
     }
 
     ctx.globalAlpha = 1 - k;
     ctx.strokeStyle = this.colors.ring;
     ctx.lineWidth = 1 + 4 * (1 - k);
     ctx.beginPath();
-    ctx.arc(im.x, im.y, r, 0, Math.PI * 2);
+    ctx.ellipse(im.x, im.y, rx, ry, 0, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.globalAlpha = (1 - k) * 0.6;
     ctx.strokeStyle = this.colors.hot;
     ctx.lineWidth = 1 + 2 * (1 - k);
     ctx.beginPath();
-    ctx.arc(im.x, im.y, r * 0.62, 0, Math.PI * 2);
+    ctx.ellipse(im.x, im.y, rx * 0.62, ry * 0.62, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 
