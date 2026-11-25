@@ -43,7 +43,7 @@ import { ItemRewardPopup } from '../ui/ItemRewardPopup.js';
 import { fmtTime, pileOffset } from '../utils/math.js';
 import { healEase, healFillDuration } from '../utils/healAnimation.js';
 
-export const MovementRegistry = { chase: 'chase', patrol: 'patrol', ranged: 'ranged', teleport: 'teleport' };
+export const MovementRegistry = { chase: 'chase', patrol: 'patrol', ranged: 'ranged', archer: 'archer', teleport: 'teleport' };
 export const WeaponRegistry = { to_target: 'to_target', around_player: 'around_player', orbit: 'orbit', area: 'area' };
 export const EffectRegistry = { oneshot: 'oneshot', looping: 'looping', attached: 'attached' };
 export const ChestRewardRegistry = { coins: 'coins', spell: 'spell', levelup: 'levelup', mixed: 'mixed' };
@@ -1691,8 +1691,8 @@ export class Game {
         // длительность задаётся в game_config.visuals.skeleton_archer.
         if (this._useSkeleton(raw)) {
           const sc = (g.visuals && g.visuals.skeleton_archer) || {};
-          raw.deathDuration = (sc.death_duration_ms ?? 1500) / 1000;
-          raw.deathFade = (sc.death_fade_ms ?? 500) / 1000;
+          raw.deathDuration = (sc.death_duration_ms ?? 1600) / 1000;
+          raw.deathFade = (sc.death_fade_ms ?? 600) / 1000;
         }
         this.enemies.push(raw);
       }
@@ -1704,11 +1704,30 @@ export class Game {
 
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      if (e.deathT > 0) { e.updateDeath(dt); continue; }
+      if (e.deathT > 0) {
+        if (this._useSkeleton(e) && !(e.deathDuration > 0)) {
+          const sc = (g.visuals && g.visuals.skeleton_archer) || {};
+          e.deathDuration = (sc.death_duration_ms ?? 1600) / 1000;
+          e.deathFade = (sc.death_fade_ms ?? 600) / 1000;
+        }
+        e.updateDeath(dt); continue;
+      }
       let { mx, my, dist } = e.steer(dt, this.player.x, this.player.y);
       e.facing = (this.player.x >= e.x) ? 1 : -1;
-      // процедурный скелет-лучник: 4-сторонняя ориентация по вектору к игроку
-      if (e.cfg.movement_type === 'ranged' && !e.isBoss) {
+      // Скелет-лучник: во время натяжения/выстрела смотрит на игрока,
+      // а в патруле — по направлению шага (влево/вправо).
+      if (e.cfg.id === 'skeleton_archer' && !e.isBoss) {
+        const sc = (g.visuals && g.visuals.skeleton_archer) || {};
+        const aimPre = (sc.aim_pre_ms ?? 420) / 1000;
+        const aiming = e.shootT > 0 || e.attackT > 0 || e.pendingShot
+          || (e.attackCd > 0 && e.attackCd < aimPre);
+        let faceX;
+        if (aiming) faceX = this.player.x >= e.x ? 1 : -1;
+        else if (Math.abs(mx) > 0.01) faceX = mx > 0 ? 1 : -1;
+        else faceX = this.player.x >= e.x ? 1 : -1;
+        e.heroDir = faceX > 0 ? 'right' : 'left';
+        e.facing = faceX;
+      } else if (e.cfg.movement_type === 'ranged' && !e.isBoss) {
         const ddx = this.player.x - e.x, ddy = this.player.y - e.y;
         e.heroDir = Math.abs(ddx) >= Math.abs(ddy)
           ? (ddx >= 0 ? 'right' : 'left')
@@ -1732,6 +1751,12 @@ export class Game {
             continue;
           }
         }
+      } else if (e.cfg.movement_type === 'archer') {
+        // Лук: сначала натяжение (shootT), стрела вылетает в момент release_at.
+        this._updateArcherShot(e, dt, dist);
+        if (e.attackT <= 0 && e.shootT <= 0 && !e.pendingShot) {
+          try { e.setAnim('walk'); } catch (err) {}
+        }
       } else if (e.cfg.movement_type === 'ranged' && e.attackCd <= 0 && dist < (e.cfg.attack_range || 300)) {
         const proj = this.enemyProjById.get(e.cfg.projectile_id);
         if (proj) {
@@ -1740,7 +1765,7 @@ export class Game {
           e.playAttack();
           // процедурный скелет-лучник: анимация подъёма лука
           const skelCfg = (g.visuals && g.visuals.skeleton_archer) || {};
-          e.shootDuration = (skelCfg.shoot_duration_ms ?? 600) / 1000;
+          e.shootDuration = (skelCfg.shoot_duration_ms ?? 760) / 1000;
           e.shootT = e.shootDuration;
         }
       } else if (e.attackT <= 0) {
@@ -2254,14 +2279,62 @@ export class Game {
     ctx.restore();
   }
 
-  // Процедурный скелет-лучник: включён + враг ranged + спрайт отсутствует
-  // (или mode === 'always'). Аналог проверки useMage для героя.
+  // Точка схода стрелы: наконечник стрелы у лука, а не центр тела.
+  // Учитывает зеркалирование по facing и масштаб спрайта.
+  _skeletonArrowOrigin(e) {
+    const g = this.config.game_config;
+    const sc = (g.visuals && g.visuals.skeleton_archer) || {};
+    const artScale = Math.min((e.rw || 64) / 64, (e.rh || 64) / 64);
+    const s = (g.visuals.global_sprite_scale || 1) * artScale;
+    const face = e.facing < 0 ? -1 : 1;
+    return {
+      x: e.x + ((sc.bow_hand_x ?? 17) + (sc.arrow_length_px ?? 23)) * s * face,
+      y: e.y + (sc.bow_hand_y ?? -1) * s
+    };
+  }
+
+  // Скелет-лучник: натяжение лука и выстрел в момент release_at.
+  // Стрела не появляется мгновенно — сначала проигрывается натяжение.
+  _updateArcherShot(e, dt, dist) {
+    if (!e || !e.cfg || e.deathT > 0) return;
+    const g = this.config.game_config;
+    const sc = (g.visuals && g.visuals.skeleton_archer) || {};
+    const a = e.cfg.archer || {};
+    const shootDur = Math.max(0.2, (sc.shoot_duration_ms ?? 760) / 1000);
+    const rel = Math.max(0.05, Math.min(0.6, a.release_at ?? 0.2));
+    const range = e.cfg.attack_range || 300;
+
+    if (e.pendingShot) {
+      e.pendingShotT -= dt;
+      if (e.pendingShotT <= 0) {
+        e.pendingShot = false;
+        e.pendingShotT = 0;
+        const proj = this.enemyProjById.get(e.cfg.projectile_id);
+        if (proj) {
+          const o = this._skeletonArrowOrigin(e);
+          this.skills.enemyFire(o.x, o.y, this.player.x, this.player.y, proj, e.damage);
+        }
+        e.attackCd = (e.cfg.attack_cooldown_ms || 2000) / 1000;
+      }
+      return;
+    }
+
+    if (e.shootT > 0 || e.attackCd > 0 || dist >= range) return;
+    e.shootDuration = shootDur;
+    e.shootT = shootDur;
+    e.pendingShot = true;
+    e.pendingShotT = shootDur * rel;
+    e.playAttack();
+    e.attackT = Math.max(e.attackT || 0, shootDur);
+  }
+
+  // Процедурный скелет-лучник: только для skeleton_archer (или mode === 'always').
   _useSkeleton(e) {
     const skel = this.skeletonArcherRenderer;
     if (!skel || !e.cfg) return false;
     const cfg = skel.cfg || {};
     if (cfg.enabled === false || cfg.mode === 'never') return false;
-    if (e.cfg.movement_type !== 'ranged' || e.isBoss) return false;
+    if (e.cfg.id !== 'skeleton_archer' || e.isBoss) return false;
     if (cfg.mode === 'always') return true;
     return !!(e.cfg.sprite && this.assets && this.assets.isMissing && this.assets.isMissing(e.cfg.sprite));
   }

@@ -31,6 +31,12 @@ export class Enemy extends Entity {
     // Процедурный скелет-лучник: таймер выстрела
     this.shootT = 0; // остаток анимации выстрела, сек
     this.shootDuration = 0.6; // переопределяется из game_config.visuals.skeleton_archer
+    this.pendingShot = false; // скелет уже натягивает лук, стрела ещё не выпущена
+    this.pendingShotT = 0; // остаток до момента выпуска стрелы, сек
+    // Патруль/стрейф лучника: ходит влево-вправо и останавливается на выстрел.
+    this.patrolDir = Math.random() < 0.5 ? -1 : 1;
+    this.patrolTurnT = 0;
+    this.patrolPauseT = 0;
   }
 
   get rw() { return this.cfg.frames.frame_width; }
@@ -56,6 +62,8 @@ export class Enemy extends Entity {
       this.hp = 0;
       this.deathT = 0.0001; // начать death-анимацию
       this.shootT = 0;
+      this.pendingShot = false;
+      this.pendingShotT = 0;
       try { this.setAnim('death'); } catch (e) {}
     }
     return amount;
@@ -71,6 +79,8 @@ export class Enemy extends Entity {
     this.slowT = 0;
     this.deathT = 0.0001;
     this.shootT = 0;
+    this.pendingShot = false;
+    this.pendingShotT = 0;
     try { this.setAnim('death'); } catch (e) {}
     return true;
   }
@@ -173,6 +183,43 @@ export class Enemy extends Entity {
       const range = this.cfg.attack_range || 300;
       if (d < range * 0.7) { mx = -mx; my = -my; } // отойти
       else if (d < range) { mx = 0; my = 0; } // держать дистанцию
+    } else if (type === 'archer') {
+      // Скелет-лучник: подходит на дистанцию, затем ходит влево-вправо,
+      // останавливается на натяжение лука и отходит, если игрок слишком близко.
+      const a = this.cfg.archer || {};
+      const range = this.cfg.attack_range || 300;
+      const retreat = a.retreat_range || 120;
+      const strafe = a.strafe_speed_scale ?? 0.6;
+      const turn = Math.max(0.2, (a.turn_interval_ms ?? 1600) / 1000);
+      const pause = Math.max(0, (a.turn_pause_ms ?? 110) / 1000);
+      const stopToShoot = a.stop_to_shoot !== false;
+
+      if (this.shootT > 0 || this.attackT > 0) {
+        // Стоит и завершает выстрел.
+        mx = 0; my = 0;
+      } else if (d < retreat) {
+        // Слишком близко — отходит, не поворачиваясь спиной к игроку.
+        mx = -dx / d; my = -dy / d;
+      } else if (stopToShoot && this.attackCd <= 0 && d < range) {
+        // Готов стрелять — остановка на натяжение.
+        mx = 0; my = 0;
+      } else if (d > range) {
+        // Вне дистанции выстрела — подходит.
+        mx = dx / d; my = dy / d;
+      } else if (this.patrolPauseT > 0) {
+        this.patrolPauseT = Math.max(0, this.patrolPauseT - dt);
+        mx = 0; my = 0;
+      } else {
+        this.patrolTurnT += dt;
+        if (this.patrolTurnT >= turn) {
+          this.patrolTurnT = 0;
+          this.patrolDir *= -1;
+          this.patrolPauseT = pause;
+        }
+        const vert = a.vertical_drift_scale ?? 0.12;
+        mx = this.patrolDir * strafe;
+        my = Math.max(-vert, Math.min(vert, (dy / d) * vert));
+      }
     } else if (type === 'patrol') {
       this.wanderT += dt * 2;
       mx = mx * 0.7 + Math.cos(this.wanderT) * 0.5;

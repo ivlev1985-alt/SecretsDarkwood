@@ -29,6 +29,10 @@ function hash(n) {
 export class SkeletonArcherRenderer {
   constructor(cfg = {}) {
     this.cfg = cfg || {};
+    // Бюджет перерисовок на кадр: при большой волне скелетов не даём
+    // всем кэшам обновиться одновременно и вызвать пик >16 мс.
+    this._budgetToken = -1;
+    this._budgetCount = 0;
   }
 
   setConfig(cfg) { this.cfg = cfg || {}; }
@@ -68,7 +72,10 @@ export class SkeletonArcherRenderer {
     }
 
     const cacheFps = cfg.cache_fps ?? 18;
-    const qf = Math.floor((time || 0) * cacheFps);
+    // Фаза на каждого скелета: без неё все кэши перерисовываются в один кадр
+    // и дают синхронные пики при большой волне. Сдвиг размазывает перерисовку.
+    const phase = (enemy._skelSeed || 0) % 1;
+    const qf = Math.floor((time || 0) * cacheFps + phase);
     const dir = this._dir(enemy);
     const flashQ = Math.round(Math.max(0, enemy.hitFlash || 0) * 8);
     const shootQ = Math.round(Math.max(0, enemy.shootT || 0) * 20);
@@ -77,13 +84,27 @@ export class SkeletonArcherRenderer {
     const key = dir + '|' + qf + '|' + shootQ + '|' + deathQ + '|' + flashQ
       + '|' + movingQ + '|' + (enemy.alive === false || enemy.deathT > 0 ? 1 : 0);
 
+    const maxRenders = cfg.max_renders_per_frame ?? 4;
+    const frameToken = Math.floor((time || 0) * 60);
+    if (frameToken !== this._budgetToken) {
+      this._budgetToken = frameToken;
+      this._budgetCount = 0;
+    }
     if (key !== c.key) {
-      c.key = key;
-      const qt = qf / cacheFps;
-      let dt = qt - (c.lastTime || 0);
-      if (!(dt > 0) || dt > 0.5) dt = 1 / cacheFps;
-      c.lastTime = qt;
-      this._renderFrame(enemy, qt, dir, cfg, c, dt);
+      // Если бюджет исчерпан, оставляем прошлый кадр кэша до следующего
+      // кадра. Новый враг может моргнуть пустым 1–2 кадра — это дешевле
+      // синхронного пика на всю волну.
+      if (maxRenders > 0 && this._budgetCount >= maxRenders) {
+        // пропустить перерисовку
+      } else {
+        this._budgetCount++;
+        c.key = key;
+        const qt = qf / cacheFps;
+        let dt = qt - (c.lastTime || 0);
+        if (!(dt > 0) || dt > 0.5) dt = 1 / cacheFps;
+        c.lastTime = qt;
+        this._renderFrame(enemy, qt, dir, cfg, c, dt);
+      }
     }
 
     ctx.save();
@@ -255,6 +276,7 @@ export class SkeletonArcherRenderer {
         this._drawBody(ctx, pose, cfg, P);
         ctx.restore();
       }
+      this._drawBoneHeap(ctx, pose, P);
       this._drawBones(ctx, pose, cfg, P, c);
     } else {
       this._drawBody(ctx, pose, cfg, P);
@@ -265,9 +287,9 @@ export class SkeletonArcherRenderer {
     ctx.save();
     ctx.translate(pose.sway + pose.deathSlide, pose.bob + pose.deathSink);
     // Падение: вращаем вокруг области таза, а не вокруг центра кадра.
-    ctx.translate(0, 18);
+    ctx.translate(0, 22);
     ctx.rotate(pose.deathK > 0 ? pose.fallRot : pose.lean);
-    ctx.translate(0, -18);
+    ctx.translate(0, -22);
 
     this._drawBackCloak(ctx, pose, P);
     this._drawQuiver(ctx, pose, P);
@@ -294,9 +316,9 @@ export class SkeletonArcherRenderer {
     ctx.save();
     ctx.globalAlpha = 0.42;
     const sq = 1 - clamp01(pose.deathK) * 0.15;
-    ctx.translate(pose.sway * 0.4 + pose.deathSlide * 0.5, 27);
-    ctx.scale(1.1 * sq, 0.32 * sq);
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 16);
+    ctx.translate(pose.sway * 0.4 + pose.deathSlide * 0.5, 36);
+    ctx.scale(1.3 * sq, 0.32 * sq);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 19);
     g.addColorStop(0, '#000000');
     g.addColorStop(0.55, 'rgba(0,0,0,0.55)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -315,17 +337,18 @@ export class SkeletonArcherRenderer {
     ctx.strokeStyle = P.cloakTrim;
     ctx.lineWidth = 0.8;
     ctx.beginPath();
-    ctx.moveTo(-7, -7);
-    ctx.quadraticCurveTo(-14, 1, -13 + sway, 16 + hemWave);
-    ctx.lineTo(-10 + sway, 14 + hemWave);
-    ctx.lineTo(-8 + sway, 20 + hemWave);
-    ctx.lineTo(-5 + sway, 15 + hemWave);
-    ctx.lineTo(-2 + sway, 22 + hemWave);
-    ctx.lineTo(2 + sway, 16 + hemWave);
-    ctx.lineTo(5 + sway, 21 + hemWave);
-    ctx.lineTo(8 + sway, 15 + hemWave);
-    ctx.lineTo(11 + sway, 18 + hemWave);
-    ctx.quadraticCurveTo(12, 3, 7, -7);
+    ctx.moveTo(-8, -8);
+    ctx.quadraticCurveTo(-16, 3, -16 + sway, 27 + hemWave);
+    ctx.lineTo(-11 + sway, 23 + hemWave);
+    ctx.lineTo(-9 + sway, 31 + hemWave);
+    ctx.lineTo(-6 + sway, 26 + hemWave);
+    ctx.lineTo(-3 + sway, 33 + hemWave);
+    ctx.lineTo(0 + sway, 27 + hemWave);
+    ctx.lineTo(3 + sway, 32 + hemWave);
+    ctx.lineTo(6 + sway, 26 + hemWave);
+    ctx.lineTo(9 + sway, 30 + hemWave);
+    ctx.lineTo(12 + sway, 24 + hemWave);
+    ctx.quadraticCurveTo(14, 4, 8, -8);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -335,8 +358,8 @@ export class SkeletonArcherRenderer {
     ctx.strokeStyle = P.cloakMid;
     ctx.lineWidth = 0.7;
     ctx.beginPath();
-    ctx.moveTo(-6, 2); ctx.quadraticCurveTo(-8, 9, -7 + sway, 17);
-    ctx.moveTo(4, 3); ctx.quadraticCurveTo(5, 10, 6 + sway, 16);
+    ctx.moveTo(-7, 3); ctx.quadraticCurveTo(-10, 13, -8 + sway, 28);
+    ctx.moveTo(5, 4); ctx.quadraticCurveTo(6, 14, 7 + sway, 26);
     ctx.stroke();
     ctx.restore();
   }
@@ -345,25 +368,26 @@ export class SkeletonArcherRenderer {
     const sway = pose.side ? pose.sway * 0.35 : 0;
     const hem = Math.sin(pose.time * 2.2) * 0.8;
     ctx.save();
-    const g = ctx.createLinearGradient(0, -8, 0, 20);
+    const g = ctx.createLinearGradient(0, -9, 0, 25);
     g.addColorStop(0, P.cloakLight);
-    g.addColorStop(0.38, P.cloakMid);
+    g.addColorStop(0.34, P.cloakMid);
     g.addColorStop(1, P.cloakDark);
     ctx.fillStyle = g;
     ctx.strokeStyle = P.cloakTrim;
     ctx.lineWidth = 0.9;
     ctx.beginPath();
-    ctx.moveTo(-7, -6);
-    ctx.quadraticCurveTo(-9, 2, -7, 10);
-    ctx.lineTo(-9 + sway, 19 + hem);
-    ctx.lineTo(-6 + sway, 17 + hem);
-    ctx.lineTo(-3 + sway, 21 + hem);
-    ctx.lineTo(0 + sway, 17 + hem);
-    ctx.lineTo(3 + sway, 21 + hem);
-    ctx.lineTo(6 + sway, 17 + hem);
-    ctx.lineTo(8 + sway, 19 + hem);
-    ctx.quadraticCurveTo(8, 3, 6, -6);
-    ctx.quadraticCurveTo(0, -9, -7, -6);
+    ctx.moveTo(-8, -7);
+    ctx.quadraticCurveTo(-10, 2, -8, 12);
+    ctx.lineTo(-9 + sway, 17 + hem);
+    ctx.lineTo(-7 + sway, 14 + hem);
+    ctx.lineTo(-4 + sway, 19 + hem);
+    ctx.lineTo(-1 + sway, 15 + hem);
+    ctx.lineTo(2 + sway, 20 + hem);
+    ctx.lineTo(5 + sway, 15 + hem);
+    ctx.lineTo(8 + sway, 18 + hem);
+    ctx.lineTo(9 + sway, 13 + hem);
+    ctx.quadraticCurveTo(9, 3, 7, -7);
+    ctx.quadraticCurveTo(0, -10, -8, -7);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -371,36 +395,70 @@ export class SkeletonArcherRenderer {
     // Плечевая накидка с рваным краем.
     ctx.fillStyle = P.cloakMid;
     ctx.beginPath();
-    ctx.moveTo(-8, -6);
-    ctx.lineTo(-10, -2); ctx.lineTo(-7, -1); ctx.lineTo(-8, 2);
-    ctx.lineTo(-4, 0); ctx.lineTo(-1, 3); ctx.lineTo(2, 0);
-    ctx.lineTo(6, 2); ctx.lineTo(8, -2); ctx.lineTo(6, -6);
-    ctx.quadraticCurveTo(0, -10, -8, -6);
+    ctx.moveTo(-9, -7);
+    ctx.lineTo(-11, -2); ctx.lineTo(-8, -1); ctx.lineTo(-9, 3);
+    ctx.lineTo(-5, 1); ctx.lineTo(-1, 4); ctx.lineTo(3, 1);
+    ctx.lineTo(7, 3); ctx.lineTo(9, -2); ctx.lineTo(7, -7);
+    ctx.quadraticCurveTo(0, -11, -9, -7);
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = P.cloakTrim;
     ctx.lineWidth = 0.7;
     ctx.stroke();
 
-    // Пара ребер, проглядывающих сквозь прореху плаща.
+    // Прореха на груди: проглядывают ребра и позвоночник.
     ctx.save();
-    ctx.globalAlpha = 0.8;
+    ctx.globalAlpha = 0.9;
     ctx.strokeStyle = P.boneShadow;
-    ctx.lineWidth = 1.15;
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(1.4, 1.2 + i * 1.9);
-      ctx.quadraticCurveTo(4.6, 0.4 + i * 1.9, 6.0, 1.7 + i * 1.9);
-      ctx.stroke();
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(1.5, -1.5);
+    ctx.quadraticCurveTo(4.2, -2.2, 6.2, -0.5);
+    for (let i = 0; i < 4; i++) {
+      const yy = 0.8 + i * 1.9;
+      ctx.moveTo(1.2, yy);
+      ctx.quadraticCurveTo(4.4, yy - 0.9, 6.3, yy + 0.3);
     }
+    ctx.stroke();
+    ctx.strokeStyle = P.bone;
+    ctx.lineWidth = 0.75;
+    ctx.beginPath(); ctx.moveTo(1.4, -1.8); ctx.lineTo(1.4, 7.8); ctx.stroke();
     ctx.restore();
+
+    // Диагональный ремень через грудь.
+    ctx.strokeStyle = P.leatherDark;
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-7.2, -5.2);
+    ctx.quadraticCurveTo(-1.0, 0.2, 6.4, 10.8);
+    ctx.stroke();
+    ctx.strokeStyle = P.leather;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(-7.0, -5.0);
+    ctx.quadraticCurveTo(-0.8, 0.4, 6.2, 10.5);
+    ctx.stroke();
+    ctx.fillStyle = P.metal;
+    ctx.strokeStyle = P.cloakTrim;
+    ctx.lineWidth = 0.4;
+    ctx.beginPath(); ctx.roundRect(0.6, 2.0, 2.0, 2.6, 0.5); ctx.fill(); ctx.stroke();
 
     // Воротник и шов.
     ctx.strokeStyle = P.accent;
     ctx.globalAlpha = 0.7;
     ctx.lineWidth = 0.7;
     ctx.beginPath();
-    ctx.moveTo(-5, -5.5); ctx.quadraticCurveTo(0, -2.4, 5, -5.5);
+    ctx.moveTo(-6, -6.5); ctx.quadraticCurveTo(0, -2.8, 6, -6.5);
+    ctx.stroke();
+
+    // Складки плаща.
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = P.cloakLight;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-4, 4); ctx.quadraticCurveTo(-5, 10, -4 + sway, 17);
+    ctx.moveTo(3, 6); ctx.quadraticCurveTo(4, 11, 5 + sway, 18);
     ctx.stroke();
     ctx.restore();
   }
@@ -412,55 +470,59 @@ export class SkeletonArcherRenderer {
     ctx.strokeStyle = P.cloakTrim;
     ctx.lineWidth = 0.7;
     ctx.beginPath();
-    ctx.roundRect(-7 + x, 8, 13, 3.2, 1.1);
+    ctx.roundRect(-8 + x, 11, 15, 3.4, 1.1);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = P.leather;
-    ctx.fillRect(-7 + x, 8.4, 13, 1.4);
+    ctx.fillRect(-8 + x, 11.4, 15, 1.4);
     ctx.fillStyle = P.metal;
-    ctx.fillRect(x - 0.8, 7.5, 2.4, 4.2);
+    ctx.fillRect(x - 0.8, 10.4, 2.6, 4.6);
     ctx.fillStyle = P.accent;
-    ctx.fillRect(x - 0.2, 8.3, 1.2, 2.6);
+    ctx.fillRect(x - 0.2, 11.3, 1.2, 2.8);
 
-    // Поясная сумка.
+    // Поясные сумки.
     ctx.fillStyle = P.leather;
     ctx.strokeStyle = P.leatherDark;
     ctx.beginPath();
-    ctx.roundRect(-9 + x, 10.4, 4.8, 4.8, 1.2);
+    ctx.roundRect(-10 + x, 13.4, 5.0, 5.2, 1.2);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = P.leatherLight;
-    ctx.fillRect(-9.1 + x, 10.6, 4.9, 1.2);
+    ctx.fillRect(-10.1 + x, 13.6, 5.1, 1.2);
+    ctx.beginPath();
+    ctx.roundRect(5.2 + x, 13.8, 4.2, 4.4, 1.0);
+    ctx.fillStyle = P.leatherDark;
+    ctx.fill(); ctx.stroke();
     ctx.restore();
   }
 
   _drawQuiver(ctx, pose, P) {
     ctx.save();
-    ctx.translate(pose.side ? -8.5 : -5.5, -3.5);
-    ctx.rotate(pose.side ? 0.28 : 0.16);
+    ctx.translate(pose.side ? -10.0 : -6.5, -5.5);
+    ctx.rotate(pose.side ? 0.30 : 0.16);
     ctx.fillStyle = P.leatherDark;
     ctx.strokeStyle = P.cloakTrim;
     ctx.lineWidth = 0.8;
     ctx.beginPath();
-    ctx.roundRect(-2.6, -5, 5.2, 15, 2.2);
+    ctx.roundRect(-2.8, -6, 5.6, 17, 2.4);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = P.leather;
-    ctx.fillRect(-2.3, -4.5, 1.1, 13.5);
+    ctx.fillRect(-2.5, -5.5, 1.2, 15.5);
     ctx.fillStyle = P.leatherLight;
-    ctx.fillRect(-2.6, 1.8, 5.2, 1.0);
+    ctx.fillRect(-2.8, 2.0, 5.6, 1.1);
 
     // Стрелы в колчане.
     for (let i = 0; i < 3; i++) {
-      const ax = -1.8 + i * 1.8;
+      const ax = -1.9 + i * 1.9;
       ctx.strokeStyle = P.arrowWood;
       ctx.lineWidth = 0.7;
-      ctx.beginPath(); ctx.moveTo(ax, -4); ctx.lineTo(ax + 0.5, -10); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ax, -5); ctx.lineTo(ax + 0.6, -12); ctx.stroke();
       ctx.fillStyle = i % 2 ? P.arrowFletch : P.accent;
       ctx.beginPath();
-      ctx.moveTo(ax + 0.5, -10);
-      ctx.lineTo(ax - 0.7, -8.7);
-      ctx.lineTo(ax + 0.8, -8.4);
+      ctx.moveTo(ax + 0.6, -12);
+      ctx.lineTo(ax - 0.8, -10.4);
+      ctx.lineTo(ax + 0.9, -10.1);
       ctx.closePath();
       ctx.fill();
     }
@@ -498,20 +560,54 @@ export class SkeletonArcherRenderer {
 
   _drawLeg(ctx, pose, P, near) {
     const sign = near ? 1 : -1;
-    const stride = (pose.moving ? 1 : 0) * (pose.moving ? (this.cfg.walk_boot_stride_px ?? 3.2) : 0);
-    const lift = pose.moving ? (this.cfg.walk_boot_lift_px ?? 2.2) : 0;
+    const stride = (pose.moving ? 1 : 0) * (this.cfg.walk_boot_stride_px ?? 5.0);
+    const lift = pose.moving ? (this.cfg.walk_boot_lift_px ?? 3.2) : 0;
     const ph = pose.step * sign;
-    const hipX = near ? 2.5 : -2.5;
-    const hipY = 10;
-    const footX = hipX + ph * stride * 0.9;
-    const footY = 26 - Math.max(0, ph) * lift;
-    const kneeX = (hipX + footX) * 0.5 + (near ? 0.8 : -0.8);
-    const kneeY = 18.0 - Math.max(0, ph) * lift * 0.28;
+    const hipX = near ? 2.6 : -2.6;
+    const hipY = 9;
+    const footX = hipX + ph * stride * 0.95;
+    const footY = 36 - Math.max(0, ph) * lift;
+    const kneeX = (hipX + footX) * 0.5 + (near ? 0.9 : -0.9) + ph * 0.9;
+    const kneeY = 24.0 - Math.max(0, ph) * lift * 0.28;
 
-    const dark = near ? 1 : 0.72;
-    this._drawLimbBone(ctx, hipX, hipY, kneeX, kneeY, 2.15, P, dark);
-    this._joint(ctx, kneeX, kneeY, 1.35, P, dark);
-    this._drawLimbBone(ctx, kneeX, kneeY, footX, footY - 2.2, 1.8, P, dark);
+    const dark = near ? 1 : 0.7;
+    this._drawLimbBone(ctx, hipX, hipY, kneeX, kneeY, 2.2, P, dark);
+    this._joint(ctx, kneeX, kneeY, 1.4, P, dark);
+    this._drawLimbBone(ctx, kneeX, kneeY, footX, footY - 2.8, 1.85, P, dark);
+
+    // Обмотка/штанина на бедре — только на ближней ноге, чтобы читался объём.
+    if (near) {
+      ctx.save();
+      ctx.globalAlpha *= 0.95;
+      ctx.fillStyle = P.cloakDark;
+      ctx.strokeStyle = P.cloakTrim;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(hipX - 2.0, hipY + 1.0);
+      ctx.lineTo(kneeX - 1.5, kneeY - 2.0);
+      ctx.lineTo(kneeX + 1.1, kneeY - 1.4);
+      ctx.lineTo(hipX + 2.2, hipY + 1.6);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = P.leather;
+      ctx.lineWidth = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(hipX - 1.9, hipY + 3.2); ctx.lineTo(kneeX - 1.2, kneeY - 1.8);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Ремешок у щиколотки.
+    ctx.save();
+    ctx.globalAlpha *= dark;
+    ctx.strokeStyle = P.leatherDark;
+    ctx.lineWidth = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(footX - 1.8, footY - 5.0);
+    ctx.lineTo(footX + 1.8, footY - 5.6);
+    ctx.stroke();
+    ctx.restore();
+
     this._drawBoot(ctx, footX, footY, pose.side, near, P, dark);
   }
 
@@ -524,63 +620,117 @@ export class SkeletonArcherRenderer {
     if (side) {
       // Профиль: носок смотрит вперёд (вправо до зеркалирования).
       ctx.beginPath();
-      ctx.moveTo(x - 2.2, y - 3.5);
-      ctx.lineTo(x + 2.6, y - 3.5);
-      ctx.quadraticCurveTo(x + 5.4, y - 1.4, x + 4.6, y + 1.1);
-      ctx.lineTo(x - 2.4, y + 1.2);
+      ctx.moveTo(x - 2.8, y - 4.2);
+      ctx.lineTo(x + 3.2, y - 4.2);
+      ctx.quadraticCurveTo(x + 6.8, y - 1.8, x + 5.8, y + 1.4);
+      ctx.lineTo(x - 2.9, y + 1.5);
       ctx.closePath();
       ctx.fill(); ctx.stroke();
       ctx.fillStyle = P.leatherDark;
-      ctx.fillRect(x - 2.3, y - 0.4, 7.1, 1.7);
+      ctx.fillRect(x - 2.8, y + 0.2, 8.7, 1.9);
       ctx.fillStyle = P.metal;
-      ctx.fillRect(x + 0.2, y - 2.5, 1.5, 1.4);
+      ctx.fillRect(x + 0.4, y - 3.2, 1.8, 1.5);
+      // Костяные пальцы, торчащие из ботинка.
+      ctx.fillStyle = P.bone;
+      ctx.strokeStyle = P.boneShadow;
+      ctx.lineWidth = 0.35;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.arc(x + 5.0 + i * 0.9, y + 0.2, 0.8, 0, TAU);
+        ctx.fill(); ctx.stroke();
+      }
     } else {
       ctx.beginPath();
-      ctx.ellipse(x, y + 0.2, 3.1, 2.5, 0, 0, TAU);
+      ctx.ellipse(x, y + 0.2, 3.6, 2.9, 0, 0, TAU);
       ctx.fill(); ctx.stroke();
       ctx.fillStyle = P.leatherDark;
-      ctx.fillRect(x - 2.4, y + 0.4, 4.8, 1.2);
+      ctx.fillRect(x - 2.8, y + 0.4, 5.6, 1.4);
     }
     if (near) {
       ctx.globalAlpha *= 0.7;
       ctx.strokeStyle = P.leatherLight;
-      ctx.lineWidth = 0.45;
-      ctx.beginPath(); ctx.moveTo(x - 1.5, y - 2.8); ctx.lineTo(x + 1.5, y - 2.8); ctx.stroke();
+      ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(x - 2.0, y - 3.2); ctx.lineTo(x + 2.0, y - 3.2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 2.1, y - 2.1); ctx.lineTo(x + 2.1, y - 2.1); ctx.stroke();
     }
     ctx.restore();
   }
 
   _bowPose(pose, cfg) {
     const aim = pose.aim || 0;
-    const cx = cfg.bow_hand_x ?? 15;
-    const cy = (cfg.bow_hand_y ?? -1) + (1 - aim) * (cfg.bow_idle_drop_px ?? 2.5);
-    const h = cfg.bow_height_px ?? 31;
-    const pull = (cfg.string_pull_px ?? 8.5) * (pose.pull || 0);
-    return { cx, cy, h, pull, nockX: cx - pull, nockY: cy };
+    const cx = cfg.bow_hand_x ?? 17;
+    const cy = (cfg.bow_hand_y ?? -1) + (1 - aim) * (cfg.bow_idle_drop_px ?? 2);
+    const h = cfg.bow_height_px ?? 56;
+    const pull = (cfg.string_pull_px ?? 12) * (pose.pull || 0);
+    const rest = cfg.string_rest_offset_px ?? 1.2;
+    return {
+      cx, cy, h, pull,
+      nockX: cx - rest - pull,
+      nockY: cy,
+      flex: (cfg.bow_flex_px ?? 2.6) * aim,
+      aim
+    };
   }
 
   _drawDrawingArm(ctx, pose, cfg, P) {
     const b = this._bowPose(pose, cfg);
     const aim = pose.aim || 0;
-    const sx = -4.4, sy = -4.2;
-    const ex = lerp(-6.5, -1.3, aim);
-    const ey = lerp(1.4, 0.2, aim);
-    const hx = lerp(-2.1, b.nockX - 1.2, aim);
-    const hy = lerp(1.2, b.nockY + 0.1, aim);
-    this._drawLimbBone(ctx, sx, sy, ex, ey, 1.85, P, 0.75);
-    this._joint(ctx, ex, ey, 1.05, P, 0.75);
-    this._drawLimbBone(ctx, ex, ey, hx, hy, 1.45, P, 0.7);
-    this._drawHand(ctx, hx, hy, P, 0.78, aim > 0.4);
+    const sx = -6.0, sy = -5.2;
+    const ex = lerp(-5.0, -1.0, aim);
+    const ey = lerp(1.6, -2.0, aim);
+    const hx = lerp(-2.2, b.nockX - 1.0, aim);
+    const hy = lerp(1.4, b.nockY + 0.1, aim);
+    this._drawLimbBone(ctx, sx, sy, ex, ey, 1.95, P, 0.82);
+    this._joint(ctx, ex, ey, 1.1, P, 0.82);
+    this._drawLimbBone(ctx, ex, ey, hx, hy, 1.55, P, 0.78);
+    // Кожаный наруч на запястье.
+    ctx.save();
+    ctx.globalAlpha *= 0.9;
+    ctx.strokeStyle = P.leatherDark;
+    ctx.lineWidth = 2.1;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(lerp(ex, hx, 0.62), lerp(ey, hy, 0.62));
+    ctx.lineTo(lerp(ex, hx, 0.86), lerp(ey, hy, 0.86));
+    ctx.stroke();
+    ctx.strokeStyle = P.leather;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(lerp(ex, hx, 0.64), lerp(ey, hy, 0.64));
+    ctx.lineTo(lerp(ex, hx, 0.84), lerp(ey, hy, 0.84));
+    ctx.stroke();
+    ctx.restore();
+    if (aim <= 0.12) this._drawHand(ctx, hx, hy, P, 0.88, aim > 0.4);
   }
-
   _drawBowArm(ctx, pose, cfg, P) {
     const b = this._bowPose(pose, cfg);
-    const sx = 4.2, sy = -4.2;
-    const ex = 9.3, ey = lerp(1.8, 0.1, pose.aim || 0);
+    const sx = 6.0, sy = -5.2;
+    const ex = 10.4, ey = lerp(2.0, 0.1, pose.aim || 0);
     const hx = b.cx - 0.6, hy = b.cy;
-    this._drawLimbBone(ctx, sx, sy, ex, ey, 2.0, P, 1);
-    this._joint(ctx, ex, ey, 1.10, P, 1);
-    this._drawLimbBone(ctx, ex, ey, hx, hy, 1.55, P, 1);
+    this._drawLimbBone(ctx, sx, sy, ex, ey, 2.05, P, 1);
+    this._joint(ctx, ex, ey, 1.15, P, 1);
+    this._drawLimbBone(ctx, ex, ey, hx, hy, 1.65, P, 1);
+    // Кожаный наруч лучника.
+    ctx.save();
+    ctx.globalAlpha *= 0.95;
+    ctx.strokeStyle = P.leatherDark;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(lerp(ex, hx, 0.34), lerp(ey, hy, 0.34));
+    ctx.lineTo(lerp(ex, hx, 0.72), lerp(ey, hy, 0.72));
+    ctx.stroke();
+    ctx.strokeStyle = P.leather;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(lerp(ex, hx, 0.36), lerp(ey, hy, 0.36));
+    ctx.lineTo(lerp(ex, hx, 0.70), lerp(ey, hy, 0.70));
+    ctx.stroke();
+    ctx.fillStyle = P.metal;
+    ctx.beginPath();
+    ctx.arc(lerp(ex, hx, 0.52), lerp(ey, hy, 0.52), 0.55, 0, TAU);
+    ctx.fill();
+    ctx.restore();
     this._drawHand(ctx, hx, hy, P, 1, true);
   }
 
@@ -606,109 +756,170 @@ export class SkeletonArcherRenderer {
     const b = this._bowPose(pose, cfg);
     const aim = pose.aim || 0;
     const h = b.h;
-    const topX = b.cx + h * 0.16;
-    const topY = b.cy - h * 0.50;
-    const botX = b.cx + h * 0.16;
-    const botY = b.cy + h * 0.50;
-    const shoulderTopX = b.cx - 2.4;
-    const shoulderTopY = b.cy - h * 0.2;
-    const shoulderBotX = b.cx - 2.4;
-    const shoulderBotY = b.cy + h * 0.2;
+    const cx = b.cx, cy = b.cy;
+    const flex = b.flex || 0;
+
+    // Верхний и нижний концы: лук слегка асимметричный, как на референсе.
+    const topX = cx - 2.0 - flex * 0.65;
+    const topY = cy - h * 0.50;
+    const botX = cx + 3.2 + flex * 0.45;
+    const botY = cy + h * 0.50;
 
     ctx.save();
-    ctx.rotate((1 - aim) * -0.06);
-
-    // Верхнее и нижнее плечо лука.
+    ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    for (let pass = 0; pass < 2; pass++) {
-      ctx.strokeStyle = pass === 0 ? P.cloakTrim : P.bowWood;
-      ctx.lineWidth = pass === 0 ? 4.4 : 2.9;
-      ctx.beginPath();
-      ctx.moveTo(b.cx, b.cy);
-      ctx.bezierCurveTo(shoulderTopX, shoulderTopY, shoulderTopX + 1.8, topY + 4, topX, topY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(b.cx, b.cy);
-      ctx.bezierCurveTo(shoulderBotX, shoulderBotY, shoulderBotX + 1.8, botY - 4, botX, botY);
-      ctx.stroke();
-    }
-    // Светлая грань.
-    ctx.strokeStyle = P.bowWoodLight;
-    ctx.globalAlpha = 0.65;
-    ctx.lineWidth = 0.75;
-    ctx.beginPath();
-    ctx.moveTo(b.cx - 0.5, b.cy - 2);
-    ctx.bezierCurveTo(shoulderTopX - 0.4, shoulderTopY, shoulderTopX + 1.2, topY + 4, topX, topY + 0.4);
-    ctx.moveTo(b.cx - 0.5, b.cy + 2);
-    ctx.bezierCurveTo(shoulderBotX - 0.4, shoulderBotY, shoulderBotX + 1.2, botY - 4, botX, botY - 0.4);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
 
-    // Костяные наконечники плеч лука.
+    // Широкие изогнутые плечи лука (заполненные серпы, а не тонкая палка).
+    const drawLimb = (tipX, tipY, sign) => {
+      const out1X = cx + 11.5 + flex * 0.35;
+      const out1Y = cy + sign * h * 0.16;
+      const out2X = cx + 14.5 + flex * 0.22;
+      const out2Y = cy + sign * h * 0.36;
+      const in1X = cx + 5.2;
+      const in1Y = cy + sign * h * 0.14;
+      const in2X = cx + 6.2 + flex * 0.18;
+      const in2Y = cy + sign * h * 0.34;
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.bezierCurveTo(out1X, out1Y, out2X, out2Y, tipX, tipY);
+      ctx.bezierCurveTo(in2X, in2Y, in1X, in1Y, cx, cy);
+      ctx.closePath();
+      ctx.fillStyle = P.bowWood;
+      ctx.strokeStyle = P.cloakTrim;
+      ctx.lineWidth = 0.95;
+      ctx.fill();
+      ctx.stroke();
+
+      // Светлая грань по внешней стороне.
+      ctx.strokeStyle = P.bowWoodLight;
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(cx + 0.4, cy + sign * 1.8);
+      ctx.bezierCurveTo(out1X - 1.4, out1Y, out2X - 1.6, out2Y, tipX, tipY + sign * 0.6);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Тёмная внутренняя жилка.
+      ctx.strokeStyle = P.cloakTrim;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(cx + 1.0, cy + sign * 1.5);
+      ctx.bezierCurveTo(in1X - 0.4, in1Y, in2X - 0.3, in2Y, tipX - 0.6, tipY - sign * 0.8);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+    drawLimb(topX, topY, -1);
+    drawLimb(botX, botY, 1);
+
+    // Костяные/стальные наконечники плеч.
     ctx.fillStyle = P.bowBone;
     ctx.strokeStyle = P.boneShadow;
     ctx.lineWidth = 0.55;
-    for (const [tx, ty, flip] of [[topX, topY, 1], [botX, botY, -1]]) {
+    for (const [tx, ty, s] of [[topX, topY, -1], [botX, botY, 1]]) {
       ctx.beginPath();
-      ctx.moveTo(tx + 2.2, ty - 0.4 * flip);
-      ctx.lineTo(tx - 1.8, ty - 2.5 * flip);
-      ctx.lineTo(tx - 0.7, ty + 1.4 * flip);
+      ctx.moveTo(tx - 1.6, ty + s * 1.2);
+      ctx.lineTo(tx + 4.4, ty - s * 1.0);
+      ctx.lineTo(tx + 2.0, ty + s * 4.0);
       ctx.closePath();
       ctx.fill(); ctx.stroke();
     }
 
     // Обмотка рукояти.
-    ctx.strokeStyle = P.leather;
-    ctx.lineWidth = 3.1;
-    ctx.beginPath(); ctx.moveTo(b.cx - 0.5, b.cy - 3); ctx.lineTo(b.cx - 0.5, b.cy + 3); ctx.stroke();
+    ctx.fillStyle = P.leatherDark;
+    ctx.strokeStyle = P.cloakTrim;
+    ctx.lineWidth = 0.65;
+    ctx.beginPath();
+    ctx.roundRect(cx - 2.4, cy - 4.8, 4.8, 9.6, 1.6);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = P.leather;
+    ctx.beginPath();
+    ctx.roundRect(cx - 1.9, cy - 4.2, 3.8, 8.4, 1.2);
+    ctx.fill();
     ctx.strokeStyle = P.leatherLight;
     ctx.lineWidth = 0.55;
-    for (let i = -1; i <= 1; i++) {
-      ctx.beginPath(); ctx.moveTo(b.cx - 2.0, b.cy + i * 1.5); ctx.lineTo(b.cx + 1.0, b.cy + i * 1.5 - 0.4); ctx.stroke();
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 1.9, cy + i * 1.55);
+      ctx.lineTo(cx + 1.9, cy + i * 1.55 - 0.35);
+      ctx.stroke();
     }
+    // Металлическая пятка/полка для стрелы.
+    ctx.fillStyle = P.metal;
+    ctx.strokeStyle = P.cloakTrim;
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.roundRect(cx + 1.2, cy - 1.8, 2.6, 1.3, 0.4);
+    ctx.fill(); ctx.stroke();
 
-    // Тетива (натянутая или прямая).
-    const nockX = b.nockX;
-    const nockY = b.nockY;
+    // Тетива: в покое прямая между концами, при натяжении — V к кисти.
     ctx.strokeStyle = P.bowString;
-    ctx.lineWidth = 0.85;
+    ctx.lineWidth = 1.0;
     ctx.beginPath();
     ctx.moveTo(topX, topY);
-    ctx.lineTo(nockX, nockY);
+    if (aim > 0.05) ctx.lineTo(b.nockX, b.nockY);
+    else ctx.lineTo((topX + botX) * 0.5, (topY + botY) * 0.5);
     ctx.lineTo(botX, botY);
     ctx.stroke();
 
-    // Стрела на тетиве.
-    if (aim > 0.10) {
-      const a = clamp01((aim - 0.1) / 0.9);
+    // Узла тетивы.
+    if (aim > 0.05) {
+      ctx.fillStyle = P.leatherDark;
+      ctx.beginPath();
+      ctx.arc(b.nockX, b.nockY, 1.0, 0, TAU);
+      ctx.fill();
+    }
+
+    // Стрела на тетиве — появляется вместе с натяжением.
+    if (aim > 0.08) {
+      const a = clamp01((aim - 0.08) / 0.92);
       ctx.save();
       ctx.globalAlpha *= a;
-      const arrowLen = cfg.arrow_length_px ?? 21;
-      const tipX = b.cx + arrowLen;
+      const arrowLen = cfg.arrow_length_px ?? 23;
+      const tipX = cx + arrowLen;
+      const ny = b.nockY;
+      // Древко.
       ctx.strokeStyle = P.arrowWood;
-      ctx.lineWidth = 1.25;
+      ctx.lineWidth = 0.85;
       ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(nockX, nockY); ctx.lineTo(tipX, nockY); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(b.nockX, ny); ctx.lineTo(tipX, ny); ctx.stroke();
+      ctx.strokeStyle = P.arrowFletch;
+      ctx.globalAlpha *= 0.45;
+      ctx.lineWidth = 0.28;
+      ctx.beginPath(); ctx.moveTo(b.nockX + 1, ny - 0.35); ctx.lineTo(tipX - 2, ny - 0.35); ctx.stroke();
+      ctx.globalAlpha /= 0.45;
       // Наконечник.
       ctx.fillStyle = P.arrowHead;
+      ctx.strokeStyle = P.boneShadow;
+      ctx.lineWidth = 0.3;
       ctx.beginPath();
-      ctx.moveTo(tipX + 3.2, nockY);
-      ctx.lineTo(tipX - 1.4, nockY - 1.7);
-      ctx.lineTo(tipX - 1.4, nockY + 1.7);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(tipX + 3.0, ny);
+      ctx.lineTo(tipX - 1.0, ny - 1.5);
+      ctx.lineTo(tipX - 1.0, ny + 1.5);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
       // Оперение.
       ctx.fillStyle = P.arrowFletch;
       ctx.beginPath();
-      ctx.moveTo(nockX + 1.0, nockY);
-      ctx.lineTo(nockX + 4.1, nockY - 2.0);
-      ctx.lineTo(nockX + 4.6, nockY);
+      ctx.moveTo(b.nockX + 0.6, ny);
+      ctx.lineTo(b.nockX + 3.8, ny - 1.8);
+      ctx.lineTo(b.nockX + 4.4, ny);
       ctx.closePath(); ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(nockX + 1.0, nockY);
-      ctx.lineTo(nockX + 4.1, nockY + 2.0);
-      ctx.lineTo(nockX + 4.6, nockY);
+      ctx.moveTo(b.nockX + 0.6, ny);
+      ctx.lineTo(b.nockX + 3.8, ny + 1.8);
+      ctx.lineTo(b.nockX + 4.4, ny);
       ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = P.leatherLight;
+      ctx.lineWidth = 0.25;
+      ctx.beginPath(); ctx.moveTo(b.nockX + 1.0, ny - 1.7); ctx.lineTo(b.nockX + 3.6, ny - 1.7); ctx.stroke();
       ctx.restore();
+    }
+
+    // Кисть, удерживающая тетиву (поверх тетивы и стрелы).
+    if (aim > 0.12) {
+      this._drawHand(ctx, b.nockX - 0.7, b.nockY, P, 0.95, true);
     }
     ctx.restore();
   }
@@ -716,92 +927,120 @@ export class SkeletonArcherRenderer {
   // ===================== HEAD =====================
 
   _drawHead(ctx, pose, cfg, P) {
-    const headSway = Math.sin(pose.time * 1.6) * (cfg.idle_head_turn_px ?? 1.0) * (1 - pose.moveK);
+    const headSway = Math.sin(pose.time * 1.6) * (cfg.idle_head_turn_px ?? 0.8) * (1 - pose.moveK);
     ctx.save();
     ctx.translate(headSway, 0);
 
-    // Задняя часть капюшона.
+    // Задняя часть капюшона: остроконечный, как на референсе.
     ctx.fillStyle = P.cloakDark;
     ctx.strokeStyle = P.cloakTrim;
-    ctx.lineWidth = 0.9;
+    ctx.lineWidth = 0.95;
     ctx.beginPath();
-    ctx.moveTo(-9, -5.5);
-    ctx.quadraticCurveTo(-10.5, -15, -2.5, -23.5);
-    ctx.quadraticCurveTo(6.6, -22.0, 9.1, -11.0);
-    ctx.quadraticCurveTo(9.4, -4.0, 6.2, -2.0);
-    ctx.lineTo(-7.2, -2.2);
+    ctx.moveTo(-9, -6);
+    ctx.quadraticCurveTo(-10.5, -15, -4.5, -24);
+    ctx.quadraticCurveTo(0.5, -28, 5.5, -25);
+    ctx.quadraticCurveTo(9.0, -19, 8.8, -9.5);
+    ctx.quadraticCurveTo(9.0, -4, 6.0, -2.0);
+    ctx.lineTo(-7.4, -2.2);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
     // Тёмная внутренность капюшона.
-    ctx.fillStyle = '#080a08';
+    ctx.fillStyle = '#070907';
     ctx.beginPath();
-    ctx.ellipse(1.2, -11.0, 6.2, 7.0, 0.05, 0, TAU);
+    ctx.ellipse(1.2, -14.0, 6.0, 7.0, 0.04, 0, TAU);
     ctx.fill();
 
     if (!pose.back) {
-      // Череп.
+      // Череп — вытянутый, угловатый, с тяжёлой челюстью.
+      ctx.fillStyle = P.bone;
+      ctx.strokeStyle = P.boneShadow;
+      ctx.lineWidth = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(-3.0, -18.2);
+      ctx.quadraticCurveTo(-0.6, -20.0, 4.2, -17.6);
+      ctx.quadraticCurveTo(5.6, -15.0, 4.8, -10.8);
+      ctx.lineTo(3.9, -8.2);
+      ctx.quadraticCurveTo(1.0, -5.6, -2.0, -8.0);
+      ctx.lineTo(-3.7, -11.8);
+      ctx.quadraticCurveTo(-4.1, -15.4, -3.0, -18.2);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+
+      // Надбровная дуга.
+      ctx.strokeStyle = P.boneShadow;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-2.8, -16.4);
+      ctx.quadraticCurveTo(1.0, -18.2, 5.0, -16.0);
+      ctx.stroke();
+
+      // Челюсть.
       ctx.fillStyle = P.bone;
       ctx.strokeStyle = P.boneShadow;
       ctx.lineWidth = 0.65;
       ctx.beginPath();
-      ctx.ellipse(1.6, -11.6, 4.15, 5.1, -0.03, 0, TAU);
-      ctx.fill(); ctx.stroke();
-
-      // Челюсть.
-      ctx.beginPath();
-      ctx.moveTo(-1.6, -7.7);
-      ctx.quadraticCurveTo(1.4, -5.3, 4.9, -7.2);
-      ctx.lineTo(3.8, -5.0);
-      ctx.quadraticCurveTo(1.2, -4.0, -1.0, -5.6);
+      ctx.moveTo(-2.0, -8.6);
+      ctx.quadraticCurveTo(1.0, -5.4, 4.8, -8.2);
+      ctx.lineTo(3.8, -5.6);
+      ctx.quadraticCurveTo(0.8, -4.0, -1.3, -6.4);
       ctx.closePath();
       ctx.fill(); ctx.stroke();
 
-      // Глазницы + свечение.
-      const eyes = pose.front ? [[-1.8, -12.4], [2.6, -12.4]] : [[3.1, -12.3]];
-      for (const [ex, ey] of eyes) {
-        ctx.fillStyle = '#100c08';
-        ctx.beginPath(); ctx.ellipse(ex, ey, 1.55, 1.9, 0, 0, TAU); ctx.fill();
+      // Глазницы + свечение. Оба глаза равны — скелет смотрит в профиль/анфас,
+      // но лицо всегда читается двумя огоньками.
+      const eyes = [[-1.7, -14.8, 1.45], [3.1, -14.8, 1.45]];
+      for (const [ex, ey, er] of eyes) {
+        ctx.fillStyle = '#0d0a06';
+        ctx.beginPath(); ctx.ellipse(ex, ey, er, er * 1.2, 0, 0, TAU); ctx.fill();
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        const eg = ctx.createRadialGradient(ex, ey, 0, ex, ey, 2.3);
+        const eg = ctx.createRadialGradient(ex, ey, 0, ex, ey, er * 1.9);
         eg.addColorStop(0, P.eyeCore);
-        eg.addColorStop(0.28, P.eye);
+        eg.addColorStop(0.25, P.eye);
         eg.addColorStop(1, 'rgba(255,140,0,0)');
         ctx.globalAlpha = cfg.eye_glow_alpha ?? 0.8;
         ctx.fillStyle = eg;
-        ctx.beginPath(); ctx.arc(ex, ey, 2.3, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex, ey, er * 1.9, 0, TAU); ctx.fill();
         ctx.restore();
       }
 
       // Носовая впадина.
       ctx.fillStyle = P.boneDark;
       ctx.beginPath();
-      ctx.moveTo(2.0, -10.2);
-      ctx.lineTo(3.5, -8.6);
-      ctx.lineTo(1.4, -8.5);
+      ctx.moveTo(1.5, -12.2);
+      ctx.lineTo(3.0, -10.0);
+      ctx.lineTo(0.7, -9.9);
       ctx.closePath();
       ctx.fill();
 
       // Зубы.
       ctx.strokeStyle = P.boneShadow;
-      ctx.lineWidth = 0.45;
-      for (let i = 0; i < 3; i++) {
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < 4; i++) {
         ctx.beginPath();
-        ctx.moveTo(-0.2 + i * 1.25, -6.8);
-        ctx.lineTo(-0.1 + i * 1.25, -5.4);
+        ctx.moveTo(-1.2 + i * 1.2, -8.0);
+        ctx.lineTo(-1.1 + i * 1.2, -6.2);
         ctx.stroke();
       }
 
-      // Трещина на черепе.
-      ctx.strokeStyle = P.boneDark;
-      ctx.globalAlpha *= 0.8;
-      ctx.lineWidth = 0.38;
+      // Скула и трещины.
+      ctx.strokeStyle = P.boneShadow;
+      ctx.globalAlpha *= 0.7;
+      ctx.lineWidth = 0.5;
       ctx.beginPath();
-      ctx.moveTo(0.1, -16.4);
-      ctx.lineTo(1.1, -15.0);
-      ctx.lineTo(0.5, -14.0);
+      ctx.moveTo(-2.7, -10.8);
+      ctx.quadraticCurveTo(0.0, -9.6, 3.8, -10.6);
+      ctx.stroke();
+      ctx.strokeStyle = P.boneDark;
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(-0.4, -18.8);
+      ctx.lineTo(0.8, -17.0);
+      ctx.lineTo(0.1, -15.8);
+      ctx.moveTo(3.2, -18.2);
+      ctx.lineTo(4.0, -16.6);
       ctx.stroke();
     } else {
       // Вид со спины: складки капюшона, без лица.
@@ -809,30 +1048,53 @@ export class SkeletonArcherRenderer {
       ctx.globalAlpha *= 0.7;
       ctx.lineWidth = 0.8;
       ctx.beginPath();
-      ctx.moveTo(-2.5, -20.2);
-      ctx.quadraticCurveTo(-4.5, -12, -3.2, -5.4);
-      ctx.moveTo(4.2, -19.0);
-      ctx.quadraticCurveTo(5.2, -12, 4.1, -5.8);
+      ctx.moveTo(-2.5, -22.5);
+      ctx.quadraticCurveTo(-5.0, -13, -3.8, -5.8);
+      ctx.moveTo(4.0, -21.5);
+      ctx.quadraticCurveTo(5.4, -13, 4.4, -6.2);
       ctx.stroke();
     }
 
-    // Передний край капюшона.
+    // Передний край капюшона — двумя дугами, не перекрывая лицо.
     ctx.strokeStyle = P.cloakTrim;
-    ctx.lineWidth = 1.7;
+    ctx.lineWidth = 2.0;
     ctx.beginPath();
-    ctx.moveTo(-7.2, -6.0);
-    ctx.quadraticCurveTo(-4.8, -20.3, 2.0, -22.1);
-    ctx.quadraticCurveTo(8.2, -19.1, 8.3, -7.0);
+    ctx.moveTo(-8.0, -6.4);
+    ctx.quadraticCurveTo(-7.0, -15.0, -4.6, -21.6);
+    ctx.quadraticCurveTo(-3.2, -25.4, -0.8, -25.8);
+    ctx.moveTo(2.4, -25.9);
+    ctx.quadraticCurveTo(7.2, -21.8, 8.8, -8.0);
     ctx.stroke();
+    ctx.strokeStyle = P.cloakLight;
+    ctx.globalAlpha *= 0.45;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-6.8, -8.0);
+    ctx.quadraticCurveTo(-5.8, -19.0, -0.8, -24.4);
+    ctx.stroke();
+    ctx.globalAlpha /= 0.45;
 
     // Акцентная завязка капюшона.
     ctx.strokeStyle = P.accent;
     ctx.globalAlpha *= 0.75;
-    ctx.lineWidth = 0.55;
+    ctx.lineWidth = 0.6;
     ctx.beginPath();
-    ctx.moveTo(-4.0, -4.3);
-    ctx.quadraticCurveTo(1.2, -1.8, 5.3, -4.7);
+    ctx.moveTo(-4.2, -5.0);
+    ctx.quadraticCurveTo(1.2, -2.0, 5.4, -5.4);
     ctx.stroke();
+
+    // Яркие зрачки поверх всех слоёв — оба глаза читаются даже в тени капюшона.
+    if (!pose.back) {
+      const eyeDots = [[-1.7, -14.8], [3.1, -14.8]];
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = P.eyeCore;
+      for (const [ex, ey] of eyeDots) {
+        ctx.beginPath(); ctx.arc(ex, ey, 0.95, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -843,21 +1105,21 @@ export class SkeletonArcherRenderer {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     const r = (cfg.shoot_flash_radius_px ?? 8) * (0.5 + a * 0.8);
-    const g = ctx.createRadialGradient(b.cx + 18, b.cy, 0, b.cx + 18, b.cy, r);
+    const g = ctx.createRadialGradient(b.cx + 24, b.cy, 0, b.cx + 24, b.cy, r);
     g.addColorStop(0, '#fff9d8');
     g.addColorStop(0.35, '#ffd15c');
     g.addColorStop(1, 'rgba(255,120,0,0)');
     ctx.globalAlpha = (cfg.shoot_flash_alpha ?? 0.55) * a;
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(b.cx + 18, b.cy, r, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(b.cx + 24, b.cy, r, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#ffe9a8';
     ctx.lineWidth = 0.7;
     ctx.globalAlpha *= 0.7;
     for (let i = 0; i < 3; i++) {
       const y = b.cy - 2.6 + i * 2.6;
       ctx.beginPath();
-      ctx.moveTo(b.cx + 16 + i * 1.4, y);
-      ctx.lineTo(b.cx + 26 + a * 5, y - 0.3 * (i - 1));
+      ctx.moveTo(b.cx + 21 + i * 1.4, y);
+      ctx.lineTo(b.cx + 31 + a * 5, y - 0.3 * (i - 1));
       ctx.stroke();
     }
     ctx.restore();
@@ -874,8 +1136,8 @@ export class SkeletonArcherRenderer {
       const n = c.dust.length < 4 ? 2 : 1;
       for (let i = 0; i < n; i++) {
         c.dust.push({
-          x: (i % 2 === 0 ? -3 : 3) + (Math.random() - 0.5) * 2,
-          y: 26.5 + Math.random() * 1.2,
+          x: (i % 2 === 0 ? -4 : 4) + (Math.random() - 0.5) * 2,
+          y: 35.0 + Math.random() * 1.2,
           vx: (i % 2 === 0 ? -1 : 1) * (2.5 + Math.random() * 4),
           vy: 2 + Math.random() * 4,
           r: 1 + Math.random() * 1.2,
@@ -915,20 +1177,21 @@ export class SkeletonArcherRenderer {
   _makeBones(seed) {
     const S = 1;
     const defs = [
-      { kind: 'skull', sx: 1.0, sy: -12.0, tx: -2.5, ty: 20.0, size: 5.2, launch: 10, delay: 0.00, spin: -1.2, rest: -0.18 },
-      { kind: 'jaw', sx: 1.4, sy: -7.0, tx: 2.2, ty: 23.0, size: 4.0, launch: 7, delay: 0.03, spin: 2.1, rest: 0.28 },
-      { kind: 'ribcage', sx: 0.0, sy: 1.0, tx: 0.0, ty: 24.2, size: 7.6, launch: 9, delay: 0.06, spin: 1.0, rest: 0.05 },
-      { kind: 'pelvis', sx: 0.0, sy: 9.0, tx: 6.2, ty: 24.4, size: 5.0, launch: 8, delay: 0.09, spin: -1.8, rest: 0.35 },
-      { kind: 'femur', sx: -2.5, sy: 10.0, tx: -10.5, ty: 25.0, size: 6.4, launch: 11, delay: 0.04, spin: 3.0, rest: 1.30 },
-      { kind: 'femur', sx: 2.5, sy: 10.0, tx: 9.6, ty: 25.2, size: 6.0, launch: 10, delay: 0.11, spin: -2.4, rest: -0.9 },
-      { kind: 'shin', sx: -3.0, sy: 17.0, tx: -13.5, ty: 26.0, size: 5.6, launch: 8, delay: 0.12, spin: 2.6, rest: 1.1 },
-      { kind: 'shin', sx: 3.0, sy: 17.0, tx: 12.0, ty: 26.0, size: 5.2, launch: 9, delay: 0.16, spin: -2.9, rest: -1.25 },
-      { kind: 'arm', sx: -4.4, sy: -4.2, tx: -6.8, ty: 21.5, size: 5.4, launch: 12, delay: 0.02, spin: 2.5, rest: 0.7 },
-      { kind: 'arm', sx: 4.2, sy: -4.2, tx: 7.0, ty: 22.0, size: 5.0, launch: 13, delay: 0.07, spin: -2.1, rest: -0.5 },
-      { kind: 'hand', sx: -2.1, sy: 1.0, tx: -4.2, ty: 23.2, size: 2.4, launch: 6, delay: 0.17, spin: 3.7, rest: 0.0 },
-      { kind: 'hand', sx: 14.0, sy: 0.0, tx: 4.8, ty: 22.6, size: 2.2, launch: 7, delay: 0.14, spin: -3.5, rest: 0.15 },
-      { kind: 'boot', sx: 3.4, sy: 25.0, tx: -7.2, ty: 26.4, size: 4.2, launch: 6, delay: 0.18, spin: 1.7, rest: 0.2 },
-      { kind: 'boot', sx: -3.4, sy: 25.0, tx: 8.4, ty: 26.4, size: 4.2, launch: 7, delay: 0.20, spin: -1.4, rest: -0.2 }
+      { kind: 'skull', sx: 1.0, sy: -14.0, tx: -1.5, ty: 30.5, size: 5.4, launch: 10, delay: 0.00, spin: -1.2, rest: -0.18 },
+      { kind: 'jaw', sx: 1.4, sy: -8.0, tx: 2.5, ty: 33.0, size: 4.0, launch: 7, delay: 0.03, spin: 2.1, rest: 0.28 },
+      { kind: 'ribcage', sx: 0.0, sy: 2.0, tx: 0.0, ty: 33.0, size: 7.8, launch: 9, delay: 0.06, spin: 1.0, rest: 0.05 },
+      { kind: 'pelvis', sx: 0.0, sy: 11.0, tx: 6.2, ty: 33.5, size: 5.2, launch: 8, delay: 0.09, spin: -1.8, rest: 0.35 },
+      { kind: 'femur', sx: -2.5, sy: 10.0, tx: -9.5, ty: 34.0, size: 6.6, launch: 11, delay: 0.04, spin: 3.0, rest: 1.30 },
+      { kind: 'femur', sx: 2.5, sy: 10.0, tx: 8.6, ty: 34.4, size: 6.2, launch: 10, delay: 0.11, spin: -2.4, rest: -0.9 },
+      { kind: 'shin', sx: -3.0, sy: 24.0, tx: -12.0, ty: 35.0, size: 5.8, launch: 8, delay: 0.12, spin: 2.6, rest: 1.1 },
+      { kind: 'shin', sx: 3.0, sy: 24.0, tx: 11.0, ty: 35.0, size: 5.4, launch: 9, delay: 0.16, spin: -2.9, rest: -1.25 },
+      { kind: 'arm', sx: -6.0, sy: -5.2, tx: -6.8, ty: 31.5, size: 5.6, launch: 12, delay: 0.02, spin: 2.5, rest: 0.7 },
+      { kind: 'arm', sx: 6.0, sy: -5.2, tx: 7.0, ty: 32.0, size: 5.2, launch: 13, delay: 0.07, spin: -2.1, rest: -0.5 },
+      { kind: 'hand', sx: -2.2, sy: 2.0, tx: -4.2, ty: 32.5, size: 2.4, launch: 6, delay: 0.17, spin: 3.7, rest: 0.0 },
+      { kind: 'hand', sx: 16.4, sy: -1.0, tx: 4.8, ty: 32.5, size: 2.2, launch: 7, delay: 0.14, spin: -3.5, rest: 0.15 },
+      { kind: 'boot', sx: 3.4, sy: 35.0, tx: -7.2, ty: 35.6, size: 4.4, launch: 6, delay: 0.18, spin: 1.7, rest: 0.2 },
+      { kind: 'boot', sx: -3.4, sy: 35.0, tx: 8.4, ty: 35.6, size: 4.4, launch: 7, delay: 0.20, spin: -1.4, rest: -0.2 },
+      { kind: 'bow', sx: 17.0, sy: -1.0, tx: 13.0, ty: 35.2, size: 12.0, launch: 8, delay: 0.08, spin: 1.5, rest: 0.1 }
     ];
     return defs.map((d, i) => {
       const r = (n) => hash(seed + i * 17.7 + n * 3.11);
@@ -948,6 +1211,38 @@ export class SkeletonArcherRenderer {
         rest: d.rest + (r(9) - 0.5) * 0.5
       };
     });
+  }
+
+  _drawBoneHeap(ctx, pose, P) {
+    const k = pose.deathK;
+    if (k < 0.24) return;
+    const a = smoothstep(clamp01((k - 0.24) / 0.36));
+    ctx.save();
+    ctx.globalAlpha = a * 0.95;
+    ctx.fillStyle = P.cloakDark;
+    ctx.strokeStyle = P.cloakTrim;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-13.0, 36.0);
+    ctx.lineTo(-11.0, 32.6);
+    ctx.lineTo(-8.0, 34.6);
+    ctx.lineTo(-5.0, 31.8);
+    ctx.lineTo(-1.0, 34.8);
+    ctx.lineTo(3.0, 32.0);
+    ctx.lineTo(6.0, 34.8);
+    ctx.lineTo(9.0, 32.4);
+    ctx.lineTo(12.0, 35.0);
+    ctx.lineTo(13.0, 36.0);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = a * 0.35;
+    ctx.strokeStyle = P.cloakMid;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-9.0, 34.0); ctx.quadraticCurveTo(-5.0, 33.0, -2.0, 34.8);
+    ctx.moveTo(2.0, 33.6); ctx.quadraticCurveTo(6.0, 33.2, 9.0, 34.6);
+    ctx.stroke();
+    ctx.restore();
   }
 
   _drawBones(ctx, pose, cfg, P, c) {
@@ -1062,6 +1357,33 @@ export class SkeletonArcherRenderer {
       ctx.fill(); ctx.stroke();
       ctx.fillStyle = P.leatherDark;
       ctx.fillRect(-size * 0.55, size * 0.2, size * 1.3, size * 0.22);
+    } else if (kind === 'bow') {
+      // Упавший лук: широкий серп + тетива.
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = P.cloakTrim;
+      ctx.lineWidth = size * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.62, 0);
+      ctx.quadraticCurveTo(0, -size * 0.42, size * 0.62, 0);
+      ctx.stroke();
+      ctx.strokeStyle = P.bowWood;
+      ctx.lineWidth = size * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.62, 0);
+      ctx.quadraticCurveTo(0, -size * 0.42, size * 0.62, 0);
+      ctx.stroke();
+      ctx.strokeStyle = P.bowWoodLight;
+      ctx.lineWidth = size * 0.06;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.58, -0.4);
+      ctx.quadraticCurveTo(0, -size * 0.36, size * 0.58, -0.4);
+      ctx.stroke();
+      ctx.strokeStyle = P.bowString;
+      ctx.lineWidth = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.62, 0);
+      ctx.lineTo(size * 0.62, 0);
+      ctx.stroke();
     }
   }
 }

@@ -140,6 +140,24 @@ export class ConfigLoader {
       if (registries && registries.movement && !registries.movement[m.movement_type]) {
         errors.push('monster ' + m.id + ' unknown movement_type=' + m.movement_type);
       }
+      // Лучник: дистанция/кулдаун и параметры патруля/натяжения.
+      if (m.movement_type === 'archer') {
+        const a = m.archer || {};
+        if (!(m.attack_range > 0)) errors.push('monster ' + m.id + ' archer needs attack_range > 0');
+        if (!(m.attack_cooldown_ms > 0)) errors.push('monster ' + m.id + ' archer needs attack_cooldown_ms > 0');
+        if (a.release_at !== undefined && !(a.release_at >= 0 && a.release_at <= 1)) {
+          errors.push('monster ' + m.id + ' archer.release_at must be 0..1');
+        }
+        if (a.retreat_range !== undefined && !(a.retreat_range >= 0)) {
+          errors.push('monster ' + m.id + ' archer.retreat_range must be >= 0');
+        }
+        if (a.strafe_speed_scale !== undefined && !(a.strafe_speed_scale > 0)) {
+          errors.push('monster ' + m.id + ' archer.strafe_speed_scale must be > 0');
+        }
+        if (a.turn_interval_ms !== undefined && !(a.turn_interval_ms > 0)) {
+          errors.push('monster ' + m.id + ' archer.turn_interval_ms must be > 0');
+        }
+      }
       // Боссы: паттерн + параметры рывка/залпа (всё из конфига, код не трогаем)
         if (m.is_boss) {
           const pat = m.boss_pattern || 'shooter';
