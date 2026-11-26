@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<!-- ⚠️ ПЕРЕД ЛЮБЫМИ ПРАВКАМИ ПРОЧТИ pathx/README.md — там архитектура утилиты,
+     правила независимости от игры и известные особенности рендереров (§4). -->
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PathX — Path Explorer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#14141f;color:#dcdfea;font-size:13px;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:14px;padding:7px 16px;background:#1c1c2b;border-bottom:1px solid #2c2c42;flex-shrink:0}
+header h1{font-size:15px;font-weight:700;letter-spacing:1.5px;color:#ff4d6d;white-space:nowrap}
+header h1 span{color:#6f7ba8;font-weight:400;letter-spacing:0;font-size:11px}
+.status{font-size:11px;color:#6f7ba8}.status.ok{color:#4ec98d}.status.err{color:#ff4d6d}
+.main{display:flex;flex:1;overflow:hidden}
+.nav{width:300px;min-width:300px;background:#1c1c2b;border-right:1px solid #2c2c42;display:flex;flex-direction:column;overflow:hidden}
+.nav-tools{padding:8px;border-bottom:1px solid #2c2c42;display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.tool-row{display:flex;align-items:center;gap:6px}
+.tool-row>label{font-size:10px;color:#6f7ba8;text-transform:uppercase;letter-spacing:.4px;width:62px;flex-shrink:0}
+.sel,input[type=text]{background:#14141f;color:#dcdfea;border:1px solid #2c2c42;border-radius:4px;padding:4px 6px;font-size:11px;font-family:inherit;flex:1;min-width:0}
+.sel:focus,input[type=text]:focus{outline:1px solid #ff4d6d}
+.nav-list{flex:1;overflow-y:auto;padding:6px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;transition:border-color .12s,background .12s;border:1px solid transparent;margin-bottom:4px}
+.nav-item:hover{border-color:#4a4a72;background:#191926}
+.nav-item.active{border-color:#ff4d6d;background:#241c28}
+.nav-thumb{width:56px;height:56px;border-radius:4px;background:#0e0e17;border:1px solid #2c2c42;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.nav-thumb canvas,.nav-thumb img{max-width:100%;max-height:100%;object-fit:contain;image-rendering:pixelated}
+.nav-info{flex:1;min-width:0}
+.nav-name{font-size:11.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-type{font-size:9.5px;color:#5d6684;margin-top:1px}
+.nav-desc{font-size:9px;color:#5d6684;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.viewer{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.stage{flex:1;position:relative;background:linear-gradient(45deg,#101018 25%,transparent 25%,transparent 75%,#101018 75%),linear-gradient(45deg,#101018 25%,#14141f 25%,#14141f 75%,#101018 75%);background-size:24px 24px;background-position:0 0,12px 12px;display:flex;align-items:center;justify-content:center;overflow:hidden;min-height:0}
+.stage canvas{image-rendering:pixelated;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.hud{position:absolute;top:10px;left:10px;background:rgba(12,12,20,.82);border:1px solid #2c2c42;border-radius:6px;padding:8px 11px;max-width:340px;pointer-events:none;line-height:1.45}
+.hud-title{font-size:13px;font-weight:600;color:#ff4d6d}
+.hud-meta{font-size:10.5px;color:#8b93b0}
+.hud-desc{font-size:10.5px;color:#6f7ba8;margin-top:5px}
+.controls{height:212px;min-height:212px;background:#1c1c2b;border-top:1px solid #2c2c42;display:flex;flex-direction:column;flex-shrink:0}
+.tabs{display:flex;border-bottom:1px solid #2c2c42;flex-shrink:0}
+.tab{padding:6px 15px;font-size:11px;cursor:pointer;color:#6f7ba8;border-bottom:2px solid transparent;user-select:0;transition:color .1s}
+.tab:hover{color:#c3c9de}.tab.active{color:#ff4d6d;border-bottom-color:#ff4d6d}
+.panels{flex:1;overflow-y:auto}
+.panel{display:none;padding:10px 14px}.panel.active{display:block}
+.field{margin-bottom:12px}
+.field-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#6f7ba8;margin-bottom:6px}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap}
+.btn{background:#14141f;color:#c3c9de;border:1px solid #2c2c42;border-radius:4px;padding:5px 12px;font-size:11px;font-family:inherit;cursor:pointer;transition:all .1s;white-space:nowrap}
+.btn:hover{border-color:#4a4a72;color:#fff}.btn.active{background:#ff4d6d;border-color:#ff4d6d;color:#fff}
+.playbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.playbar .btn{min-width:38px;text-align:center}
+.time{font-size:11px;color:#8b93b0;font-variant-numeric:tabular-nums}
+.slider-row{display:flex;align-items:center;gap:9px;margin-bottom:5px}
+.slider-row label{width:150px;flex-shrink:0;font-size:10.5px;color:#8b93b0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slider-row input[type=range]{flex:1;min-width:60px;height:3px;accent-color:#ff4d6d}
+.slider-row .val{width:48px;text-align:right;font-size:10.5px;color:#c3c9de;font-variant-numeric:tabular-nums;flex-shrink:0}
+.empty{font-size:10.5px;color:#5d6684;font-style:italic}
+::-webkit-scrollbar{width:7px}::-webkit-scrollbar-track{background:#14141f}::-webkit-scrollbar-thumb{background:#2c2c42;border-radius:4px}::-webkit-scrollbar-thumb:hover{background:#ff4d6d}
+.loading{display:flex;align-items:center;justify-content:center;height:100%;color:#5d6684;font-size:12px;gap:10px}
+.spinner{width:20px;height:20px;border:2px solid #2c2c42;border-top-color:#ff4d6d;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>PathX <span>— Path Explorer</span></h1>
+  <span class="status" id="status">Загрузка...</span>
+</header>
+<div class="main">
+  <div class="nav">
+    <div class="nav-tools">
+      <div class="tool-row"><label>Тип:</label><select class="sel" id="filterType"><option value="all">Все</option><option value="hero">Герой</option><option value="monster">Монстры</option><option value="projectile">Снаряды</option><option value="area">Зоны</option><option value="effect">Эффекты</option><option value="environment">Окружение</option><option value="item">Предметы</option><option value="pet">Питомцы</option><option value="ui">Интерфейс</option></select></div>
+      <div class="tool-row"><label>Поиск:</label><input type="text" id="searchInput" placeholder="..."></div>
+    </div>
+    <div class="nav-list" id="navList"><div class="loading"><div class="spinner"></div>Загрузка...</div></div>
+  </div>
+  <div class="viewer">
+    <div class="stage">
+      <canvas id="mainCanvas" width="512" height="512"></canvas>
+      <div class="hud" id="hud"><div class="hud-title">Выберите модельку</div><div class="hud-meta">PathX — Path Explorer</div></div>
+    </div>
+    <div class="controls">
+      <div class="tabs">
+        <div class="tab active" data-tab="states">Состояния</div>
+        <div class="tab" data-tab="directions">Направления</div>
+        <div class="tab" data-tab="params">Параметры</div>
+        <div class="tab" data-tab="playback">Воспроизведение</div>
+      </div>
+      <div class="panels">
+        <div class="panel active" id="tab-states"></div>
+        <div class="panel" id="tab-directions"></div>
+        <div class="panel" id="tab-params"></div>
+        <div class="panel" id="tab-playback"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { PROCEDURAL, TYPE_META } from './manifest.js';
+import { makeHero, makeSkeleton, makeFireball, makeBolt, makeNova, makeFrostRing, makeTornado, makeWall, makeLightningScene, stepEntity, prepareEntity } from './adapters.js';
+
+// ======================== УТИЛИТЫ ========================
+const TAU = Math.PI * 2;
+function clamp01(v){return Math.max(0,Math.min(1,v))}
+function hash(n){const x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x)}
+
+function stripComments(t){
+  let out='',i=0,inStr=false;
+  while(i<t.length){
+    const c=t[i],c2=t[i+1];
+    if(inStr){if(c==='\\'){out+=c+(c2||'');i+=2;continue}if(c==='"')inStr=false;out+=c;i++;continue}
+    if(c==='"'){inStr=true;out+=c;i++;continue}
+    if(c==='/'&&c2==='//')while(i<t.length&&t[i]!==String.fromCharCode(10))i++;
+    else if(c==='/'&&c2==='*'){i+=2;while(i<t.length&&!(t[i]==='*'&&t[i+1]==='/'))i++;i+=2}
+    else out+=c;i++
+  }
+  return out;
+}
+
+async function loadJSON(name){
+  // index.html лежит в pathx/, конфиги — в корне проекта.
+  const r=await fetch('../config/'+name+'.json');
+  const t=await r.text();
+  return JSON.parse(stripComments(t));
+}
+
+function getConfig(data,path){
+  if(!path) return data;
+  const parts=path.split('.');
+  let cur=data;
+  for(const p of parts){
+    if(cur==null||typeof cur!=='object') return {};
+    cur=cur[p];
+  }
+  return cur||{};
+}
+
+// ======================== СОСТОЯНИЕ ========================
+let entries=[];
+let activeEntry=null;
+let renderer=null;
+let animTime=0;
+let playing=false;
+let lastFrameTime=0;
+let animSpeed=1;
+let rafId=null;
+let images=new Map();
+let cachedConfigs={};
+let scene=null; // кэш сцены: {entity, weaponsMap, lightningScene}
+
+// ======================== ЗАГРУЗКА ИЗОБРАЖЕНИЙ ========================
+async function loadImages(){
+  const g=await loadJSON('game_config');
+  const b=await loadJSON('balance_config');
+  const e=await loadJSON('effects_config');
+  const ui=await loadJSON('ui_config');
+  const it=await loadJSON('items_config');
+  const s=await loadJSON('skills_config');
+
+  const paths=new Set();
+  if(g.hero.sprite) paths.add(g.hero.sprite);
+  if(g.hero.portrait) paths.add(g.hero.portrait);
+  if(g.visuals?.ground?.sprite) paths.add(g.visuals.ground.sprite);
+  for(const m of(b.monsters||[])) if(m.sprite) paths.add(m.sprite);
+  for(const p of(b.environment_props||[])) if(p.sprite) paths.add(p.sprite);
+  for(const c of((b.chests||{}).types||[])) if(c.sprite) paths.add(c.sprite);
+  for(const w of(s.weapons||[])){
+    if(w.projectile_sprite) paths.add(w.projectile_sprite);
+    if(w.area_sprite) paths.add(w.area_sprite);
+    if(w.orb_sprite) paths.add(w.orb_sprite);
+  }
+  for(const fx of(e.effects||[])) if(fx.sprite) paths.add(fx.sprite);
+  if(ui.icons_hex?.sprite) paths.add(ui.icons_hex.sprite);
+  for(const t of(it.templates||[])) if(t.slot==='pet'&&t.sprite) paths.add(t.sprite);
+
+  const tasks=[];
+  for(const p of paths){
+    if(images.has(p)) continue;
+    tasks.push(fetch('../assets/'+p).then(r=>r.blob()).then(b=>{
+      return new Promise(res=>{
+        const img=new Image();
+        img.onload=()=>{images.set(p,img);res(img)};
+        img.onerror=()=>{
+          const c=document.createElement('canvas');
+          c.width=c.height=64;
+          const ctx=c.getContext('2d');
+          ctx.fillStyle='#333';ctx.fillRect(0,0,64,64);
+          ctx.fillStyle='#888';ctx.font='10px monospace';ctx.textAlign='center';
+          ctx.fillText(p.split('/').pop().slice(0,12),32,36);
+          images.set(p,c);res(c);
+        };
+        img.src=URL.createObjectURL(b);
+      });
+    }));
+  }
+  await Promise.all(tasks);
+}
+
+// ======================== ИНИЦИАЛИЗАЦИЯ ========================
+async function init(){
+  try{
+    await loadImages();
+    const g=await loadJSON('game_config');
+    const b=await loadJSON('balance_config');
+    const s=await loadJSON('skills_config');
+    const e=await loadJSON('effects_config');
+    const ui=await loadJSON('ui_config');
+    const it=await loadJSON('items_config');
+
+    cachedConfigs={game_config:g,skills_config:s,effects_config:e,ui_config:ui,items_config:it,balance_config:b};
+
+    // Процедурные
+    entries=PROCEDURAL.map(m=>{
+      let cfg={};
+      if(m.cfgFile==='game_config') cfg=getConfig(g,m.cfgPath);
+      else if(m.cfgFile==='skills_config') cfg=getConfig(s,m.cfgPath);
+      if(m.cfgPick){
+        const arr=Array.isArray(cfg)?cfg:(getConfig(s,m.cfgPath)||[]);
+        const found=arr.find(w=>w.id===m.cfgPick);
+        if(found) cfg=found;
+      }
+      if(m.cfgSub && cfg[m.cfgSub]) cfg=cfg[m.cfgSub];
+
+      // === КРИТИЧЕСКИЕ ИСПРАВЛЕНИЯ ===
+      // fireball: при mode!=='always' рендерер зовёт assets.isMissing() —
+      // утилите assets не нужен, поэтому форсируем процедурный режим.
+      if(m.id==='fireball') cfg.mode='always';
+      // hero/skeleton/tornado: кэш поза квантует время по cache_fps.
+      // 0 давать нельзя (qf/fps -> NaN), поэтому завышаем: кэш фактически
+      // отключается, анимация идёт в реальном времени.
+      if(m.force) Object.assign(cfg,m.force);
+
+      return {...m, cfg, type:'procedural'};
+    });
+
+    // Спрайтовые: монстры
+    for(const m of(b.monsters||[])){
+      entries.push({
+        id:'monster_'+m.id, label:m.id.replace(/_/g,' '), type:'monster',
+        sprite:m.sprite, frames:m.frames, boss:!!m.is_boss,
+        states:['idle','walk','attack','death'],
+        dirs:['down','up','left','right'],
+        desc:'Спрайтовый монстр: '+m.id+(m.is_boss?' (босс)':'')
+      });
+    }
+
+    // Пропы
+    for(const p of(b.environment_props||[])){
+      entries.push({
+        id:'prop_'+p.id, label:p.id.replace(/_/g,' '), type:'environment',
+        sprite:p.sprite, frames:p.frames, variability:p.variability,
+        states:['idle'], dirs:[],
+        desc:'Элемент окружения: '+p.id+(p.variability>1?' (вариативность: '+p.variability+')':'')
+      });
+    }
+
+    // Сундуки
+    for(const c of((b.chests||{}).types||[])){
+      entries.push({
+        id:'chest_'+c.id, label:c.id.replace(/_/g,' '), type:'environment',
+        sprite:c.sprite, frames:c.frames,
+        states:['idle','open'], dirs:[],
+        desc:'Сундук: '+c.id
+      });
+    }
+
+    // Лут
+    const lootSprites=b.loot?.pickup_sprites||{};
+    for(const [key,ls] of Object.entries(lootSprites)){
+      entries.push({
+        id:'loot_'+key, label:key.replace(/_/g,' '), type:'item',
+        sprite:ls.sprite, frames:{frame_width:ls.frame_width,frame_height:ls.frame_height,columns:ls.columns||1,animations:{idle:{row:0,frames:1,fps:1,loop:false}}},
+        draw_size:ls.draw_size,
+        states:['idle'], dirs:[],
+        desc:'Лут: '+key
+      });
+    }
+
+    // Эффекты
+    for(const fx of(e.effects||[])){
+      entries.push({
+        id:'effect_'+fx.id, label:fx.id.replace(/_/g,' '), type:'effect',
+        sprite:fx.sprite, frames:fx.frames, behavior:fx.behavior,
+        states:['play'], dirs:[],
+        desc:'Эффект: '+fx.id+' ('+fx.behavior+')'
+      });
+    }
+
+    // Питомцы
+    for(const pt of(it.templates||[])){
+      if(pt.slot!=='pet'||!pt.sprite) continue;
+      entries.push({
+        id:'pet_'+pt.id, label:pt.id.replace(/_/g,' '), type:'pet',
+        sprite:pt.sprite, frames:pt.sprite_frames,
+        states:['idle'], dirs:[],
+        desc:'Питомец: '+pt.id+' (радиус: '+pt.base_radius+')'
+      });
+    }
+
+    // Иконки скиллов
+    const hexCfg=ui.icons_hex;
+    if(hexCfg){
+      for(const [key,anim] of Object.entries(hexCfg.frames.animations)){
+        entries.push({
+          id:'icon_'+key, label:key.replace(/_/g,' '), type:'ui',
+          sprite:hexCfg.sprite, frames:hexCfg.frames, iconKey:key,
+          states:['idle'], dirs:[],
+          desc:'Иконка скилла: '+key
+        });
+      }
+    }
+
+    await generateThumbnails();
+
+    document.getElementById('status').textContent='Загружено: '+entries.length+' модельки';
+    document.getElementById('status').className='status ok';
+    renderNavList();
+  }catch(e){
+    document.getElementById('status').textContent='Ошибка: '+e.message;
+    document.getElementById('status').className='status err';
+    console.error(e);
+  }
+}
+
+// ======================== МИНИАТЮРЫ ========================
+async function generateThumbnails(){
+  for(const entry of entries){
+    try{
+      if(entry.type==='procedural') await genProceduralThumb(entry);
+      else genSpriteThumb(entry);
+    }catch(e){console.warn('Thumb error for '+entry.id+':',e)}
+  }
+}
+
+async function genProceduralThumb(entry){
+  const mod=await import(entry.module);
+  const RendererClass=mod[entry.cls];
+  if(!RendererClass) return;
+
+  // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: обёртка visuals ===
+  // MagicProjectileRenderer читает this.visuals[p.weaponId],
+  // FireWallRenderer читает this.visuals.fire_wall.
+  let thumbCfg=entry.cfg;
+  if(entry.ctor==='visuals'){
+    thumbCfg={ [entry.visualKey]: entry.cfg };
+  }
+
+  const r=new RendererClass(thumbCfg);
+  const S=96;
+  const tmpCanvas=document.createElement('canvas');
+  tmpCanvas.width=tmpCanvas.height=S;
+  const tmpCtx=tmpCanvas.getContext('2d');
+
+  const state=entry.states[0]||'idle';
+  const dir=entry.dirs[0]||'right';
+  const entity=makeEntity(entry,state,dir);
+  const zoom=S/(entry.extent||128);
+
+  // Вызов draw с правильным 4-м аргументом для данного рендерера.
+  const callDraw=(ctx,t)=>{
+    if(entry.draw==='weapons'){ r.draw(ctx,entity,t,null); return; }
+    if(entry.draw==='skill'){
+      const sc=makeLightningScene(entry.cfg,dir);
+      sc.draw(ctx,t); return;
+    }
+    if(entry.entity==='hero'||entry.entity==='skeleton'){
+      r.draw(ctx,entity,t,{scale:zoom,w:64,h:64}); return;
+    }
+    r.draw(ctx,entity,t,null);
+  };
+
+  // lightning — своя отрисовка, warmup не нужен.
+  if(entry.draw!=='skill'){
+    warmup(entry,entity,callDraw,12,1/60);
+  }
+
+  tmpCtx.save();
+  tmpCtx.translate(S/2,S/2);
+  if(entry.draw==='skill'){
+    // молнию позиционируем в мировых координатах — зум не нужен
+    callDraw(tmpCtx,0.5);
+  } else if(entry.entity==='hero'||entry.entity==='skeleton'){
+    callDraw(tmpCtx,0.5);
+  } else {
+    tmpCtx.scale(zoom,zoom);
+    callDraw(tmpCtx,0.5);
+  }
+  tmpCtx.restore();
+  entry.thumbCanvas=tmpCanvas;
+}
+
+function genSpriteThumb(entry){
+  const img=images.get(entry.sprite);
+  if(!img) return;
+  const tmpCanvas=document.createElement('canvas');
+  tmpCanvas.width=tmpCanvas.height=96;
+  const tmpCtx=tmpCanvas.getContext('2d');
+  const ds=entry.draw_size||64;
+  tmpCtx.drawImage(img,(96-ds)/2,(96-ds)/2,ds,ds);
+  entry.thumbCanvas=tmpCanvas;
+}
+
+function warmup(entry,entity,callDraw,frames,dt){
+  const off=document.createElement('canvas');
+  off.width=off.height=8;
+  const octx=off.getContext('2d');
+  for(let i=0;i<frames;i++){
+    try{callDraw(octx,(i+1)*dt)}catch(e){break}
+    stepEntity(entry,entity,dt);
+  }
+}
+
+// ======================== НАВИГАТОР ========================
+function renderNavList(){
+  const filterType=document.getElementById('filterType').value;
+  const search=document.getElementById('searchInput').value.toLowerCase();
+
+  let filtered=entries.filter(e=>{
+    if(filterType!=='all'&&e.type!==filterType) return false;
+    if(search&&!e.label.toLowerCase().includes(search)&&!e.id.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  filtered.sort((a,b)=>a.label.localeCompare(b.label,'ru'));
+
+  const navList=document.getElementById('navList');
+  navList.innerHTML='';
+  for(const entry of filtered){
+    const div=document.createElement('div');
+    div.className='nav-item'+(activeEntry===entry?' active':'');
+    const meta=TYPE_META[entry.type]||{label:entry.type,color:'#888'};
+    div.innerHTML=`
+      <div class="nav-thumb">${entry.thumbCanvas?entry.thumbCanvas.outerHTML:'<div style="width:100%;height:100%;background:#333"></div>'}</div>
+      <div class="nav-info">
+        <div class="nav-name">${entry.label}</div>
+        <div class="nav-type" style="color:${meta.color}">${meta.label} · ${entry.id}</div>
+        <div class="nav-desc">${entry.desc||''}</div>
+      </div>`;
+    div.addEventListener('click',()=>selectEntry(entry));
+    navList.appendChild(div);
+  }
+}
+
+function selectEntry(entry){
+  activeEntry=entry;
+  animTime=0;playing=false;renderer=null;scene=null;
+  renderNavList();
+  updateHud();
+  buildControls();
+  renderMain();
+}
+
+function updateHud(){
+  if(!activeEntry) return;
+  const meta=TYPE_META[activeEntry.type]||{label:activeEntry.type,color:'#888'};
+  document.getElementById('hud').innerHTML=`
+    <div class="hud-title">${activeEntry.label}</div>
+    <div class="hud-meta" style="color:${meta.color}">${meta.label} · ${activeEntry.id}</div>
+    <div class="hud-desc">${activeEntry.desc||''}</div>`;
+}
+
+// ======================== ПОСТРОЕНИЕ СУЩНОСТИ ========================
+function makeEntity(entry,state,dir){
+  switch(entry.id){
+    case 'hero_mage': return makeHero(state,dir);
+    case 'skeleton_archer': return makeSkeleton(state,dir);
+    case 'fireball': return makeFireball(state,dir);
+    case 'magic_bolt': return makeBolt(state,dir);
+    case 'arcane_nova': return makeNova(state,dir);
+    case 'frost_ring': {
+      const weapons=getConfig(cachedConfigs.skills_config,'weapons');
+      const wCfg=weapons.find(w=>w.id==='frost_ring')||{};
+      return makeFrostRing(entry.cfg,wCfg);
+    }
+    case 'tornado': {
+      const weapons=getConfig(cachedConfigs.skills_config,'weapons');
+      const wCfg=weapons.find(w=>w.id==='tornado')||{};
+      return makeTornado(state,entry.cfg,wCfg);
+    }
+    case 'fire_wall': {
+      const weapons=getConfig(cachedConfigs.skills_config,'weapons');
+      const wCfg=weapons.find(w=>w.id==='fire_wall')||{};
+      return makeWall(state,entry.cfg,wCfg);
+    }
+    default: return {x:0,y:0};
+  }
+}
+
+// ======================== ОТРИСОВКА ========================
+function renderMain(){
+  const canvas=document.getElementById('mainCanvas');
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(!activeEntry){
+    ctx.fillStyle='#5d6684';ctx.font='14px monospace';ctx.textAlign='center';
+    ctx.fillText('Выберите модельку',canvas.width/2,canvas.height/2);
+    return;
+  }
+
+  try{
+    if(activeEntry.type==='procedural') renderProcedural(ctx,canvas);
+    else renderSprite(ctx,canvas,activeEntry);
+  }catch(e){
+    ctx.fillStyle='#ff4d6d';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('Ошибка: '+e.message,canvas.width/2,canvas.height/2);
+    console.error(e);
+  }
+}
+
+// Кэш сцены: сущность живёт в одном объекте, чтобы хвосты снарядов
+// и возраст зон копировались между кадрами.
+function ensureScene(entry){
+  if(scene && scene.entry !== entry){
+    scene=null;
+  }
+  if(!scene){
+    const state=entry.states[0]||'idle';
+    const dir=entry.dirs[0]||'right';
+    const entity=makeEntity(entry,state,dir);
+    resetEntity(entry,entity);
+    prepareEntity(entry,entity);
+    scene={entry,entity};
+  }
+  return scene;
+}
+
+async function renderProcedural(ctx,canvas){
+  const s=ensureScene(activeEntry);
+  const state=getActiveState();
+  const dir=getActiveDir();
+
+  // Если состояние/направление изменились — пересоздаём сущность.
+  if(s._state!==state||s._dir!==dir){
+    s.entity=makeEntity(activeEntry,state,dir);
+    resetEntity(activeEntry,s.entity);
+    s._state=state;s._dir=dir;
+  }
+
+  // lightning рисуется не рендерером — класс-рендерер для неё не создаём.
+  if(!renderer&&activeEntry.draw!=='skill'){
+    const mod=await import(activeEntry.module);
+    const RendererClass=mod[activeEntry.cls];
+    // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: обёртка visuals ===
+    let rCfg=activeEntry.cfg;
+    if(activeEntry.ctor==='visuals'){
+      rCfg={ [activeEntry.visualKey]: activeEntry.cfg };
+    }
+    renderer=new RendererClass(rCfg);
+  }
+  drawFrame(ctx,canvas,s.entity);
+}
+
+async function drawFrame(ctx,canvas,entity){
+  if(!activeEntry) return;
+  const entry=activeEntry;
+  if(!renderer&&entry.draw!=='skill') return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Зум: extent — сколько пикселей мира должно влезть в кадр.
+  const extent=entry.extent||128;
+  const zoom=Math.min(canvas.width,canvas.height)/extent;
+
+  ctx.save();
+  ctx.translate(canvas.width/2,canvas.height/2);
+  try{
+    // frost_ring: entity — это Map, draw(ctx, weaponsMap, time, assets)
+    if(entry.draw==='weapons'){
+      if(!scene||!scene.ringRenderer){
+        const mod=await import(entry.module);
+        scene.ringRenderer=new mod.FrostRingRenderer(entry.cfg);
+      }
+      ctx.scale(zoom,zoom);
+      scene.ringRenderer.draw(ctx,entity,animTime,null);
+      ctx.restore();
+      return;
+    }
+    // lightning: рисуем через makeLightningScene (свои мировые координаты)
+    if(entry.draw==='skill'){
+      const sc=makeLightningScene(entry.cfg,getActiveDir());
+      sc.draw(ctx,animTime);
+      ctx.restore();
+      return;
+    }
+    // Hero/Skeleton: 4-й аргумент — opts{scale,w,h}, НЕ assets.
+    // Рендерер сам масштабирует арт на opts.scale, поэтому translate/scale
+    // снаружи не нужны.
+    if(entry.entity==='hero'||entry.entity==='skeleton'){
+      renderer.draw(ctx,entity,animTime,{scale:zoom,w:64,h:64});
+    } else {
+      ctx.scale(zoom,zoom);
+      renderer.draw(ctx,entity,animTime,null);
+    }
+  }catch(e){console.error('Render error:',e)}
+  ctx.restore();
+}
+
+function renderSprite(ctx,canvas,entry){
+  const img=images.get(entry.sprite);
+  if(!img) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save();
+  ctx.translate(canvas.width/2,canvas.height/2);
+
+  const ds=entry.draw_size||64;
+  const frames=entry.frames;
+  let sx=0,sy=0,sw=ds,sh=ds;
+
+  if(frames&&frames.animations){
+    const anim=frames.animations[entry.states[0]||'idle'];
+    if(anim){
+      const col=anim.col!==undefined?anim.col:0;
+      const row=anim.row||0;
+      const fw=frames.frame_width||ds;
+      const fh=frames.frame_height||ds;
+      sx=col*fw;sy=row*fh;sw=fw;sh=fh;
+    }
+  }
+
+  const scale=Math.min(canvas.width,canvas.height)/Math.max(sw,sh);
+  const dw=sw*scale, dh=sh*scale;
+  ctx.drawImage(img,sx,sy,sw,sh,-dw/2,-dh/2,dw,dh);
+  ctx.restore();
+}
+
+function getActiveState(){
+  const btn=document.querySelector('.btn[data-state]');
+  return btn&&btn.classList.contains('active')?btn.dataset.state:(activeEntry.states[0]||'idle');
+}
+
+function getActiveDir(){
+  const btn=document.querySelector('.btn[data-dir]');
+  return btn&&btn.classList.contains('active')?btn.dataset.dir:(activeEntry.dirs[0]||'right');
+}
+
+// ======================== АНИМАЦИЯ ========================
+async function startAnimLoop(){
+  if(rafId) return;
+  lastFrameTime=performance.now();
+  function loop(now){
+    if(!playing){rafId=null;return}
+    const dt=(now-lastFrameTime)/1000;
+    lastFrameTime=now;
+    animTime+=dt*animSpeed;
+    if(activeEntry&&activeEntry.type==='procedural'){
+      const s=ensureScene(activeEntry);
+      const state=getActiveState();
+      const dir=getActiveDir();
+      if(s._state!==state||s._dir!==dir){
+        s.entity=makeEntity(activeEntry,state,dir);
+        resetEntity(activeEntry,s.entity);
+        s._state=state;s._dir=dir;
+      }
+      stepEntity(activeEntry,s.entity,dt);
+      drawFrame(document.getElementById('mainCanvas').getContext('2d'),document.getElementById('mainCanvas'),s.entity);
+    }
+    updatePlaybackUI();
+    rafId=requestAnimationFrame(loop);
+  }
+  rafId=requestAnimationFrame(loop);
+}
+
+function stopAnimLoop(){
+  if(rafId){cancelAnimationFrame(rafId);rafId=null}
+}
+
+// ======================== ПАНЕЛИ УПРАВЛЕНИЯ ========================
+function buildControls(){
+  if(!activeEntry) return;
+  buildStatesPanel();
+  buildDirectionsPanel();
+  buildParamsPanel();
+  buildPlaybackPanel();
+}
+
+function buildStatesPanel(){
+  const tab=document.getElementById('tab-states');
+  if(!activeEntry.states.length){tab.innerHTML='<p class="empty">Нет состояний</p>';return}
+  tab.innerHTML=`<div class="field"><div class="field-label">Состояние</div><div class="btn-row">
+    ${activeEntry.states.map(s=>`<button class="btn ${s===activeEntry.states[0]?'active':''}" data-state="${s}">${s}</button>`).join('')}
+  </div></div>`;
+  tab.querySelectorAll('.btn[data-state]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      tab.querySelectorAll('.btn[data-state]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderMain();
+    });
+  });
+}
+
+function buildDirectionsPanel(){
+  const tab=document.getElementById('tab-directions');
+  if(!activeEntry.dirs.length){tab.innerHTML='<p class="empty">Нет направлений</p>';return}
+  tab.innerHTML=`<div class="field"><div class="field-label">Направление</div><div class="btn-row">
+    ${activeEntry.dirs.map(d=>`<button class="btn" data-dir="${d}">${d}</button>`).join('')}
+  </div></div>`;
+  tab.querySelectorAll('.btn[data-dir]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      tab.querySelectorAll('.btn[data-dir]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderMain();
+    });
+  });
+}
+
+function buildParamsPanel(){
+  const tab=document.getElementById('tab-params');
+  if(!activeEntry.cfg||typeof activeEntry.cfg!=='object'){tab.innerHTML='<p class="empty">Нет параметров</p>';return}
+  const cfg=activeEntry.cfg;
+  const sliders=[];
+  for(const[key,val]of Object.entries(cfg)){
+    if(typeof val==='number'&&Number.isFinite(val)){
+      sliders.push({key,val,min:Math.floor(val*100)/100,max:Math.ceil(val*100)/100});
+    }
+  }
+  if(!sliders.length){tab.innerHTML='<p class="empty">Нет числовых параметров</p>';return}
+  tab.innerHTML=`<div class="field"><div class="field-label">Параметры (${activeEntry.id})</div>
+    ${sliders.slice(0,20).map(s=>`<div class="slider-row">
+      <label>${s.key}</label>
+      <input type="range" min="${s.min}" max="${s.max}" step="0.01" value="${s.val}" data-param="${s.key}">
+      <span class="val">${Number.isInteger(s.val)?s.val:s.val.toFixed(2)}</span>
+    </div>`).join('')}
+  </div>`;
+  tab.querySelectorAll('input[type=range]').forEach(input=>{
+    input.addEventListener('input',()=>{
+      const key=input.dataset.param;
+      const val=parseFloat(input.value);
+      input.nextElementSibling.textContent=Number.isInteger(val)?val:val.toFixed(2);
+      if(renderer){
+        const nextCfg={...activeEntry.cfg,[key]:val};
+        if(typeof renderer.setConfig==='function') renderer.setConfig(nextCfg);
+        else if(typeof renderer.setVisuals==='function') renderer.setVisuals({[activeEntry.visualKey]:nextCfg});
+        renderMain();
+      }
+    });
+  });
+}
+
+function buildPlaybackPanel(){
+  const tab=document.getElementById('tab-playback');
+  tab.innerHTML=`<div class="field"><div class="field-label">Воспроизведение</div>
+    <div class="playbar">
+      <button class="btn" id="playBtn" title="Play/Pause">▶</button>
+      <span class="time" id="animTime">t = 0.00</span>
+      <label style="font-size:11px;color:#6f7ba8">Скорость:</label>
+      <select class="sel" id="speedSelect" style="width:60px">
+        <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+      </select>
+    </div>
+  </div>
+  <div class="field"><div class="field-label">Время</div>
+    <div class="slider-row">
+      <label>Прямой скролл</label>
+      <input type="range" min="0" max="5" step="0.01" value="0" id="timeSlider">
+      <span class="val" id="timeVal">0.00</span>
+    </div>
+  </div>`;
+  const playBtn=document.getElementById('playBtn');
+  playBtn.addEventListener('click',()=>{
+    playing=!playing;
+    playBtn.textContent=playing?'⏸':'▶';
+    playBtn.classList.toggle('playing',playing);
+    if(playing) startAnimLoop(); else stopAnimLoop();
+  });
+  document.getElementById('speedSelect').addEventListener('change',e=>{animSpeed=parseFloat(e.target.value)});
+  const timeSlider=document.getElementById('timeSlider');
+  timeSlider.addEventListener('input',()=>{
+    animTime=parseFloat(timeSlider.value);
+    updatePlaybackUI();renderMain();
+  });
+}
+
+function updatePlaybackUI(){
+  const t=document.getElementById('animTime');
+  const v=document.getElementById('timeVal');
+  const s=document.getElementById('timeSlider');
+  if(t) t.textContent='t = '+animTime.toFixed(2);
+  if(v) v.textContent=animTime.toFixed(2);
+  if(s){s.max=Math.max(5,animTime+1);s.value=animTime}
+}
+
+// ======================== СБРОС СУЩНОСТИ ========================
+function resetEntity(entry,e){
+  if(!e) return;
+  if(entry.entity==='fireball'){
+    e._fbTrail=[];e._fbBoomScaled=false;
+  }
+  if(entry.entity==='bolt'){
+    e._mbTrail=[];
+  }
+  if(entry.entity==='nova'){
+    e.trail=[];
+  }
+  if(entry.entity==='tornado'){
+    e.age=0;e.x=0;e.y=0;
+  }
+  if(entry.entity==='wall'){
+    e.wall.flames.forEach((f,i)=>{
+      f.alive=true;f.dying=false;f.dead=false;f.dieT=0;f.animT=0;f.frame=0;
+    });
+    e.wall.age=0;e.wall.dying=false;e.wall.dieAge=0;e.wall.done=false;
+  }
+}
+
+// ======================== ТАБЫ ========================
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ======================== ФИЛЬТРЫ ========================
+document.getElementById('filterType').addEventListener('change',renderNavList);
+document.getElementById('searchInput').addEventListener('input',renderNavList);
+
+// ======================== ЗАПУСК ========================
+init();
+</script>
+</body>
+</html>
