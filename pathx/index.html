@@ -51,6 +51,8 @@ header h1 span{color:#6f7ba8;font-weight:400;letter-spacing:0;font-size:11px}
 .btn{background:#14141f;color:#c3c9de;border:1px solid #2c2c42;border-radius:4px;padding:5px 12px;font-size:11px;font-family:inherit;cursor:pointer;transition:all .1s;white-space:nowrap}
 .btn:hover{border-color:#4a4a72;color:#fff}.btn.active{background:#ff4d6d;border-color:#ff4d6d;color:#fff}
 .playbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.playbar-fixed{flex-shrink:0;border-top:1px solid #2c2c42;padding:8px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#191926}
+.playbar-fixed .slider-row{flex:1;min-width:180px;margin:0}
 .playbar .btn{min-width:38px;text-align:center}
 .time{font-size:11px;color:#8b93b0;font-variant-numeric:tabular-nums}
 .slider-row{display:flex;align-items:center;gap:9px;margin-bottom:5px}
@@ -87,14 +89,13 @@ header h1 span{color:#6f7ba8;font-weight:400;letter-spacing:0;font-size:11px}
         <div class="tab active" data-tab="states">Состояния</div>
         <div class="tab" data-tab="directions">Направления</div>
         <div class="tab" data-tab="params">Параметры</div>
-        <div class="tab" data-tab="playback">Воспроизведение</div>
       </div>
       <div class="panels">
         <div class="panel active" id="tab-states"></div>
         <div class="panel" id="tab-directions"></div>
         <div class="panel" id="tab-params"></div>
-        <div class="panel" id="tab-playback"></div>
       </div>
+      <div class="playbar-fixed" id="playbarFixed"></div>
     </div>
   </div>
 </div>
@@ -390,7 +391,7 @@ async function genProceduralThumb(entry){
     callDraw(tmpCtx,0.5);
   }
   tmpCtx.restore();
-  entry.thumbCanvas=tmpCanvas;
+  entry.thumbData=tmpCanvas.toDataURL('image/png');
 }
 
 function genSpriteThumb(entry){
@@ -401,7 +402,7 @@ function genSpriteThumb(entry){
   const tmpCtx=tmpCanvas.getContext('2d');
   const ds=entry.draw_size||64;
   tmpCtx.drawImage(img,(96-ds)/2,(96-ds)/2,ds,ds);
-  entry.thumbCanvas=tmpCanvas;
+  entry.thumbData=tmpCanvas.toDataURL('image/png');
 }
 
 function warmup(entry,entity,callDraw,frames,dt){
@@ -434,7 +435,7 @@ function renderNavList(){
     div.className='nav-item'+(activeEntry===entry?' active':'');
     const meta=TYPE_META[entry.type]||{label:entry.type,color:'#888'};
     div.innerHTML=`
-      <div class="nav-thumb">${entry.thumbCanvas?entry.thumbCanvas.outerHTML:'<div style="width:100%;height:100%;background:#333"></div>'}</div>
+      <div class="nav-thumb">${entry.thumbData?`<img src="${entry.thumbData}" alt="">`:'<div style="width:100%;height:100%;background:#333"></div>'}</div>
       <div class="nav-info">
         <div class="nav-name">${entry.label}</div>
         <div class="nav-type" style="color:${meta.color}">${meta.label} · ${entry.id}</div>
@@ -538,10 +539,10 @@ async function renderProcedural(ctx,canvas){
   if(s._state!==state||s._dir!==dir){
     s.entity=makeEntity(activeEntry,state,dir);
     resetEntity(activeEntry,s.entity);
+    prepareEntity(activeEntry,s.entity);
     s._state=state;s._dir=dir;
   }
 
-  // lightning рисуется не рендерером — класс-рендерер для неё не создаём.
   if(!renderer&&activeEntry.draw!=='skill'){
     const mod=await import(activeEntry.module);
     const RendererClass=mod[activeEntry.cls];
@@ -628,13 +629,13 @@ function renderSprite(ctx,canvas,entry){
 }
 
 function getActiveState(){
-  const btn=document.querySelector('.btn[data-state]');
-  return btn&&btn.classList.contains('active')?btn.dataset.state:(activeEntry.states[0]||'idle');
+  const btn=document.querySelector('.btn[data-state].active');
+  return btn?btn.dataset.state:(activeEntry.states[0]||'idle');
 }
 
 function getActiveDir(){
-  const btn=document.querySelector('.btn[data-dir]');
-  return btn&&btn.classList.contains('active')?btn.dataset.dir:(activeEntry.dirs[0]||'right');
+  const btn=document.querySelector('.btn[data-dir].active');
+  return btn?btn.dataset.dir:(activeEntry.dirs[0]||'right');
 }
 
 // ======================== АНИМАЦИЯ ========================
@@ -653,6 +654,7 @@ async function startAnimLoop(){
       if(s._state!==state||s._dir!==dir){
         s.entity=makeEntity(activeEntry,state,dir);
         resetEntity(activeEntry,s.entity);
+        prepareEntity(activeEntry,s.entity);
         s._state=state;s._dir=dir;
       }
       stepEntity(activeEntry,s.entity,dt);
@@ -696,7 +698,7 @@ function buildDirectionsPanel(){
   const tab=document.getElementById('tab-directions');
   if(!activeEntry.dirs.length){tab.innerHTML='<p class="empty">Нет направлений</p>';return}
   tab.innerHTML=`<div class="field"><div class="field-label">Направление</div><div class="btn-row">
-    ${activeEntry.dirs.map(d=>`<button class="btn" data-dir="${d}">${d}</button>`).join('')}
+    ${activeEntry.dirs.map((d,i)=>`<button class="btn ${i===0?'active':''}" data-dir="${d}">${d}</button>`).join('')}
   </div></div>`;
   tab.querySelectorAll('.btn[data-dir]').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -741,31 +743,33 @@ function buildParamsPanel(){
 }
 
 function buildPlaybackPanel(){
-  const tab=document.getElementById('tab-playback');
-  tab.innerHTML=`<div class="field"><div class="field-label">Воспроизведение</div>
-    <div class="playbar">
-      <button class="btn" id="playBtn" title="Play/Pause">▶</button>
-      <span class="time" id="animTime">t = 0.00</span>
-      <label style="font-size:11px;color:#6f7ba8">Скорость:</label>
-      <select class="sel" id="speedSelect" style="width:60px">
-        <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-        <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
-      </select>
-    </div>
-  </div>
-  <div class="field"><div class="field-label">Время</div>
+  const bar=document.getElementById('playbarFixed');
+  bar.innerHTML=`
+    <button class="btn" id="playBtn" title="Play/Pause">▶</button>
+    <button class="btn" id="resetBtn" title="Сбросить сцену">⟲</button>
+    <span class="time" id="animTime">t = 0.00</span>
+    <label style="font-size:11px;color:#6f7ba8">Скорость:</label>
+    <select class="sel" id="speedSelect" style="width:64px">
+      <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+    </select>
     <div class="slider-row">
-      <label>Прямой скролл</label>
+      <label>Время</label>
       <input type="range" min="0" max="5" step="0.01" value="0" id="timeSlider">
       <span class="val" id="timeVal">0.00</span>
-    </div>
-  </div>`;
+    </div>`;
   const playBtn=document.getElementById('playBtn');
   playBtn.addEventListener('click',()=>{
     playing=!playing;
+    // Старт «с начала»: если играем из нуля — пересобираем сцену,
+    // чтобы снаряды/зоны вернулись на старт с чистыми хвостами.
+    if(playing&&animTime<=0.001) resetScene();
     playBtn.textContent=playing?'⏸':'▶';
-    playBtn.classList.toggle('playing',playing);
     if(playing) startAnimLoop(); else stopAnimLoop();
+  });
+  document.getElementById('resetBtn').addEventListener('click',()=>{
+    playing=false;playBtn.textContent='▶';stopAnimLoop();
+    animTime=0;resetScene();updatePlaybackUI();renderMain();
   });
   document.getElementById('speedSelect').addEventListener('change',e=>{animSpeed=parseFloat(e.target.value)});
   const timeSlider=document.getElementById('timeSlider');
@@ -773,6 +777,20 @@ function buildPlaybackPanel(){
     animTime=parseFloat(timeSlider.value);
     updatePlaybackUI();renderMain();
   });
+}
+
+// Полная пересборка кэша сцены (сущность + рендереры) для текущего
+// состояния/направления.
+function resetScene(){
+  scene=null;renderer=null;
+  if(activeEntry){
+    const s=ensureScene(activeEntry);
+    s._state=getActiveState();
+    s._dir=getActiveDir();
+    s.entity=makeEntity(activeEntry,s._state,s._dir);
+    resetEntity(activeEntry,s.entity);
+    prepareEntity(activeEntry,s.entity);
+  }
 }
 
 function updatePlaybackUI(){

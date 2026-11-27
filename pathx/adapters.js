@@ -399,8 +399,26 @@ export function stepEntity(entry, e, dt) {
     if (!e.exploding) {
       e.x += e.vx * dt;
       e.y += e.vy * dt;
+      wrapProjectile(entry, e);
     }
     return;
+  }
+}
+
+// «Тор»-обёртка: снаряд, вылетевший за кадр, возвращается с противоположной
+// стороны. Хвост (история позиций) сдвигаем вместе с снарядом, иначе он
+// растянется через весь экран.
+function wrapProjectile(entry, e) {
+  const R = (entry.extent || 200) * 0.75;
+  let dx = 0, dy = 0;
+  if (e.x > R) dx = -2 * R; else if (e.x < -R) dx = 2 * R;
+  if (e.y > R) dy = -2 * R; else if (e.y < -R) dy = 2 * R;
+  if (!dx && !dy) return;
+  e.x += dx;
+  e.y += dy;
+  for (const key of ['_fbTrail', '_mbTrail', 'trail']) {
+    const tr = e[key];
+    if (Array.isArray(tr)) for (const p of tr) { p.x += dx; p.y += dy; }
   }
 }
 
