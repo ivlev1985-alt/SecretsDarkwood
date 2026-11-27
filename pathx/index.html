@@ -520,12 +520,15 @@ function ensureScene(entry){
     scene=null;
   }
   if(!scene){
-    const state=entry.states[0]||'idle';
-    const dir=entry.dirs[0]||'right';
+    // ВАЖНО: _state/_dir обязаны быть проставлены сразу, иначе проверка
+    // «состояние изменилось» в renderProcedural срабатывает каждый кадр
+    // и сущность пересоздаётся заново (сбрасываются life/age/хвосты).
+    const state=getActiveState();
+    const dir=getActiveDir();
     const entity=makeEntity(entry,state,dir);
     resetEntity(entry,entity);
     prepareEntity(entry,entity);
-    scene={entry,entity};
+    scene={entry,entity,_state:state,_dir:dir};
   }
   return scene;
 }
@@ -817,12 +820,9 @@ function resetEntity(entry,e){
   if(entry.entity==='tornado'){
     e.age=0;e.x=0;e.y=0;
   }
-  if(entry.entity==='wall'){
-    e.wall.flames.forEach((f,i)=>{
-      f.alive=true;f.dying=false;f.dead=false;f.dieT=0;f.animT=0;f.frame=0;
-    });
-    e.wall.age=0;e.wall.dying=false;e.wall.dieAge=0;e.wall.done=false;
-  }
+  // Для wall ничего не сбрасываем: makeWall уже расставил alive/dying/spawnT
+  // под текущее состояние (spawning/alive/dying), а stepEntity досимулирует
+  // их по модели SkillSystem._updateWall.
 }
 
 // ======================== ТАБЫ ========================

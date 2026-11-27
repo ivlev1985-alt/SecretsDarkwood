@@ -127,6 +127,7 @@ export const PROCEDURAL = [
     cfgFile: 'game_config',
     cfgPath: 'visuals.frost_ring',
     draw: 'weapons',
+    entity: 'frost_ring',
     weaponFile: 'skills_config',
     weaponPath: 'weapons',
     weaponPick: 'frost_ring',

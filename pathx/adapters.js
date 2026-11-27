@@ -75,13 +75,17 @@ export function makeSkeleton(state, dir) {
 
 function projectileBase(state, dir, speed, explodingStates) {
   const v = dirVec(dir);
+  const exploding = explodingStates.includes(state);
   return {
     x: 0, y: 0,
     vx: v.x * speed,
     vy: v.y * speed,
     life: 0,
-    maxLife: 1e9,
-    exploding: explodingStates.includes(state),
+    // Для взрывных фаз maxLife обязан быть конечным: рендереры считают
+    // k = life/maxLife (fireball сам поднимает его до boom_life_ms через
+    // Math.max). С 1e9 взрыв навсегда замирает на k≈0.
+    maxLife: exploding ? 0.3 : 1e9,
+    exploding,
     spritePath: null
   };
 }
@@ -117,10 +121,12 @@ export function makeTornado(state, visual, weaponCfg) {
   const spawnMs = visual.spawn_ms ?? 260;
   const fadeMs = visual.fade_out_ms ?? 900;
   const ttlMs = weaponCfg?.area_duration_ms ?? 5000;
+  // ВНИМАНИЕ: TornadoRenderer._life сравнивает ttl с fade_out_ms в
+  // МИЛИСЕКУНДАХ, а age — в секундах. Единицы путать нельзя.
   let age, ttl;
-  if (state === 'spawn') { age = spawnMs * 0.4 / 1000; ttl = ttlMs / 1000; }
-  else if (state === 'fading') { age = 2.2; ttl = fadeMs * 0.3 / 1000; }
-  else { age = 2.2; ttl = ttlMs / 1000; }
+  if (state === 'spawn') { age = spawnMs * 0.4 / 1000; ttl = ttlMs; }
+  else if (state === 'fading') { age = 2.2; ttl = fadeMs * 0.3; }
+  else { age = 2.2; ttl = ttlMs; }
 
   // Кэш позы ломает предпросмотр (квантование возраста). 0 давать нельзя —
   // деление на fps даст NaN; завышаем, чтобы кэш обновлялся каждый кадр.
@@ -351,6 +357,27 @@ export function makeLightningScene(visualCfg, dir) {
 export function stepEntity(entry, e, dt) {
   if (!e) return;
 
+  // Персонажи: таймеры в игре — «остаток» анимации, они убывают к 0.
+  // Каст/выстрел в превью зацикливаем, смерть — проигрывается один раз.
+  if (entry.entity === 'hero') {
+    if (e.castT > 0) {
+      e.castT = Math.max(0, e.castT - dt);
+      if (e.castT === 0) e.castT = e.castDuration; // луп каста
+    }
+    if (e.deathT > 0) e.deathT = Math.max(0, e.deathT - dt);
+    return;
+  }
+
+  if (entry.entity === 'skeleton') {
+    if (e.shootT > 0) {
+      e.shootT = Math.max(0, e.shootT - dt);
+      if (e.shootT === 0) e.shootT = e.shootDuration; // луп выстрела
+    }
+    if (e.attackCd > 0) e.attackCd = Math.max(0, e.attackCd - dt);
+    if (e.deathT > 0) e.deathT = Math.max(0, e.deathT - dt);
+    return;
+  }
+
   // Орбиты frost_ring двигает SkillSystem в игре; здесь повторяем его модель:
   // угол растёт по dir, радиус «дышит», кристалл крутится вокруг своей оси.
   if (entry.entity === 'frost_ring') {
@@ -390,7 +417,33 @@ export function stepEntity(entry, e, dt) {
   }
 
   if (entry.entity === 'wall') {
-    e.wall.age += dt * 1000;
+    // Порт SkillSystem._updateWall: появление от центра к краям, ttl,
+    // затем угасание от краёв к центру + смена кадров атласа.
+    const w = e.wall;
+    const ms = dt * 1000;
+    const n = Math.max(...w.flames.map((f) => f.spawnT)) || 3;
+    if (!w.dying) {
+      w.age += ms;
+      for (const f of w.flames) {
+        if (!f.alive && w.age >= f.spawnT * w.spawnMs) f.alive = true;
+      }
+      if (w.age >= e.ttl) { w.dying = true; w.dieAge = 0; }
+    } else {
+      w.dieAge += ms;
+      for (const f of w.flames) {
+        if (!f.dying && w.dieAge >= (n - f.spawnT) * w.spawnMs) f.dying = true;
+        if (f.dying) {
+          f.dieT = (f.dieT || 0) + ms;
+          if (f.dieT >= w.spawnMs) f.dead = true;
+        }
+      }
+      if (w.flames.every((f) => f.dead)) w.done = true;
+    }
+    for (const f of w.flames) {
+      if (!f.alive || f.dead) continue;
+      f.animT += dt;
+      if (f.animT >= 1 / 12) { f.animT -= 1 / 12; f.frame = Math.floor(Math.random() * 18); }
+    }
     return;
   }
 
